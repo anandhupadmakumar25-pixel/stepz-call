@@ -8,6 +8,9 @@ class LeadProvider extends ChangeNotifier {
   bool _isLoading = false;
   String? _errorMessage;
 
+  List<BranchModel> _branches = [];
+  List<LeadCategoryModel> _categories = [];
+
   ImportBatchModel? _activeImportBatch;
   bool _isImporting = false;
 
@@ -15,10 +18,90 @@ class LeadProvider extends ChangeNotifier {
   LeadModel? get selectedLead => _selectedLead;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
+  List<BranchModel> get branches => _branches;
+  List<LeadCategoryModel> get categories => _categories;
   ImportBatchModel? get activeImportBatch => _activeImportBatch;
   bool get isImporting => _isImporting;
 
-  Future<void> fetchLeads({String? status, String? search}) async {
+  Future<void> fetchBranches() async {
+    try {
+      final res = await ApiClient.get('/leads/branches/');
+      if (res is List) {
+        _branches = res.map((item) => BranchModel.fromJson(item)).toList();
+        notifyListeners();
+      }
+    } catch (_) {}
+  }
+
+  Future<bool> createBranch({required String name, String code = '', String address = ''}) async {
+    try {
+      final res = await ApiClient.post('/leads/branches/', {
+        'name': name.trim(),
+        'code': code.trim(),
+        'address': address.trim(),
+      });
+      final b = BranchModel.fromJson(res);
+      _branches.add(b);
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> deleteBranch(String branchId) async {
+    try {
+      await ApiClient.delete('/leads/branches/$branchId/');
+      _branches.removeWhere((b) => b.id == branchId);
+      notifyListeners();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> fetchCategories() async {
+    try {
+      final res = await ApiClient.get('/leads/categories/');
+      if (res is List) {
+        _categories = res.map((item) => LeadCategoryModel.fromJson(item)).toList();
+        notifyListeners();
+      }
+    } catch (_) {}
+  }
+
+  Future<bool> createCategory({required String name, String colorCode = '#6366F1', String description = ''}) async {
+    try {
+      final res = await ApiClient.post('/leads/categories/', {
+        'name': name.trim(),
+        'color_code': colorCode.trim(),
+        'description': description.trim(),
+      });
+      final c = LeadCategoryModel.fromJson(res);
+      _categories.add(c);
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> deleteCategory(String categoryId) async {
+    try {
+      await ApiClient.delete('/leads/categories/$categoryId/');
+      _categories.removeWhere((c) => c.id == categoryId);
+      notifyListeners();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> fetchLeads({String? status, String? search, String? branchId, String? categoryId}) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
@@ -28,6 +111,12 @@ class LeadProvider extends ChangeNotifier {
       final params = <String>[];
       if (status != null && status.isNotEmpty && status != 'ALL') {
         params.add('status=$status');
+      }
+      if (branchId != null && branchId.isNotEmpty && branchId != 'ALL') {
+        params.add('branch=$branchId');
+      }
+      if (categoryId != null && categoryId.isNotEmpty && categoryId != 'ALL') {
+        params.add('category=$categoryId');
       }
       if (search != null && search.isNotEmpty) {
         params.add('search=${Uri.encodeComponent(search)}');

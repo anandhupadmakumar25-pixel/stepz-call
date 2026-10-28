@@ -4,10 +4,12 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from django.db.models import Q
 
-from apps.leads.models import Lead, ImportBatch, PermanentPhoneNumberRegistry
+from apps.leads.models import Lead, Branch, LeadCategory, ImportBatch, PermanentPhoneNumberRegistry
 from apps.leads.serializers import (
     LeadSerializer,
     LeadDetailSerializer,
+    BranchSerializer,
+    LeadCategorySerializer,
     ImportBatchSerializer,
     PermanentPhoneNumberRegistrySerializer,
     BulkAssignSerializer
@@ -16,6 +18,94 @@ from apps.leads.services.import_service import LeadImportService
 from apps.leads.services.assignment_service import LeadAssignmentService
 from apps.core.permissions import IsCompanyAdmin, IsEmployee
 from apps.core.phone_utils import normalize_phone_number
+
+class BranchListCreateView(views.APIView):
+    permission_classes = [IsEmployee]
+
+    def get(self, request):
+        user = request.user
+        company = user.company
+        if not company:
+            return Response([])
+        branches = Branch.objects.filter(company=company, is_active=True).order_by('name')
+        return Response(BranchSerializer(branches, many=True).data)
+
+    def post(self, request):
+        user = request.user
+        company = user.company
+        if not company or not user.is_company_admin:
+            return Response({"error": "Admin permission required."}, status=status.HTTP_403_FORBIDDEN)
+        name = request.data.get('name', '').strip()
+        if not name:
+            return Response({"name": ["Branch name is required."]}, status=status.HTTP_400_BAD_REQUEST)
+        branch, created = Branch.objects.get_or_create(
+            company=company,
+            name=name,
+            defaults={
+                'code': request.data.get('code', '').strip(),
+                'address': request.data.get('address', '').strip(),
+                'is_active': True
+            }
+        )
+        if not created and not branch.is_active:
+            branch.is_active = True
+            branch.save(update_fields=['is_active'])
+        return Response(BranchSerializer(branch).data, status=status.HTTP_201_CREATED)
+
+class BranchDetailView(views.APIView):
+    permission_classes = [IsCompanyAdmin]
+
+    def delete(self, request, pk):
+        branch = Branch.objects.filter(id=pk, company=request.user.company).first()
+        if not branch:
+            return Response({"error": "Branch not found."}, status=status.HTTP_404_NOT_FOUND)
+        branch.is_active = False
+        branch.save(update_fields=['is_active'])
+        return Response({"message": "Branch deleted successfully."}, status=status.HTTP_200_OK)
+
+class LeadCategoryListCreateView(views.APIView):
+    permission_classes = [IsEmployee]
+
+    def get(self, request):
+        user = request.user
+        company = user.company
+        if not company:
+            return Response([])
+        categories = LeadCategory.objects.filter(company=company, is_active=True).order_by('name')
+        return Response(LeadCategorySerializer(categories, many=True).data)
+
+    def post(self, request):
+        user = request.user
+        company = user.company
+        if not company or not user.is_company_admin:
+            return Response({"error": "Admin permission required."}, status=status.HTTP_403_FORBIDDEN)
+        name = request.data.get('name', '').strip()
+        if not name:
+            return Response({"name": ["Category name is required."]}, status=status.HTTP_400_BAD_REQUEST)
+        category, created = LeadCategory.objects.get_or_create(
+            company=company,
+            name=name,
+            defaults={
+                'color_code': request.data.get('color_code', '#6366F1'),
+                'description': request.data.get('description', '').strip(),
+                'is_active': True
+            }
+        )
+        if not created and not category.is_active:
+            category.is_active = True
+            category.save(update_fields=['is_active'])
+        return Response(LeadCategorySerializer(category).data, status=status.HTTP_201_CREATED)
+
+class LeadCategoryDetailView(views.APIView):
+    permission_classes = [IsCompanyAdmin]
+
+    def delete(self, request, pk):
+        category = LeadCategory.objects.filter(id=pk, company=request.user.company).first()
+        if not category:
+            return Response({"error": "Category not found."}, status=status.HTTP_404_NOT_FOUND)
+        category.is_active = False
+        category.save(update_fields=['is_active'])
+        return Response({"message": "Category deleted successfully."}, status=status.HTTP_200_OK)
 
 class LeadListCreateView(views.APIView):
     permission_classes = [IsEmployee]
@@ -36,8 +126,16 @@ class LeadListCreateView(views.APIView):
 
         # Filters
         status_param = request.query_params.get('status')
-        if status_param:
+        if status_param and status_param != 'ALL':
             leads = leads.filter(status=status_param)
+
+        branch_param = request.query_params.get('branch')
+        if branch_param and branch_param != 'ALL':
+            leads = leads.filter(branch_id=branch_param)
+
+        category_param = request.query_params.get('category')
+        if category_param and category_param != 'ALL':
+            leads = leads.filter(category_id=category_param)
 
         assigned_to_param = request.query_params.get('assigned_to')
         if assigned_to_param and user.is_company_admin:
@@ -58,7 +156,7 @@ class LeadListCreateView(views.APIView):
             )
 
         # Simple pagination or full list
-        leads = leads.order_by('-created_at')
+        leads = leads.select_related('branch', 'category', 'assigned_to').order_by('-created_at')
         serializer = LeadSerializer(leads[:200], many=True)
         return Response(serializer.data)
 
@@ -92,8 +190,22 @@ class LeadListCreateView(views.APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+        # Dynamic Branch and Category resolution
+        branch_id = request.data.get('branch') or request.data.get('branch_id')
+        category_id = request.data.get('category') or request.data.get('category_id')
+
+        branch = None
+        if branch_id:
+            branch = Branch.objects.filter(id=branch_id, company=company).first()
+
+        category = None
+        if category_id:
+            category = LeadCategory.objects.filter(id=category_id, company=company).first()
+
         lead = Lead.objects.create(
             company=company,
+            branch=branch,
+            category=category,
             first_name=first_name,
             last_name=request.data.get('last_name', '').strip(),
             raw_phone=raw_phone,

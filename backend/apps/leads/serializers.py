@@ -1,15 +1,49 @@
 from rest_framework import serializers
-from apps.leads.models import Lead, ImportBatch, ImportRowError, PermanentPhoneNumberRegistry, LeadAssignmentHistory
+from apps.leads.models import (
+    Lead,
+    Branch,
+    LeadCategory,
+    ImportBatch,
+    ImportRowError,
+    PermanentPhoneNumberRegistry,
+    LeadAssignmentHistory
+)
+
+class BranchSerializer(serializers.ModelSerializer):
+    lead_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Branch
+        fields = ['id', 'name', 'code', 'address', 'is_active', 'lead_count', 'created_at']
+        read_only_fields = ['id', 'created_at', 'lead_count']
+
+    def get_lead_count(self, obj):
+        return obj.leads.count()
+
+class LeadCategorySerializer(serializers.ModelSerializer):
+    lead_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = LeadCategory
+        fields = ['id', 'name', 'color_code', 'description', 'is_active', 'lead_count', 'created_at']
+        read_only_fields = ['id', 'created_at', 'lead_count']
+
+    def get_lead_count(self, obj):
+        return obj.leads.count()
 
 class LeadSerializer(serializers.ModelSerializer):
     assigned_to_name = serializers.CharField(source='assigned_to.full_name', read_only=True)
+    branch_name = serializers.CharField(source='branch.name', read_only=True)
+    category_name = serializers.CharField(source='category.name', read_only=True)
+    category_color = serializers.CharField(source='category.color_code', read_only=True)
     full_name = serializers.CharField(read_only=True)
 
     class Meta:
         model = Lead
         fields = [
             'id', 'first_name', 'last_name', 'full_name', 'raw_phone', 'normalized_phone',
-            'email', 'city', 'state', 'source', 'status', 'assigned_to', 'assigned_to_name',
+            'email', 'city', 'state', 'source', 'status', 'branch', 'branch_name',
+            'category', 'category_name', 'category_color', 'assigned_to', 'assigned_to_name',
             'assigned_at', 'is_assigned_ever', 'custom_fields', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'normalized_phone', 'assigned_at', 'is_assigned_ever', 'created_at', 'updated_at']

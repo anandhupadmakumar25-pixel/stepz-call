@@ -1,3 +1,61 @@
+class BranchModel {
+  final String id;
+  final String name;
+  final String code;
+  final String address;
+  final bool isActive;
+  final int leadCount;
+
+  BranchModel({
+    required this.id,
+    required this.name,
+    this.code = '',
+    this.address = '',
+    this.isActive = true,
+    this.leadCount = 0,
+  });
+
+  factory BranchModel.fromJson(Map<String, dynamic> json) {
+    return BranchModel(
+      id: json['id']?.toString() ?? '',
+      name: json['name'] ?? '',
+      code: json['code'] ?? '',
+      address: json['address'] ?? '',
+      isActive: json['is_active'] ?? true,
+      leadCount: json['lead_count'] ?? 0,
+    );
+  }
+}
+
+class LeadCategoryModel {
+  final String id;
+  final String name;
+  final String colorCode;
+  final String description;
+  final bool isActive;
+  final int leadCount;
+
+  LeadCategoryModel({
+    required this.id,
+    required this.name,
+    this.colorCode = '#6366F1',
+    this.description = '',
+    this.isActive = true,
+    this.leadCount = 0,
+  });
+
+  factory LeadCategoryModel.fromJson(Map<String, dynamic> json) {
+    return LeadCategoryModel(
+      id: json['id']?.toString() ?? '',
+      name: json['name'] ?? '',
+      colorCode: json['color_code'] ?? '#6366F1',
+      description: json['description'] ?? '',
+      isActive: json['is_active'] ?? true,
+      leadCount: json['lead_count'] ?? 0,
+    );
+  }
+}
+
 class LeadModel {
   final String id;
   final String firstName;
@@ -10,6 +68,11 @@ class LeadModel {
   final String state;
   final String source;
   final String status;
+  final String? branchId;
+  final String? branchName;
+  final String? categoryId;
+  final String? categoryName;
+  final String? categoryColor;
   final String? assignedTo;
   final String? assignedToName;
   final String? assignedAt;
@@ -30,6 +93,11 @@ class LeadModel {
     required this.state,
     required this.source,
     required this.status,
+    this.branchId,
+    this.branchName,
+    this.categoryId,
+    this.categoryName,
+    this.categoryColor,
     this.assignedTo,
     this.assignedToName,
     this.assignedAt,
@@ -52,6 +120,11 @@ class LeadModel {
       state: json['state'] ?? '',
       source: json['source'] ?? 'MANUAL',
       status: json['status'] ?? 'UNASSIGNED',
+      branchId: json['branch']?.toString(),
+      branchName: json['branch_name'],
+      categoryId: json['category']?.toString(),
+      categoryName: json['category_name'],
+      categoryColor: json['category_color'] ?? '#6366F1',
       assignedTo: json['assigned_to']?.toString(),
       assignedToName: json['assigned_to_name'],
       assignedAt: json['assigned_at'],

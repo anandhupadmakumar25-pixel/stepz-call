@@ -86,6 +86,14 @@ class ApiClient {
     return _processResponse(res);
   }
 
+  // HTTP DELETE
+  static Future<dynamic> delete(String endpoint) async {
+    final url = Uri.parse('$baseUrl$endpoint');
+    final headers = await _headers();
+    final res = await http.delete(url, headers: headers);
+    return _processResponse(res);
+  }
+
   // HTTP Multipart Upload (for Excel / CSV)
   static Future<dynamic> uploadFile(String endpoint, List<int> fileBytes, String filename) async {
     final url = Uri.parse('$baseUrl$endpoint');

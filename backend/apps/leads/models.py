@@ -97,6 +97,48 @@ class ImportRowError(TimeStampedModel):
     def __str__(self):
         return f"Row {self.row_number}: {self.error_type} - {self.details}"
 
+class Branch(TenantModel):
+    """
+    Dynamic company branch entity (e.g. 'Main Branch', 'Branch X', 'Branch Y').
+    """
+    name = models.CharField(max_length=150)
+    code = models.CharField(max_length=50, blank=True)
+    address = models.CharField(max_length=255, blank=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ['name']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['company', 'name'],
+                name='unique_company_branch_name'
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.company.name})"
+
+class LeadCategory(TenantModel):
+    """
+    Dynamic lead category entity (e.g. 'Academy', 'Client', 'Customer', 'Corporate').
+    """
+    name = models.CharField(max_length=150)
+    color_code = models.CharField(max_length=20, default='#6366F1', blank=True)
+    description = models.CharField(max_length=255, blank=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ['name']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['company', 'name'],
+                name='unique_company_category_name'
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.company.name})"
+
 class Lead(TenantModel):
     STATUS_CHOICES = [
         ('UNASSIGNED', 'Unassigned'),
@@ -112,6 +154,20 @@ class Lead(TenantModel):
         ('ARCHIVED', 'Archived'),
     ]
 
+    branch = models.ForeignKey(
+        Branch,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='leads'
+    )
+    category = models.ForeignKey(
+        LeadCategory,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='leads'
+    )
     first_name = models.CharField(max_length=128)
     last_name = models.CharField(max_length=128, blank=True)
     raw_phone = models.CharField(max_length=32)

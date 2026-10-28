@@ -135,6 +135,30 @@ class _LeadDetailScreenState extends State<LeadDetailScreen> {
                                     style: GoogleFonts.inter(fontSize: isMobile ? 17 : 20, fontWeight: FontWeight.w700),
                                   ),
                                   StatusBadge(status: lead.status),
+                                  if (lead.branchName != null)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.surfaceSecondary,
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        '📍 ${lead.branchName}',
+                                        style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600),
+                                      ),
+                                    ),
+                                  if (lead.categoryName != null)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.accentVioletLight,
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        '🏷 ${lead.categoryName}',
+                                        style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.accentViolet),
+                                      ),
+                                    ),
                                 ],
                               ),
                               const SizedBox(height: 6),
