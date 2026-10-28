@@ -193,16 +193,25 @@ class LeadImportService:
         return batch
 
     @classmethod
-    def confirm_import(cls, batch_id, company, confirmed_by) -> int:
+    def confirm_import(cls, batch_id, company, confirmed_by, branch_id=None, category_id=None) -> int:
         """
         Commits all valid staged leads from preview into real Lead records in DB.
         """
+        from apps.leads.models import Branch, LeadCategory
         with transaction.atomic():
             batch = ImportBatch.objects.select_for_update().filter(id=batch_id, company=company).first()
             if not batch:
                 raise ValueError("Import batch not found.")
             if batch.status != 'PENDING':
                 raise ValueError(f"Batch has already been {batch.status}.")
+
+            branch = None
+            if branch_id:
+                branch = Branch.objects.filter(id=branch_id, company=company).first()
+
+            category = None
+            if category_id:
+                category = LeadCategory.objects.filter(id=category_id, company=company).first()
 
             leads_to_create = []
             for item in batch.staging_data:
@@ -219,6 +228,8 @@ class LeadImportService:
                     email=item.get('email', ''),
                     city=item.get('city', ''),
                     state=item.get('state', ''),
+                    branch=branch,
+                    category=category,
                     source=f"IMPORT_{batch.file_name}",
                     import_batch=batch,
                     status='UNASSIGNED',

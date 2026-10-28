@@ -199,13 +199,16 @@ class LeadProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> confirmImport(String batchId) async {
+  Future<bool> confirmImport(String batchId, {String? branchId, String? categoryId}) async {
     _isImporting = true;
     _errorMessage = null;
     notifyListeners();
 
     try {
-      await ApiClient.post('/leads/import/confirm/$batchId/', {});
+      final body = <String, dynamic>{};
+      if (branchId != null && branchId.isNotEmpty) body['branch_id'] = branchId;
+      if (categoryId != null && categoryId.isNotEmpty) body['category_id'] = categoryId;
+      await ApiClient.post('/leads/import/confirm/$batchId/', body);
       _isImporting = false;
       _activeImportBatch = null;
       await fetchLeads();

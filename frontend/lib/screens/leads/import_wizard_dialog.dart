@@ -18,6 +18,18 @@ class _ImportWizardDialogState extends State<ImportWizardDialog> {
   PlatformFile? _selectedFile;
   ImportBatchModel? _batchPreview;
   String? _importSuccessMessage;
+  String? _selectedBranchId;
+  String? _selectedCategoryId;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final p = context.read<LeadProvider>();
+      p.fetchBranches();
+      p.fetchCategories();
+    });
+  }
 
   Future<void> _pickFile() async {
     final result = await FilePicker.platform.pickFiles(
@@ -61,7 +73,11 @@ class _ImportWizardDialogState extends State<ImportWizardDialog> {
   Future<void> _confirmImport() async {
     if (_batchPreview == null) return;
     final provider = context.read<LeadProvider>();
-    final success = await provider.confirmImport(_batchPreview!.id);
+    final success = await provider.confirmImport(
+      _batchPreview!.id,
+      branchId: _selectedBranchId,
+      categoryId: _selectedCategoryId,
+    );
 
     if (success && mounted) {
       setState(() {
@@ -263,6 +279,68 @@ class _ImportWizardDialogState extends State<ImportWizardDialog> {
               ),
               const SizedBox(height: 14),
             ],
+
+            // Optional Dynamic Branch & Category Assignment for imported leads
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceSecondary,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.tune_outlined, size: 16, color: AppColors.accentViolet),
+                      const SizedBox(width: 6),
+                      Text('Default Batch Tagging (Optional)', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: [
+                      SizedBox(
+                        width: 250,
+                        child: DropdownButtonFormField<String?>(
+                          initialValue: _selectedBranchId,
+                          decoration: const InputDecoration(
+                            labelText: 'Assign Branch',
+                            isDense: true,
+                            contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          ),
+                          items: [
+                            const DropdownMenuItem(value: null, child: Text('No Branch (Global)')),
+                            ...leadProvider.branches.map((br) => DropdownMenuItem(value: br.id, child: Text(br.name))),
+                          ],
+                          onChanged: (val) => setState(() => _selectedBranchId = val),
+                        ),
+                      ),
+                      SizedBox(
+                        width: 250,
+                        child: DropdownButtonFormField<String?>(
+                          initialValue: _selectedCategoryId,
+                          decoration: const InputDecoration(
+                            labelText: 'Assign Category',
+                            isDense: true,
+                            contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          ),
+                          items: [
+                            const DropdownMenuItem(value: null, child: Text('No Category')),
+                            ...leadProvider.categories.map((cat) => DropdownMenuItem(value: cat.id, child: Text(cat.name))),
+                          ],
+                          onChanged: (val) => setState(() => _selectedCategoryId = val),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
 
             Text('Sample Staged Records for Import', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600)),
             const SizedBox(height: 8),

@@ -282,11 +282,15 @@ class LeadImportConfirmView(views.APIView):
 
     def post(self, request, pk):
         company = request.user.company
+        branch_id = request.data.get('branch_id')
+        category_id = request.data.get('category_id')
         try:
             created_count = LeadImportService.confirm_import(
                 batch_id=pk,
                 company=company,
-                confirmed_by=request.user
+                confirmed_by=request.user,
+                branch_id=branch_id,
+                category_id=category_id,
             )
             return Response({
                 "success": True,
