@@ -20,16 +20,13 @@ class CompanySerializer(serializers.ModelSerializer):
     def get_lead_count(self, obj):
         return obj.leads.count()
 
-class CompanyCreateSerializer(serializers.ModelSerializer):
-    admin_email = serializers.EmailField(write_only=True)
-    admin_password = serializers.CharField(write_only=True)
-    admin_first_name = serializers.CharField(write_only=True)
-    admin_last_name = serializers.CharField(write_only=True, required=False, allow_blank=True)
-
-    class Meta:
-        model = Company
-        fields = [
-            'name', 'subdomain', 'contact_email', 'contact_phone',
-            'status', 'default_country_code', 'default_country_iso',
-            'admin_email', 'admin_password', 'admin_first_name', 'admin_last_name'
-        ]
+class CompanyCreateSerializer(serializers.Serializer):
+    name = serializers.CharField(max_length=255)
+    admin_email = serializers.EmailField()
+    admin_password = serializers.CharField(min_length=6)
+    admin_first_name = serializers.CharField(max_length=150, required=False, allow_blank=True, default='')
+    admin_last_name = serializers.CharField(max_length=150, required=False, allow_blank=True, default='')
+    subdomain = serializers.CharField(max_length=100, required=False, allow_blank=True, default='')
+    contact_email = serializers.EmailField(required=False, allow_blank=True, default='')
+    contact_phone = serializers.CharField(max_length=32, required=False, allow_blank=True, default='')
+    default_country_code = serializers.CharField(max_length=4, required=False, default='+91')

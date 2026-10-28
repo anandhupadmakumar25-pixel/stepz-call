@@ -7,7 +7,8 @@ import '../../providers/auth_provider.dart';
 import '../../providers/lead_provider.dart';
 import '../../providers/employee_provider.dart';
 import '../../models/lead_model.dart';
-import '../leads/lead_detail_screen.dart';
+import 'create_calling_task_screen.dart';
+import 'task_detail_execution_screen.dart';
 
 class CallingTasksScreen extends StatefulWidget {
   const CallingTasksScreen({super.key});
@@ -50,303 +51,6 @@ class _CallingTasksScreenState extends State<CallingTasksScreen> {
     super.dispose();
   }
 
-  void _showCreateTaskDialog() {
-    final leadProvider = context.read<LeadProvider>();
-    final empProvider = context.read<EmployeeProvider>();
-
-    final titleCtrl = TextEditingController();
-    final descCtrl = TextEditingController();
-    final countCtrl = TextEditingController(text: '20');
-    String? selectedBranchId;
-    String? selectedCategoryId;
-    String? selectedEmployeeId;
-    String priority = 'MEDIUM';
-    DateTime? dueDate;
-
-    if (empProvider.employees.isNotEmpty) {
-      selectedEmployeeId = empProvider.employees.first['id']?.toString();
-    }
-
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setDlgState) => AlertDialog(
-          backgroundColor: AppColors.surface,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          title: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: AppColors.accentVioletLight,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(Icons.assignment_outlined, color: AppColors.accentViolet, size: 20),
-              ),
-              const SizedBox(width: 10),
-              Text('Create Calling Task', style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700)),
-            ],
-          ),
-          content: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 550),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  TextField(
-                    controller: titleCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Task Title *',
-                      hintText: 'e.g. Branch X - Academy Admissions Calling',
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: descCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Calling Instructions / Script Pitch',
-                      hintText: 'e.g. Pitch 15% weekend discount; follow up on enquiry form',
-                    ),
-                    maxLines: 2,
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: DropdownButtonFormField<String?>(
-                          initialValue: selectedBranchId,
-                          decoration: const InputDecoration(labelText: 'Branch (Target)'),
-                          items: [
-                            const DropdownMenuItem(value: null, child: Text('Global (Any Branch)')),
-                            ...leadProvider.branches.map((b) => DropdownMenuItem(value: b.id, child: Text(b.name))),
-                          ],
-                          onChanged: (val) => setDlgState(() => selectedBranchId = val),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: DropdownButtonFormField<String?>(
-                          initialValue: selectedCategoryId,
-                          decoration: const InputDecoration(labelText: 'Category (Target)'),
-                          items: [
-                            const DropdownMenuItem(value: null, child: Text('All Categories')),
-                            ...leadProvider.categories.map((c) => DropdownMenuItem(value: c.id, child: Text(c.name))),
-                          ],
-                          onChanged: (val) => setDlgState(() => selectedCategoryId = val),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: DropdownButtonFormField<String?>(
-                          initialValue: selectedEmployeeId,
-                          decoration: const InputDecoration(labelText: 'Assign To Employee *'),
-                          items: empProvider.employees.map((e) {
-                            final name = e['full_name'] ?? e['email'];
-                            final branch = e['branch_name'] != null ? ' (${e['branch_name']})' : '';
-                            return DropdownMenuItem<String?>(
-                              value: e['id']?.toString(),
-                              child: Text('$name$branch', maxLines: 1, overflow: TextOverflow.ellipsis),
-                            );
-                          }).toList(),
-                          onChanged: (val) => setDlgState(() => selectedEmployeeId = val),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: DropdownButtonFormField<String>(
-                          initialValue: priority,
-                          decoration: const InputDecoration(labelText: 'Priority'),
-                          items: const [
-                            DropdownMenuItem(value: 'LOW', child: Text('Low')),
-                            DropdownMenuItem(value: 'MEDIUM', child: Text('Medium')),
-                            DropdownMenuItem(value: 'HIGH', child: Text('High')),
-                            DropdownMenuItem(value: 'URGENT', child: Text('Urgent')),
-                          ],
-                          onChanged: (val) => setDlgState(() => priority = val!),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: countCtrl,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                            labelText: 'Number of Unassigned Leads',
-                            hintText: 'e.g. 25',
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: () async {
-                            final picked = await showDatePicker(
-                              context: context,
-                              initialDate: DateTime.now().add(const Duration(days: 3)),
-                              firstDate: DateTime.now(),
-                              lastDate: DateTime.now().add(const Duration(days: 365)),
-                            );
-                            if (picked != null) {
-                              setDlgState(() => dueDate = picked);
-                            }
-                          },
-                          icon: const Icon(Icons.calendar_today, size: 16),
-                          label: Text(dueDate == null
-                              ? 'Target Due Date'
-                              : '${dueDate!.year}-${dueDate!.month.toString().padLeft(2, '0')}-${dueDate!.day.toString().padLeft(2, '0')}'),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-            ElevatedButton(
-              onPressed: () async {
-                if (titleCtrl.text.trim().isEmpty || selectedEmployeeId == null) {
-                  return;
-                }
-                final nav = Navigator.of(ctx);
-                final scaf = ScaffoldMessenger.of(context);
-                final ok = await leadProvider.createTask({
-                  'title': titleCtrl.text.trim(),
-                  'description': descCtrl.text.trim(),
-                  'branch_id': selectedBranchId,
-                  'category_id': selectedCategoryId,
-                  'assigned_to_id': selectedEmployeeId,
-                  'priority': priority,
-                  'due_date': dueDate != null ? '${dueDate!.year}-${dueDate!.month.toString().padLeft(2, '0')}-${dueDate!.day.toString().padLeft(2, '0')}' : null,
-                  'lead_count': int.tryParse(countCtrl.text) ?? 0,
-                });
-                if (ok) {
-                  nav.pop();
-                  scaf.showSnackBar(
-                    const SnackBar(content: Text('Calling Task created & leads assigned!'), backgroundColor: AppColors.success),
-                  );
-                }
-              },
-              child: const Text('Create & Assign Task'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showTaskLeadsDialog(CallingTaskModel task) async {
-    final leadProvider = context.read<LeadProvider>();
-    await leadProvider.fetchTaskDetail(task.id);
-
-    if (!mounted) return;
-
-    showDialog(
-      context: context,
-      builder: (ctx) => Consumer<LeadProvider>(
-        builder: (context, provider, _) {
-          final leads = provider.taskLeads;
-          return AlertDialog(
-            backgroundColor: AppColors.surface,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            title: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(task.title, style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700)),
-                      Text(
-                        'Assigned to: ${task.assignedToName ?? 'Telecaller'} • ${leads.length} Leads',
-                        style: GoogleFonts.inter(fontSize: 12, color: AppColors.textSecondary),
-                      ),
-                    ],
-                  ),
-                ),
-                IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
-              ],
-            ),
-            content: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 700, maxHeight: 500),
-              child: leads.isEmpty
-                  ? Center(
-                      child: Text(
-                        'No leads currently attached to this task.',
-                        style: GoogleFonts.inter(color: AppColors.textSecondary),
-                      ),
-                    )
-                  : ListView.separated(
-                      shrinkWrap: true,
-                      itemCount: leads.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
-                      itemBuilder: (context, idx) {
-                        final lead = leads[idx];
-                        return ListTile(
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          title: Text(lead.fullName, style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600)),
-                          subtitle: Text('${lead.normalizedPhone} • ${lead.city.isNotEmpty ? lead.city : 'No City'}', style: GoogleFonts.inter(fontSize: 11, color: AppColors.textSecondary)),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: _getStatusColor(lead.status).withValues(alpha: 0.12),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(lead.status, style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w600, color: _getStatusColor(lead.status))),
-                              ),
-                              const SizedBox(width: 8),
-                              IconButton(
-                                icon: const Icon(Icons.phone_in_talk, color: AppColors.success, size: 20),
-                                tooltip: 'Open Lead & Call',
-                                onPressed: () {
-                                  Navigator.pop(ctx);
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(builder: (_) => LeadDetailScreen(leadId: lead.id)),
-                                  );
-                                },
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-            ),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
-  Color _getStatusColor(String status) {
-    switch (status) {
-      case 'COMPLETED':
-      case 'QUALIFIED':
-        return AppColors.success;
-      case 'IN_PROGRESS':
-        return AppColors.info;
-      case 'NOT_INTERESTED':
-      case 'BLOCKED':
-        return AppColors.danger;
-      default:
-        return AppColors.accentViolet;
-    }
-  }
 
   Color _getPriorityColor(String priority) {
     switch (priority) {
@@ -411,9 +115,15 @@ class _CallingTasksScreenState extends State<CallingTasksScreen> {
                 ),
                 if (!isTelecaller)
                   ElevatedButton.icon(
-                    onPressed: _showCreateTaskDialog,
+                    onPressed: () async {
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const CreateCallingTaskScreen()),
+                      );
+                      _loadData();
+                    },
                     icon: const Icon(Icons.add_task, size: 16),
-                    label: const Text('Create Task'),
+                    label: const Text('Create Task (Select Leads)'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.accentViolet,
                       foregroundColor: Colors.white,
@@ -708,12 +418,20 @@ class _CallingTasksScreenState extends State<CallingTasksScreen> {
                     '${task.completedLeadsCount} of ${task.totalLeadsCount} leads completed (${task.progressPercent}%)',
                     style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600),
                   ),
-                  OutlinedButton.icon(
-                    onPressed: () => _showTaskLeadsDialog(task),
+                  ElevatedButton.icon(
+                    onPressed: () async {
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => TaskDetailExecutionScreen(taskId: task.id)),
+                      );
+                      _loadData();
+                    },
                     icon: const Icon(Icons.phone_in_talk, size: 14),
-                    label: Text(isTelecaller ? 'Start Calling' : 'View Task Leads'),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    label: Text(isTelecaller ? 'Start Calling (View Numbers)' : 'Open Task & Numbers'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.accentViolet,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                       visualDensity: VisualDensity.compact,
                     ),
                   ),

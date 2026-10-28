@@ -152,6 +152,7 @@ class LeadModel {
   final String? assignedTo;
   final String? assignedToName;
   final String? assignedAt;
+  final String notes;
   final bool isAssignedEver;
   final int callAttemptsCount;
   final int callbacksCount;
@@ -179,6 +180,7 @@ class LeadModel {
     this.assignedTo,
     this.assignedToName,
     this.assignedAt,
+    this.notes = '',
     this.isAssignedEver = false,
     this.callAttemptsCount = 0,
     this.callbacksCount = 0,
@@ -208,6 +210,7 @@ class LeadModel {
       assignedTo: json['assigned_to']?.toString(),
       assignedToName: json['assigned_to_name'],
       assignedAt: json['assigned_at'],
+      notes: json['notes'] ?? (json['custom_fields'] is Map ? json['custom_fields']['notes'] ?? '' : ''),
       isAssignedEver: json['is_assigned_ever'] ?? false,
       callAttemptsCount: json['call_attempts_count'] ?? 0,
       callbacksCount: json['callbacks_count'] ?? 0,

@@ -25,56 +25,136 @@ class _CompanyDirectoryScreenState extends State<CompanyDirectoryScreen> {
 
   void _showCreateCompanyDialog() {
     final compNameController = TextEditingController();
-    final contactEmailController = TextEditingController();
     final adminEmailController = TextEditingController();
     final adminPasswordController = TextEditingController();
-    final adminFirstNameController = TextEditingController();
+    final phoneController = TextEditingController();
+    final subdomainController = TextEditingController();
+    final adminNameController = TextEditingController();
 
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        title: Text('Create Tenant Company', style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700)),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(controller: compNameController, decoration: const InputDecoration(labelText: 'Company Name *')),
-              const SizedBox(height: 10),
-              TextField(controller: contactEmailController, decoration: const InputDecoration(labelText: 'Contact Email *')),
-              const SizedBox(height: 10),
-              TextField(controller: adminFirstNameController, decoration: const InputDecoration(labelText: 'Company Admin First Name *')),
-              const SizedBox(height: 10),
-              TextField(controller: adminEmailController, decoration: const InputDecoration(labelText: 'Company Admin Login Email *')),
-              const SizedBox(height: 10),
-              TextField(controller: adminPasswordController, obscureText: true, decoration: const InputDecoration(labelText: 'Company Admin Initial Password *')),
-            ],
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.accentVioletLight,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.business, color: AppColors.accentViolet, size: 20),
+            ),
+            const SizedBox(width: 10),
+            Text('Create Tenant Company', style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700)),
+          ],
+        ),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 480),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Only Company Name, Admin Email, and Admin Password are required. The tenant will receive its own isolated lead pool, branch manager, and calling task features.',
+                  style: GoogleFonts.inter(fontSize: 12, color: AppColors.textSecondary),
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: compNameController,
+                  decoration: const InputDecoration(
+                    labelText: 'Company Name *',
+                    hintText: 'e.g. Apex Global or Zenith Academy',
+                    prefixIcon: Icon(Icons.storefront, size: 18),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: adminEmailController,
+                  decoration: const InputDecoration(
+                    labelText: 'Admin Login Email *',
+                    hintText: 'admin@company.com',
+                    prefixIcon: Icon(Icons.email_outlined, size: 18),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: adminPasswordController,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Admin Initial Password *',
+                    hintText: 'Minimum 6 characters',
+                    prefixIcon: Icon(Icons.lock_outline, size: 18),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  title: Text('Optional Company Details', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.accentViolet)),
+                  children: [
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: adminNameController,
+                      decoration: const InputDecoration(labelText: 'Admin First Name (Optional)', hintText: 'Admin'),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: phoneController,
+                      decoration: const InputDecoration(labelText: 'Contact Phone (Optional)', hintText: '+91 9876543210'),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: subdomainController,
+                      decoration: const InputDecoration(labelText: 'Subdomain / Slug (Optional)', hintText: 'e.g. apex'),
+                    ),
+                    const SizedBox(height: 10),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () async {
-              if (compNameController.text.trim().isEmpty || adminEmailController.text.trim().isEmpty) return;
+              final compName = compNameController.text.trim();
+              final adminEmail = adminEmailController.text.trim();
+              final adminPass = adminPasswordController.text;
+
+              if (compName.isEmpty || adminEmail.isEmpty || adminPass.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Please fill Company Name, Admin Email, and Admin Password.'), backgroundColor: AppColors.danger),
+                );
+                return;
+              }
+
               final nav = Navigator.of(ctx);
               final scaffold = ScaffoldMessenger.of(context);
               final success = await context.read<CompanyProvider>().createCompany({
-                'name': compNameController.text.trim(),
-                'contact_email': contactEmailController.text.trim(),
-                'admin_email': adminEmailController.text.trim(),
-                'admin_password': adminPasswordController.text,
-                'admin_first_name': adminFirstNameController.text.trim(),
+                'name': compName,
+                'admin_email': adminEmail,
+                'admin_password': adminPass,
+                'admin_first_name': adminNameController.text.trim().isNotEmpty ? adminNameController.text.trim() : 'Admin',
+                'contact_email': adminEmail,
+                'contact_phone': phoneController.text.trim(),
+                'subdomain': subdomainController.text.trim().isNotEmpty ? subdomainController.text.trim() : null,
                 'status': 'ACTIVE',
               });
+
               if (success) {
                 nav.pop();
                 scaffold.showSnackBar(
-                  const SnackBar(content: Text('Company and Admin created successfully!'), backgroundColor: AppColors.success),
+                  SnackBar(
+                    content: Text('Company "$compName" and Admin credentials created successfully!'),
+                    backgroundColor: AppColors.success,
+                  ),
                 );
               }
             },
-            child: const Text('Create Company'),
+            child: const Text('Create Company & Admin'),
           ),
         ],
       ),

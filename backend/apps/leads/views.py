@@ -249,6 +249,24 @@ class LeadDetailView(views.APIView):
         if not user.is_super_admin and lead.company_id != company.id:
             return Response({"error": "Unauthorized"}, status=status.HTTP_403_FORBIDDEN)
 
+        if 'notes' in request.data or 'note' in request.data:
+            note_val = request.data.get('note') or request.data.get('notes', '')
+            cf = dict(lead.custom_fields or {})
+            cf['notes'] = note_val
+            lead.custom_fields = cf
+            lead.save(update_fields=['custom_fields'])
+
+            if note_val:
+                from apps.calls.models import CallAttempt
+                CallAttempt.objects.create(
+                    company=lead.company,
+                    lead=lead,
+                    employee=user,
+                    outcome='NOTE_UPDATED',
+                    notes=note_val,
+                    call_duration=0
+                )
+
         serializer = LeadSerializer(lead, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()

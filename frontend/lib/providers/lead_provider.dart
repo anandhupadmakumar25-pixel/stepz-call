@@ -373,4 +373,69 @@ class LeadProvider extends ChangeNotifier {
       return false;
     }
   }
+
+  Future<bool> updateLeadNote(String leadId, String note) async {
+    try {
+      final res = await ApiClient.patch('/leads/$leadId/', {'notes': note});
+      final updated = LeadModel.fromJson(res);
+      final taskIdx = _taskLeads.indexWhere((l) => l.id == leadId);
+      if (taskIdx != -1) {
+        _taskLeads[taskIdx] = updated;
+      }
+      final leadIdx = _leads.indexWhere((l) => l.id == leadId);
+      if (leadIdx != -1) {
+        _leads[leadIdx] = updated;
+      }
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> updateLeadStatus(String leadId, String status) async {
+    try {
+      final res = await ApiClient.patch('/leads/$leadId/', {'status': status});
+      final updated = LeadModel.fromJson(res);
+      final taskIdx = _taskLeads.indexWhere((l) => l.id == leadId);
+      if (taskIdx != -1) {
+        _taskLeads[taskIdx] = updated;
+      }
+      final leadIdx = _leads.indexWhere((l) => l.id == leadId);
+      if (leadIdx != -1) {
+        _leads[leadIdx] = updated;
+      }
+      if (_selectedTask != null) {
+        await fetchTaskDetail(_selectedTask!.id);
+      }
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> scheduleLeadCallback(String leadId, DateTime scheduledAt, String note) async {
+    try {
+      await ApiClient.post('/callbacks/', {
+        'lead': leadId,
+        'scheduled_at': scheduledAt.toIso8601String(),
+        'initial_notes': note,
+      });
+      await updateLeadStatus(leadId, 'CALLBACK_REQUESTED');
+      if (note.isNotEmpty) {
+        await updateLeadNote(leadId, 'Callback scheduled: $note');
+      }
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
+      return false;
+    }
+  }
 }

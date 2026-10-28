@@ -82,6 +82,7 @@ class LeadSerializer(serializers.ModelSerializer):
     category_color = serializers.CharField(source='category.color_code', read_only=True)
     task_title = serializers.CharField(source='task.title', read_only=True)
     full_name = serializers.CharField(read_only=True)
+    notes = serializers.SerializerMethodField()
 
     class Meta:
         model = Lead
@@ -89,10 +90,13 @@ class LeadSerializer(serializers.ModelSerializer):
             'id', 'first_name', 'last_name', 'full_name', 'raw_phone', 'normalized_phone',
             'email', 'city', 'state', 'source', 'status', 'branch', 'branch_name',
             'category', 'category_name', 'category_color', 'task', 'task_title',
-            'assigned_to', 'assigned_to_name',
+            'assigned_to', 'assigned_to_name', 'notes',
             'assigned_at', 'is_assigned_ever', 'custom_fields', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'normalized_phone', 'assigned_at', 'is_assigned_ever', 'created_at', 'updated_at']
+
+    def get_notes(self, obj):
+        return (obj.custom_fields or {}).get('notes', '')
 
 class LeadDetailSerializer(LeadSerializer):
     call_attempts_count = serializers.SerializerMethodField()
