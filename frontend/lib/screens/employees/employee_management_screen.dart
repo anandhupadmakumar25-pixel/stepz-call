@@ -142,6 +142,7 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
 
             Expanded(
               child: Card(
+                clipBehavior: Clip.antiAlias,
                 child: empProvider.isLoading && empProvider.employees.isEmpty
                     ? const Center(child: CircularProgressIndicator())
                     : empProvider.employees.isEmpty
@@ -152,67 +153,214 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                             actionLabel: 'Add Employee',
                             onAction: _showAddEmployeeDialog,
                           )
-                        : ListView.separated(
-                            itemCount: empProvider.employees.length,
-                            separatorBuilder: (_, __) => const Divider(height: 1),
-                            itemBuilder: (context, index) {
-                              final emp = empProvider.employees[index];
-                              final isActive = emp['is_active'] == true;
-
-                              return ListTile(
-                                leading: CircleAvatar(
-                                  backgroundColor: isActive ? AppColors.accentVioletLight : AppColors.surfaceSecondary,
-                                  child: Text(
-                                    emp['first_name'] != null && emp['first_name'].isNotEmpty
-                                        ? emp['first_name'][0].toUpperCase()
-                                        : 'E',
-                                    style: TextStyle(
-                                      color: isActive ? AppColors.accentViolet : AppColors.textMuted,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                                title: Wrap(
-                                  crossAxisAlignment: WrapCrossAlignment.center,
-                                  spacing: 6,
-                                  runSpacing: 4,
-                                  children: [
-                                    Text(
-                                      emp['full_name'] ?? emp['email'],
-                                      style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600),
-                                    ),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: AppColors.surfaceSecondary,
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
-                                      child: Text(
-                                        emp['role']?.replaceAll('_', ' ') ?? '',
-                                        style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w600),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                subtitle: Text(
-                                  '${emp['email']} • Assigned: ${emp['assigned_leads_count'] ?? 0} • Calls Today: ${emp['calls_today_count'] ?? 0}',
-                                  style: GoogleFonts.inter(fontSize: 12, color: AppColors.textSecondary),
-                                ),
-                                trailing: Switch(
-                                  value: isActive,
-                                  activeTrackColor: AppColors.accentViolet,
-                                  onChanged: (val) {
-                                    context.read<EmployeeProvider>().toggleEmployeeStatus(emp['id'], val);
-                                  },
-                                ),
-                              );
-                            },
-                          ),
+                        : isMobile
+                            ? _buildMobileList(empProvider.employees)
+                            : _buildDataTable(empProvider.employees),
               ),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildDataTable(List<dynamic> employees) {
+    final horizontalScrollController = ScrollController();
+
+    return Scrollbar(
+      controller: horizontalScrollController,
+      thumbVisibility: true,
+      child: SingleChildScrollView(
+        controller: horizontalScrollController,
+        scrollDirection: Axis.horizontal,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minWidth: 850),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.vertical,
+            child: DataTable(
+              headingRowHeight: 46,
+              dataRowMinHeight: 52,
+              dataRowMaxHeight: 60,
+              columns: const [
+                DataColumn(label: Text('EMPLOYEE', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11, letterSpacing: 0.5))),
+                DataColumn(label: Text('ROLE', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11, letterSpacing: 0.5))),
+                DataColumn(label: Text('ASSIGNED LEADS', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11, letterSpacing: 0.5))),
+                DataColumn(label: Text('CALLS TODAY', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11, letterSpacing: 0.5))),
+                DataColumn(label: Text('DAILY TARGET', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11, letterSpacing: 0.5))),
+                DataColumn(label: Text('STATUS / ACCESS', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11, letterSpacing: 0.5))),
+              ],
+              rows: employees.map((emp) {
+                final isActive = emp['is_active'] == true;
+
+                return DataRow(
+                  cells: [
+                    DataCell(
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          CircleAvatar(
+                            radius: 14,
+                            backgroundColor: isActive ? AppColors.accentVioletLight : AppColors.surfaceSecondary,
+                            child: Text(
+                              emp['first_name'] != null && emp['first_name'].isNotEmpty
+                                  ? emp['first_name'][0].toUpperCase()
+                                  : 'E',
+                              style: TextStyle(
+                                color: isActive ? AppColors.accentViolet : AppColors.textMuted,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 180),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  emp['full_name'] ?? emp['email'],
+                                  style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 13),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                Text(
+                                  emp['email'],
+                                  style: GoogleFonts.inter(fontSize: 11, color: AppColors.textMuted),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    DataCell(
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: emp['role'] == 'MANAGER' ? AppColors.accentVioletLight : AppColors.surfaceSecondary,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          emp['role']?.replaceAll('_', ' ') ?? 'EMPLOYEE',
+                          style: GoogleFonts.inter(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: emp['role'] == 'MANAGER' ? AppColors.accentViolet : AppColors.textPrimary,
+                          ),
+                        ),
+                      ),
+                    ),
+                    DataCell(Text('${emp['assigned_leads_count'] ?? 0}', style: GoogleFonts.inter(fontWeight: FontWeight.w600))),
+                    DataCell(
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: (emp['calls_today_count'] ?? 0) >= (emp['daily_call_target'] ?? 50)
+                              ? AppColors.successLight
+                              : AppColors.surfaceSecondary,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          '${emp['calls_today_count'] ?? 0}',
+                          style: GoogleFonts.inter(
+                            fontWeight: FontWeight.w700,
+                            color: (emp['calls_today_count'] ?? 0) >= (emp['daily_call_target'] ?? 50)
+                                ? AppColors.success
+                                : AppColors.textPrimary,
+                          ),
+                        ),
+                      ),
+                    ),
+                    DataCell(Text('${emp['daily_call_target'] ?? 50}', style: GoogleFonts.inter(color: AppColors.textSecondary))),
+                    DataCell(
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Switch(
+                            value: isActive,
+                            activeTrackColor: AppColors.accentViolet,
+                            onChanged: (val) {
+                              context.read<EmployeeProvider>().toggleEmployeeStatus(emp['id'], val);
+                            },
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            isActive ? 'Active' : 'Disabled',
+                            style: GoogleFonts.inter(fontSize: 12, color: isActive ? AppColors.success : AppColors.textMuted, fontWeight: FontWeight.w500),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                );
+              }).toList(),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMobileList(List<dynamic> employees) {
+    return ListView.separated(
+      itemCount: employees.length,
+      separatorBuilder: (_, __) => const Divider(height: 1),
+      itemBuilder: (context, index) {
+        final emp = employees[index];
+        final isActive = emp['is_active'] == true;
+
+        return ListTile(
+          leading: CircleAvatar(
+            backgroundColor: isActive ? AppColors.accentVioletLight : AppColors.surfaceSecondary,
+            child: Text(
+              emp['first_name'] != null && emp['first_name'].isNotEmpty
+                  ? emp['first_name'][0].toUpperCase()
+                  : 'E',
+              style: TextStyle(
+                color: isActive ? AppColors.accentViolet : AppColors.textMuted,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          title: Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 6,
+            runSpacing: 4,
+            children: [
+              Text(
+                emp['full_name'] ?? emp['email'],
+                style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceSecondary,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  emp['role']?.replaceAll('_', ' ') ?? '',
+                  style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
+          subtitle: Text(
+            '${emp['email']} • Assigned: ${emp['assigned_leads_count'] ?? 0} • Calls: ${emp['calls_today_count'] ?? 0}',
+            style: GoogleFonts.inter(fontSize: 12, color: AppColors.textSecondary),
+          ),
+          trailing: Switch(
+            value: isActive,
+            activeTrackColor: AppColors.accentViolet,
+            onChanged: (val) {
+              context.read<EmployeeProvider>().toggleEmployeeStatus(emp['id'], val);
+            },
+          ),
+        );
+      },
     );
   }
 }

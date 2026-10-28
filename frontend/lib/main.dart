@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'core/theme/app_theme.dart';
 import 'providers/auth_provider.dart';
 import 'providers/dashboard_provider.dart';
@@ -33,21 +34,28 @@ class TelecallerCrmApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => CompanyProvider()),
         ChangeNotifierProvider(create: (_) => NotificationProvider()),
       ],
-      child: Consumer<AuthProvider>(
-        builder: (context, auth, _) {
-          return MaterialApp(
-            title: 'Telecaller CRM SaaS',
-            debugShowCheckedModeBanner: false,
-            theme: AppTheme.lightTheme,
-            home: auth.isLoading
-                ? const Scaffold(
-                    body: Center(
-                      child: CircularProgressIndicator(),
-                    ),
-                  )
-                : auth.isAuthenticated
-                    ? const MainLayout()
-                    : const LoginScreen(),
+      child: ScreenUtilInit(
+        designSize: const Size(1440, 900),
+        minTextAdapt: true,
+        splitScreenMode: true,
+        builder: (context, child) {
+          return Consumer<AuthProvider>(
+            builder: (context, auth, _) {
+              return MaterialApp(
+                title: 'Telecaller CRM SaaS',
+                debugShowCheckedModeBanner: false,
+                theme: AppTheme.lightTheme,
+                home: auth.isLoading
+                    ? const Scaffold(
+                        body: Center(
+                          child: CircularProgressIndicator(),
+                        ),
+                      )
+                    : auth.isAuthenticated
+                        ? const MainLayout()
+                        : const LoginScreen(),
+              );
+            },
           );
         },
       ),

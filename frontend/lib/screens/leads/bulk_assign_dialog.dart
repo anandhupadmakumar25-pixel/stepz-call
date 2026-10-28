@@ -90,25 +90,29 @@ class _BulkAssignDialogState extends State<BulkAssignDialog> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: AppColors.accentVioletLight,
-                          borderRadius: BorderRadius.circular(8),
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: AppColors.accentVioletLight,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(Icons.assignment_ind_outlined, color: AppColors.accentViolet, size: 20),
                         ),
-                        child: const Icon(Icons.assignment_ind_outlined, color: AppColors.accentViolet, size: 20),
-                      ),
-                      const SizedBox(width: 12),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Bulk Lead Assignment', style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700)),
-                          Text('${widget.selectedLeadIds.length} leads selected for allocation', style: GoogleFonts.inter(fontSize: 11, color: AppColors.textSecondary)),
-                        ],
-                      ),
-                    ],
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Bulk Lead Assignment', style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700), maxLines: 1, overflow: TextOverflow.ellipsis),
+                              Text('${widget.selectedLeadIds.length} leads selected for allocation', style: GoogleFonts.inter(fontSize: 11, color: AppColors.textSecondary), maxLines: 1, overflow: TextOverflow.ellipsis),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                   IconButton(
                     icon: const Icon(Icons.close),

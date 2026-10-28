@@ -213,6 +213,7 @@ class _LeadDirectoryScreenState extends State<LeadDirectoryScreen> {
             // Leads Directory List / Table
             Expanded(
               child: Card(
+                clipBehavior: Clip.antiAlias,
                 child: leadProvider.isLoading && leadProvider.leads.isEmpty
                     ? const Center(child: CircularProgressIndicator())
                     : leadProvider.leads.isEmpty
@@ -229,7 +230,7 @@ class _LeadDirectoryScreenState extends State<LeadDirectoryScreen> {
                             },
                           )
                         : isMobile
-                            ? _buildMobileList(leadProvider.leads)
+                            ? _buildMobileList(leadProvider.leads, isTelecaller)
                             : _buildDataTable(leadProvider.leads, isTelecaller),
               ),
             ),
@@ -240,82 +241,243 @@ class _LeadDirectoryScreenState extends State<LeadDirectoryScreen> {
   }
 
   Widget _buildDataTable(List<LeadModel> leads, bool isTelecaller) {
-    return SingleChildScrollView(
-      child: DataTable(
-        showCheckboxColumn: !isTelecaller,
-        onSelectAll: !isTelecaller
-            ? (selected) {
-                setState(() {
-                  if (selected == true) {
-                    _selectedLeadIds.addAll(leads.map((l) => l.id));
-                  } else {
-                    _selectedLeadIds.clear();
-                  }
-                });
-              }
-            : null,
-        columns: const [
-          DataColumn(label: Text('Customer Name')),
-          DataColumn(label: Text('Phone (E.164)')),
-          DataColumn(label: Text('City')),
-          DataColumn(label: Text('Status')),
-          DataColumn(label: Text('Assigned Telecaller')),
-          DataColumn(label: Text('Action')),
-        ],
-        rows: leads.map((lead) {
-          final isSelected = _selectedLeadIds.contains(lead.id);
+    final horizontalScrollController = ScrollController();
 
-          return DataRow(
-            selected: isSelected,
-            onSelectChanged: !isTelecaller
-                ? (selected) {
-                    setState(() {
-                      if (selected == true) {
-                        _selectedLeadIds.add(lead.id);
-                      } else {
-                        _selectedLeadIds.remove(lead.id);
-                      }
-                    });
-                  }
-                : null,
-            cells: [
-              DataCell(
-                InkWell(
-                  onTap: () => _openLeadDetail(lead.id),
-                  child: Text(
-                    lead.fullName,
-                    style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: AppColors.accentViolet),
-                  ),
-                ),
-              ),
-              DataCell(Text(lead.normalizedPhone, style: const TextStyle(fontFamily: 'monospace', fontSize: 12))),
-              DataCell(Text(lead.city.isNotEmpty ? lead.city : '—')),
-              DataCell(StatusBadge(status: lead.status)),
-              DataCell(Text(lead.assignedToName ?? 'Unassigned', style: GoogleFonts.inter(fontSize: 12))),
-              DataCell(
-                IconButton(
-                  icon: const Icon(Icons.arrow_forward_ios, size: 14),
-                  onPressed: () => _openLeadDetail(lead.id),
-                ),
-              ),
-            ],
-          );
-        }).toList(),
+    return Scrollbar(
+      controller: horizontalScrollController,
+      thumbVisibility: true,
+      child: SingleChildScrollView(
+        controller: horizontalScrollController,
+        scrollDirection: Axis.horizontal,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minWidth: 1000),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.vertical,
+            child: DataTable(
+              showCheckboxColumn: !isTelecaller,
+              headingRowHeight: 46,
+              dataRowMinHeight: 52,
+              dataRowMaxHeight: 58,
+              onSelectAll: !isTelecaller
+                  ? (selected) {
+                      setState(() {
+                        if (selected == true) {
+                          _selectedLeadIds.addAll(leads.map((l) => l.id));
+                        } else {
+                          _selectedLeadIds.clear();
+                        }
+                      });
+                    }
+                  : null,
+              columns: const [
+                DataColumn(label: Text('CUSTOMER NAME', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11, letterSpacing: 0.5))),
+                DataColumn(label: Text('PHONE (E.164)', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11, letterSpacing: 0.5))),
+                DataColumn(label: Text('LOCATION', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11, letterSpacing: 0.5))),
+                DataColumn(label: Text('STATUS', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11, letterSpacing: 0.5))),
+                DataColumn(label: Text('ASSIGNED TO', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11, letterSpacing: 0.5))),
+                DataColumn(label: Text('ACTIONS', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11, letterSpacing: 0.5))),
+              ],
+              rows: leads.map((lead) {
+                final isSelected = _selectedLeadIds.contains(lead.id);
+
+                return DataRow(
+                  selected: isSelected,
+                  onSelectChanged: !isTelecaller
+                      ? (selected) {
+                          setState(() {
+                            if (selected == true) {
+                              _selectedLeadIds.add(lead.id);
+                            } else {
+                              _selectedLeadIds.remove(lead.id);
+                            }
+                          });
+                        }
+                      : null,
+                  cells: [
+                    DataCell(
+                      InkWell(
+                        onTap: () => _openLeadDetail(lead.id),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            CircleAvatar(
+                              radius: 14,
+                              backgroundColor: AppColors.accentVioletLight,
+                              child: Text(
+                                lead.fullName.isNotEmpty ? lead.fullName[0].toUpperCase() : 'L',
+                                style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.accentViolet),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 180),
+                              child: Text(
+                                lead.fullName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: AppColors.accentViolet, fontSize: 13),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    DataCell(
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: AppColors.surfaceSecondary,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          lead.normalizedPhone,
+                          style: const TextStyle(fontFamily: 'monospace', fontSize: 12, fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                    ),
+                    DataCell(
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 140),
+                        child: Text(
+                          lead.city.isNotEmpty ? lead.city : '—',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.inter(fontSize: 12, color: AppColors.textSecondary),
+                        ),
+                      ),
+                    ),
+                    DataCell(StatusBadge(status: lead.status)),
+                    DataCell(
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            lead.assignedToName != null ? Icons.person_outline : Icons.person_off_outlined,
+                            size: 14,
+                            color: lead.assignedToName != null ? AppColors.accentViolet : AppColors.textMuted,
+                          ),
+                          const SizedBox(width: 6),
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 140),
+                            child: Text(
+                              lead.assignedToName ?? 'Unassigned Pool',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.inter(
+                                fontSize: 12,
+                                fontWeight: lead.assignedToName != null ? FontWeight.w500 : FontWeight.w400,
+                                color: lead.assignedToName != null ? AppColors.textPrimary : AppColors.textMuted,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    DataCell(
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.arrow_forward, size: 16, color: AppColors.textSecondary),
+                            tooltip: 'View Profile',
+                            onPressed: () => _openLeadDetail(lead.id),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                );
+              }).toList(),
+            ),
+          ),
+        ),
       ),
     );
   }
 
-  Widget _buildMobileList(List<LeadModel> leads) {
+  Widget _buildMobileList(List<LeadModel> leads, bool isTelecaller) {
     return ListView.separated(
+      padding: const EdgeInsets.all(8),
       itemCount: leads.length,
-      separatorBuilder: (_, __) => const Divider(height: 1),
+      separatorBuilder: (_, __) => const SizedBox(height: 8),
       itemBuilder: (context, index) {
         final lead = leads[index];
-        return ListTile(
-          onTap: () => _openLeadDetail(lead.id),
-          title: Text(lead.fullName, style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 14)),
-          subtitle: Text('${lead.normalizedPhone} • ${lead.city.isNotEmpty ? lead.city : 'No location'}', style: GoogleFonts.inter(fontSize: 12)),
-          trailing: StatusBadge(status: lead.status),
+        final isSelected = _selectedLeadIds.contains(lead.id);
+
+        return Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+            side: BorderSide(
+              color: isSelected ? AppColors.accentViolet : AppColors.border,
+              width: isSelected ? 1.5 : 1,
+            ),
+          ),
+          child: InkWell(
+            onTap: () => _openLeadDetail(lead.id),
+            borderRadius: BorderRadius.circular(10),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 16,
+                        backgroundColor: AppColors.accentVioletLight,
+                        child: Text(
+                          lead.fullName.isNotEmpty ? lead.fullName[0].toUpperCase() : 'L',
+                          style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.accentViolet),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              lead.fullName,
+                              style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 14),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            Text(
+                              lead.normalizedPhone,
+                              style: const TextStyle(fontFamily: 'monospace', fontSize: 11, color: AppColors.textSecondary),
+                            ),
+                          ],
+                        ),
+                      ),
+                      StatusBadge(status: lead.status),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  const Divider(height: 1),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.location_on_outlined, size: 12, color: AppColors.textMuted),
+                          const SizedBox(width: 4),
+                          Text(lead.city.isNotEmpty ? lead.city : 'No city', style: GoogleFonts.inter(fontSize: 11, color: AppColors.textSecondary)),
+                        ],
+                      ),
+                      Row(
+                        children: [
+                          Icon(Icons.person_outline, size: 12, color: lead.assignedToName != null ? AppColors.accentViolet : AppColors.textMuted),
+                          const SizedBox(width: 4),
+                          Text(lead.assignedToName ?? 'Unassigned', style: GoogleFonts.inter(fontSize: 11, color: AppColors.textSecondary)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
         );
       },
     );

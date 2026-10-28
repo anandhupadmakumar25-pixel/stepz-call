@@ -85,7 +85,9 @@ class _AddLeadDialogState extends State<AddLeadDialog> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Add New Lead', style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700)),
+                    Expanded(
+                      child: Text('Add New Lead', style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    ),
                     IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.of(context).pop()),
                   ],
                 ),

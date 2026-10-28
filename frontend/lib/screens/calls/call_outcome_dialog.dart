@@ -135,12 +135,14 @@ class _CallOutcomeDialogState extends State<CallOutcomeDialog> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Record Call Outcome', style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700)),
-                          Text('${widget.leadName} (${widget.phoneNumber})', style: GoogleFonts.inter(fontSize: 12, color: AppColors.textSecondary)),
-                        ],
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Record Call Outcome', style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700), maxLines: 1, overflow: TextOverflow.ellipsis),
+                            Text('${widget.leadName} (${widget.phoneNumber})', style: GoogleFonts.inter(fontSize: 12, color: AppColors.textSecondary), maxLines: 1, overflow: TextOverflow.ellipsis),
+                          ],
+                        ),
                       ),
                       IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.of(context).pop()),
                     ],

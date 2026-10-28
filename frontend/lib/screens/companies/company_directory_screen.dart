@@ -123,6 +123,7 @@ class _CompanyDirectoryScreenState extends State<CompanyDirectoryScreen> {
 
             Expanded(
               child: Card(
+                clipBehavior: Clip.antiAlias,
                 child: compProvider.isLoading && compProvider.companies.isEmpty
                     ? const Center(child: CircularProgressIndicator())
                     : compProvider.companies.isEmpty
@@ -131,51 +132,138 @@ class _CompanyDirectoryScreenState extends State<CompanyDirectoryScreen> {
                             title: 'No companies found',
                             description: 'Create a tenant company to invite the first Company Admin.',
                           )
-                        : ListView.separated(
-                            itemCount: compProvider.companies.length,
-                            separatorBuilder: (_, __) => const Divider(height: 1),
-                            itemBuilder: (context, index) {
-                              final comp = compProvider.companies[index];
-                              return ListTile(
-                                leading: Container(
-                                  padding: const EdgeInsets.all(8),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.navBackground,
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: const Icon(Icons.business, color: Colors.white, size: 18),
-                                ),
-                                title: Wrap(
-                                  crossAxisAlignment: WrapCrossAlignment.center,
-                                  spacing: 8,
-                                  runSpacing: 4,
-                                  children: [
-                                    Text(comp.name, style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600)),
-                                    StatusBadge(status: comp.status),
-                                  ],
-                                ),
-                                subtitle: Text(
-                                  '${comp.contactEmail} • ${comp.userCount} users • ${comp.leadCount} leads in pool',
-                                  style: GoogleFonts.inter(fontSize: 12, color: AppColors.textSecondary),
-                                ),
-                                trailing: PopupMenuButton<String>(
-                                  onSelected: (val) {
-                                    context.read<CompanyProvider>().updateCompanyStatus(comp.id, val);
-                                  },
-                                  itemBuilder: (_) => [
-                                    const PopupMenuItem(value: 'ACTIVE', child: Text('Set Active')),
-                                    const PopupMenuItem(value: 'SUSPENDED', child: Text('Suspend Company')),
-                                    const PopupMenuItem(value: 'TRIAL', child: Text('Set Trial')),
-                                  ],
-                                ),
-                              );
-                            },
-                          ),
+                        : isMobile
+                            ? _buildMobileList(compProvider.companies)
+                            : _buildDataTable(compProvider.companies),
               ),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildDataTable(List<dynamic> companies) {
+    final horizontalScrollController = ScrollController();
+
+    return Scrollbar(
+      controller: horizontalScrollController,
+      thumbVisibility: true,
+      child: SingleChildScrollView(
+        controller: horizontalScrollController,
+        scrollDirection: Axis.horizontal,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minWidth: 800),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.vertical,
+            child: DataTable(
+              headingRowHeight: 46,
+              dataRowMinHeight: 52,
+              dataRowMaxHeight: 60,
+              columns: const [
+                DataColumn(label: Text('TENANT COMPANY', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11, letterSpacing: 0.5))),
+                DataColumn(label: Text('CONTACT EMAIL', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11, letterSpacing: 0.5))),
+                DataColumn(label: Text('USERS', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11, letterSpacing: 0.5))),
+                DataColumn(label: Text('LEAD POOL', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11, letterSpacing: 0.5))),
+                DataColumn(label: Text('TENANT STATUS', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11, letterSpacing: 0.5))),
+                DataColumn(label: Text('ACTIONS', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11, letterSpacing: 0.5))),
+              ],
+              rows: companies.map((comp) {
+                return DataRow(
+                  cells: [
+                    DataCell(
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(7),
+                            decoration: BoxDecoration(
+                              color: AppColors.navBackground,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Icon(Icons.business, color: Colors.white, size: 14),
+                          ),
+                          const SizedBox(width: 10),
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 180),
+                            child: Text(
+                              comp.name,
+                              style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 13),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    DataCell(Text(comp.contactEmail, style: GoogleFonts.inter(fontSize: 12, color: AppColors.textSecondary))),
+                    DataCell(Text('${comp.userCount}', style: GoogleFonts.inter(fontWeight: FontWeight.w600))),
+                    DataCell(Text('${comp.leadCount}', style: GoogleFonts.inter(fontWeight: FontWeight.w600))),
+                    DataCell(StatusBadge(status: comp.status)),
+                    DataCell(
+                      PopupMenuButton<String>(
+                        tooltip: 'Manage Tenant',
+                        icon: const Icon(Icons.more_vert, size: 18),
+                        onSelected: (val) {
+                          context.read<CompanyProvider>().updateCompanyStatus(comp.id, val);
+                        },
+                        itemBuilder: (_) => [
+                          const PopupMenuItem(value: 'ACTIVE', child: Text('Set Active')),
+                          const PopupMenuItem(value: 'SUSPENDED', child: Text('Suspend Company')),
+                          const PopupMenuItem(value: 'TRIAL', child: Text('Set Trial')),
+                        ],
+                      ),
+                    ),
+                  ],
+                );
+              }).toList(),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMobileList(List<dynamic> companies) {
+    return ListView.separated(
+      itemCount: companies.length,
+      separatorBuilder: (_, __) => const Divider(height: 1),
+      itemBuilder: (context, index) {
+        final comp = companies[index];
+        return ListTile(
+          leading: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppColors.navBackground,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(Icons.business, color: Colors.white, size: 18),
+          ),
+          title: Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 4,
+            children: [
+              Text(comp.name, style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600)),
+              StatusBadge(status: comp.status),
+            ],
+          ),
+          subtitle: Text(
+            '${comp.contactEmail} • ${comp.userCount} users • ${comp.leadCount} leads in pool',
+            style: GoogleFonts.inter(fontSize: 12, color: AppColors.textSecondary),
+          ),
+          trailing: PopupMenuButton<String>(
+            onSelected: (val) {
+              context.read<CompanyProvider>().updateCompanyStatus(comp.id, val);
+            },
+            itemBuilder: (_) => [
+              const PopupMenuItem(value: 'ACTIVE', child: Text('Set Active')),
+              const PopupMenuItem(value: 'SUSPENDED', child: Text('Suspend Company')),
+              const PopupMenuItem(value: 'TRIAL', child: Text('Set Trial')),
+            ],
+          ),
+        );
+      },
     );
   }
 }
