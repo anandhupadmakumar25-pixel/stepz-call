@@ -1,0 +1,35 @@
+# Python / Django
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+.Python
+backend/venv/
+backend/.venv/
+*.sqlite3
+*.db
+local_settings.py
+.env
+media/
+staticfiles/
+
+# Flutter / Dart
+frontend/.dart_tool/
+frontend/.flutter-plugins
+frontend/.flutter-plugins-dependencies
+frontend/.packages
+frontend/.pub-cache/
+frontend/.pub/
+frontend/build/
+frontend/ios/Flutter/Generated.xcconfig
+frontend/android/.gradle
+frontend/android/local.properties
+
+# IDE & OS
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db

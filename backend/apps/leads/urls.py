@@ -1,0 +1,20 @@
+from django.urls import path
+from apps.leads.views import (
+    LeadListCreateView,
+    LeadDetailView,
+    LeadImportUploadView,
+    LeadImportConfirmView,
+    ImportBatchListView,
+    LeadBulkAssignView,
+    PermanentRegistryListView
+)
+
+urlpatterns = [
+    path('', LeadListCreateView.as_view(), name='lead_list_create'),
+    path('<uuid:pk>/', LeadDetailView.as_view(), name='lead_detail'),
+    path('import/upload/', LeadImportUploadView.as_view(), name='lead_import_upload'),
+    path('import/confirm/<uuid:pk>/', LeadImportConfirmView.as_view(), name='lead_import_confirm'),
+    path('import/batches/', ImportBatchListView.as_view(), name='import_batch_list'),
+    path('bulk-assign/', LeadBulkAssignView.as_view(), name='lead_bulk_assign'),
+    path('permanent-registry/', PermanentRegistryListView.as_view(), name='permanent_registry_list'),
+]
