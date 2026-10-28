@@ -24,14 +24,27 @@ class CallbackSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'rescheduled_count', 'last_rescheduled_at', 'reminder_sent', 'created_at', 'updated_at']
 
+from datetime import timedelta
+from django.utils import timezone
+
 class CallbackCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Callback
         fields = ['lead', 'scheduled_at', 'initial_notes']
 
+    def validate_scheduled_at(self, value):
+        if value < timezone.now() - timedelta(minutes=2):
+            raise serializers.ValidationError("Callback date and time cannot be in the past.")
+        return value
+
 class CallbackRescheduleSerializer(serializers.Serializer):
     new_scheduled_at = serializers.DateTimeField(required=True)
     reason = serializers.CharField(required=True, min_length=3)
+
+    def validate_new_scheduled_at(self, value):
+        if value < timezone.now() - timedelta(minutes=2):
+            raise serializers.ValidationError("Rescheduled callback date and time cannot be in the past.")
+        return value
 
 class CallbackCompleteSerializer(serializers.Serializer):
     completion_notes = serializers.CharField(required=True, min_length=3)

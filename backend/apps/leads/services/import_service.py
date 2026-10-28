@@ -213,8 +213,23 @@ class LeadImportService:
             if category_id:
                 category = LeadCategory.objects.filter(id=category_id, company=company).first()
 
+            # Re-verify permanent blocking and active leads to prevent race conditions
+            currently_blocked = set(
+                PermanentPhoneNumberRegistry.objects.filter(company=company)
+                .values_list('normalized_phone', flat=True)
+            )
+            currently_existing = set(
+                Lead.objects.filter(company=company)
+                .values_list('normalized_phone', flat=True)
+            )
+
             leads_to_create = []
+            seen_in_batch = set()
             for item in batch.staging_data:
+                norm_phone = item['normalized_phone']
+                if norm_phone in currently_blocked or norm_phone in currently_existing or norm_phone in seen_in_batch:
+                    continue
+                seen_in_batch.add(norm_phone)
                 names = item['name'].split(' ', 1)
                 first_name = names[0]
                 last_name = names[1] if len(names) > 1 else ''
@@ -224,7 +239,7 @@ class LeadImportService:
                     first_name=first_name,
                     last_name=last_name,
                     raw_phone=item['raw_phone'],
-                    normalized_phone=item['normalized_phone'],
+                    normalized_phone=norm_phone,
                     email=item.get('email', ''),
                     city=item.get('city', ''),
                     state=item.get('state', ''),
@@ -236,7 +251,8 @@ class LeadImportService:
                     is_assigned_ever=False,
                 ))
 
-            Lead.objects.bulk_create(leads_to_create)
+            if leads_to_create:
+                Lead.objects.bulk_create(leads_to_create)
             batch.status = 'CONFIRMED'
             batch.save()
 

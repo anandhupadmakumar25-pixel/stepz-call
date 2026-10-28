@@ -97,6 +97,8 @@ class CallbackRescheduleView(views.APIView):
             return Response({"error": "Callback not found"}, status=status.HTTP_404_NOT_FOUND)
         if not request.user.is_super_admin and cb.company_id != request.user.company_id:
             return Response({"error": "Unauthorized"}, status=status.HTTP_403_FORBIDDEN)
+        if request.user.role == 'EMPLOYEE' and cb.assigned_employee_id != request.user.id:
+            return Response({"error": "You are only authorized to modify callbacks assigned to you."}, status=status.HTTP_403_FORBIDDEN)
 
         serializer = CallbackRescheduleSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -131,6 +133,8 @@ class CallbackCompleteView(views.APIView):
             return Response({"error": "Callback not found"}, status=status.HTTP_404_NOT_FOUND)
         if not request.user.is_super_admin and cb.company_id != request.user.company_id:
             return Response({"error": "Unauthorized"}, status=status.HTTP_403_FORBIDDEN)
+        if request.user.role == 'EMPLOYEE' and cb.assigned_employee_id != request.user.id:
+            return Response({"error": "You are only authorized to modify callbacks assigned to you."}, status=status.HTTP_403_FORBIDDEN)
 
         serializer = CallbackCompleteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)

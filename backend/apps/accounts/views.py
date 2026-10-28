@@ -4,7 +4,7 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import get_user_model
-from django.db import transaction
+from django.db import transaction, models
 
 from apps.accounts.models import Team, EmployeeProfile
 from apps.accounts.serializers import (

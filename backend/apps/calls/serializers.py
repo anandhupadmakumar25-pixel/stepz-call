@@ -25,3 +25,10 @@ class LogCallOutcomeSerializer(serializers.Serializer):
     schedule_callback = serializers.BooleanField(default=False)
     callback_time = serializers.DateTimeField(required=False, allow_null=True)
     callback_notes = serializers.CharField(required=False, allow_blank=True)
+
+    def validate_callback_time(self, value):
+        from datetime import timedelta
+        from django.utils import timezone
+        if value and value < timezone.now() - timedelta(minutes=2):
+            raise serializers.ValidationError("Callback time cannot be in the past.")
+        return value

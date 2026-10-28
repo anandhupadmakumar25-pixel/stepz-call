@@ -51,6 +51,9 @@ class CallAttemptListCreateView(views.APIView):
         if not lead:
             return Response({"error": "Lead not found in your company."}, status=status.HTTP_404_NOT_FOUND)
 
+        if user.role == 'EMPLOYEE' and lead.assigned_to_id != user.id:
+            return Response({"error": "You are only authorized to log calls for leads assigned to you."}, status=status.HTTP_403_FORBIDDEN)
+
         with transaction.atomic():
             call = CallAttempt.objects.create(
                 company=company,

@@ -2,6 +2,7 @@ from rest_framework import views, status, generics
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+from django.db import transaction
 from django.db.models import Q
 
 from apps.leads.models import Lead, Branch, LeadCategory, CallingTask, ImportBatch, PermanentPhoneNumberRegistry
@@ -249,23 +250,15 @@ class LeadDetailView(views.APIView):
         if not user.is_super_admin and lead.company_id != company.id:
             return Response({"error": "Unauthorized"}, status=status.HTTP_403_FORBIDDEN)
 
+        if user.role == 'EMPLOYEE' and lead.assigned_to_id != user.id:
+            return Response({"error": "Unauthorized"}, status=status.HTTP_403_FORBIDDEN)
+
         if 'notes' in request.data or 'note' in request.data:
             note_val = request.data.get('note') or request.data.get('notes', '')
             cf = dict(lead.custom_fields or {})
             cf['notes'] = note_val
             lead.custom_fields = cf
             lead.save(update_fields=['custom_fields'])
-
-            if note_val:
-                from apps.calls.models import CallAttempt
-                CallAttempt.objects.create(
-                    company=lead.company,
-                    lead=lead,
-                    employee=user,
-                    outcome='NOTE_UPDATED',
-                    notes=note_val,
-                    call_duration=0
-                )
 
         serializer = LeadSerializer(lead, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
@@ -419,6 +412,8 @@ class CallingTaskListCreateView(views.APIView):
         assigned_user = User.objects.filter(id=assigned_to_id, company=company).first()
         if not assigned_user:
             return Response({"assigned_to_id": ["Target employee not found in your company."]}, status=status.HTTP_400_BAD_REQUEST)
+        if not assigned_user.is_active:
+            return Response({"assigned_to_id": ["Target employee is deactivated."]}, status=status.HTTP_400_BAD_REQUEST)
 
         branch_id = request.data.get('branch_id')
         branch = Branch.objects.filter(id=branch_id, company=company).first() if branch_id else None
@@ -430,7 +425,43 @@ class CallingTaskListCreateView(views.APIView):
         due_date = request.data.get('due_date') or None
         description = request.data.get('description', '').strip()
 
+        lead_ids = request.data.get('lead_ids', [])
+        lead_count = int(request.data.get('lead_count', 0) or 0)
+
         with transaction.atomic():
+            leads_to_assign = []
+            if lead_ids:
+                import uuid
+                clean_lead_ids = []
+                for item in lead_ids:
+                    try:
+                        clean_lead_ids.append(uuid.UUID(str(item)))
+                    except (ValueError, TypeError, AttributeError):
+                        return Response({"lead_ids": [f"Invalid lead UUID: '{item}'."]}, status=status.HTTP_400_BAD_REQUEST)
+                clean_lead_ids = list(dict.fromkeys(clean_lead_ids))
+                leads_to_assign = list(Lead.objects.select_for_update().filter(id__in=clean_lead_ids, company=company))
+                if len(leads_to_assign) != len(clean_lead_ids):
+                    return Response({"lead_ids": ["One or more selected leads do not exist or belong to another company."]}, status=status.HTTP_400_BAD_REQUEST)
+
+                # Validate lead eligibility
+                blocked_phones = set(PermanentPhoneNumberRegistry.objects.filter(company=company).values_list('normalized_phone', flat=True))
+                for l in leads_to_assign:
+                    if l.status != 'UNASSIGNED' or l.task_id is not None:
+                        return Response({"lead_ids": [f"Lead '{l.full_name}' ({l.normalized_phone}) is already assigned."]}, status=status.HTTP_400_BAD_REQUEST)
+                    if branch and l.branch_id and l.branch_id != branch.id:
+                        return Response({"lead_ids": [f"Lead '{l.full_name}' belongs to branch '{l.branch.name}', not the selected branch."]}, status=status.HTTP_400_BAD_REQUEST)
+                    if category and l.category_id and l.category_id != category.id:
+                        return Response({"lead_ids": [f"Lead '{l.full_name}' belongs to category '{l.category.name}', not the selected category."]}, status=status.HTTP_400_BAD_REQUEST)
+                    if l.normalized_phone in blocked_phones:
+                        return Response({"lead_ids": [f"Phone number {l.normalized_phone} is permanently blocked in this company."]}, status=status.HTTP_400_BAD_REQUEST)
+            elif lead_count > 0:
+                qs = Lead.objects.select_for_update().filter(company=company, status='UNASSIGNED', task__isnull=True)
+                if branch:
+                    qs = qs.filter(branch=branch)
+                if category:
+                    qs = qs.filter(category=category)
+                leads_to_assign = list(qs[:lead_count])
+
             task = CallingTask.objects.create(
                 company=company,
                 title=title,
@@ -441,23 +472,9 @@ class CallingTaskListCreateView(views.APIView):
                 created_by=user,
                 priority=priority,
                 due_date=due_date,
-                status='PENDING'
+                status='PENDING',
+                target_count=len(leads_to_assign)
             )
-
-            # Determine leads to attach to this task
-            lead_ids = request.data.get('lead_ids', [])
-            lead_count = int(request.data.get('lead_count', 0) or 0)
-
-            leads_to_assign = []
-            if lead_ids:
-                leads_to_assign = list(Lead.objects.filter(id__in=lead_ids, company=company))
-            elif lead_count > 0:
-                qs = Lead.objects.filter(company=company, status='UNASSIGNED')
-                if branch:
-                    qs = qs.filter(branch=branch)
-                if category:
-                    qs = qs.filter(category=category)
-                leads_to_assign = list(qs[:lead_count])
 
             now = timezone.now()
             registries_to_create = []
@@ -495,9 +512,6 @@ class CallingTaskListCreateView(views.APIView):
             if history_to_create:
                 LeadAssignmentHistory.objects.bulk_create(history_to_create)
 
-            task.target_count = len(leads_to_assign)
-            task.save(update_fields=['target_count'])
-
         return Response(CallingTaskSerializer(task).data, status=status.HTTP_201_CREATED)
 
 class CallingTaskDetailView(views.APIView):
@@ -528,19 +542,28 @@ class CallingTaskDetailView(views.APIView):
         if user.role == 'EMPLOYEE' and task.assigned_to_id != user.id:
             return Response({"error": "Permission denied."}, status=status.HTTP_403_FORBIDDEN)
 
-        if 'status' in request.data:
-            task.status = request.data['status']
-        if user.is_company_admin:
-            if 'priority' in request.data:
-                task.priority = request.data['priority']
-            if 'title' in request.data:
-                task.title = request.data['title']
-            if 'description' in request.data:
-                task.description = request.data['description']
-            if 'due_date' in request.data:
-                task.due_date = request.data['due_date'] or None
+        with transaction.atomic():
+            if 'status' in request.data:
+                task.status = request.data['status']
+            if user.is_company_admin:
+                if 'priority' in request.data:
+                    task.priority = request.data['priority']
+                if 'title' in request.data:
+                    task.title = request.data['title']
+                if 'description' in request.data:
+                    task.description = request.data['description']
+                if 'due_date' in request.data:
+                    task.due_date = request.data['due_date'] or None
+                if 'assigned_to_id' in request.data:
+                    from django.contrib.auth import get_user_model
+                    User = get_user_model()
+                    new_assignee = User.objects.filter(id=request.data['assigned_to_id'], company=company, is_active=True).first()
+                    if not new_assignee:
+                        return Response({"assigned_to_id": ["Target employee not found or inactive."]}, status=status.HTTP_400_BAD_REQUEST)
+                    task.assigned_to = new_assignee
+                    task.leads.update(assigned_to=new_assignee)
 
-        task.save()
+            task.save()
         return Response(CallingTaskSerializer(task).data)
 
     def delete(self, request, pk):

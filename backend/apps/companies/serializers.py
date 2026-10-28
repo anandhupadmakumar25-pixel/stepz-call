@@ -18,7 +18,8 @@ class CompanySerializer(serializers.ModelSerializer):
         return obj.users.count()
 
     def get_lead_count(self, obj):
-        return obj.leads.count()
+        from apps.leads.models import Lead
+        return Lead.objects.filter(company=obj).count()
 
 class CompanyCreateSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=255)
