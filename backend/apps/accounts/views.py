@@ -60,6 +60,9 @@ class EmployeeListCreateView(views.APIView):
             role = request.query_params.get('role')
             if role:
                 employees = employees.filter(role=role)
+            branch_id = request.query_params.get('branch')
+            if branch_id and branch_id != 'ALL':
+                employees = employees.filter(branch_id=branch_id)
             team_id = request.query_params.get('team')
             if team_id:
                 employees = employees.filter(employee_profile__team_id=team_id)
@@ -71,10 +74,11 @@ class EmployeeListCreateView(views.APIView):
                     models.Q(email__icontains=search)
                 )
 
-        serializer = EmployeeListSerializer(employees.order_by('-created_at'), many=True)
+        serializer = EmployeeListSerializer(employees.select_related('branch', 'employee_profile').order_by('-created_at'), many=True)
         return Response(serializer.data)
 
     def post(self, request):
+        from apps.leads.models import Branch
         serializer = EmployeeCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
@@ -84,6 +88,10 @@ class EmployeeListCreateView(views.APIView):
             return Response({"error": "Admin must be associated with a company to add employees."}, status=status.HTTP_400_BAD_REQUEST)
 
         with transaction.atomic():
+            branch = None
+            if data.get('branch_id'):
+                branch = Branch.objects.filter(id=data['branch_id'], company=company).first()
+
             user = User.objects.create_user(
                 email=data['email'],
                 password=data['password'],
@@ -92,6 +100,7 @@ class EmployeeListCreateView(views.APIView):
                 phone=data.get('phone', ''),
                 role=data['role'],
                 company=company,
+                branch=branch,
                 is_active=True
             )
 
@@ -125,14 +134,18 @@ class EmployeeDetailView(views.APIView):
         return Response(EmployeeListSerializer(user).data)
 
     def patch(self, request, pk):
+        from apps.leads.models import Branch
         company = request.user.company
         user = User.objects.filter(id=pk, company=company).first()
         if not user:
             return Response({"error": "Employee not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        # Allow updating active status, name, phone, team, daily target
+        # Allow updating active status, name, phone, branch, team, daily target
         if 'is_active' in request.data:
             user.is_active = bool(request.data['is_active'])
+        if 'branch_id' in request.data:
+            bid = request.data['branch_id']
+            user.branch = Branch.objects.filter(id=bid, company=company).first() if bid else None
         if 'first_name' in request.data:
             user.first_name = request.data['first_name']
         if 'last_name' in request.data:

@@ -12,15 +12,16 @@ class EmployeeProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
 
-  Future<void> fetchEmployees({String? teamId, String? search}) async {
+  Future<void> fetchEmployees({String? teamId, String? branchId, String? search}) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
 
     try {
       final params = <String>[];
-      if (teamId != null) params.add('team=$teamId');
-      if (search != null) params.add('search=${Uri.encodeComponent(search)}');
+      if (teamId != null && teamId.isNotEmpty && teamId != 'ALL') params.add('team=$teamId');
+      if (branchId != null && branchId.isNotEmpty && branchId != 'ALL') params.add('branch=$branchId');
+      if (search != null && search.isNotEmpty) params.add('search=${Uri.encodeComponent(search)}');
       final query = params.isNotEmpty ? '?${params.join('&')}' : '';
 
       final res = await ApiClient.get('/accounts/employees/$query');
@@ -34,6 +35,24 @@ class EmployeeProvider extends ChangeNotifier {
     } finally {
       _isLoading = false;
       notifyListeners();
+    }
+  }
+
+  Future<bool> updateEmployeeBranch(String employeeId, String? branchId) async {
+    try {
+      final res = await ApiClient.patch('/accounts/employees/$employeeId/', {
+        'branch_id': branchId,
+      });
+      final idx = _employees.indexWhere((e) => e['id'] == employeeId);
+      if (idx != -1) {
+        _employees[idx] = res;
+        notifyListeners();
+      }
+      return true;
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
+      return false;
     }
   }
 

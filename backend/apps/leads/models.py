@@ -139,6 +139,63 @@ class LeadCategory(TenantModel):
     def __str__(self):
         return f"{self.name} ({self.company.name})"
 
+class CallingTask(TenantModel):
+    """
+    Structured calling task created by Admin to assign batches of leads to an employee/telecaller
+    with target deadlines, branch, category, priorities, and script instructions.
+    """
+    PRIORITY_CHOICES = [
+        ('LOW', 'Low'),
+        ('MEDIUM', 'Medium'),
+        ('HIGH', 'High'),
+        ('URGENT', 'Urgent'),
+    ]
+    STATUS_CHOICES = [
+        ('PENDING', 'Pending'),
+        ('IN_PROGRESS', 'In Progress'),
+        ('COMPLETED', 'Completed'),
+        ('CANCELLED', 'Cancelled'),
+    ]
+
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    branch = models.ForeignKey(
+        Branch,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='tasks'
+    )
+    category = models.ForeignKey(
+        LeadCategory,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='tasks'
+    )
+    assigned_to = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='assigned_tasks'
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='created_tasks'
+    )
+    priority = models.CharField(max_length=20, choices=PRIORITY_CHOICES, default='MEDIUM')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING', db_index=True)
+    due_date = models.DateField(null=True, blank=True)
+    target_count = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.title} -> {self.assigned_to.email} ({self.status})"
+
 class Lead(TenantModel):
     STATUS_CHOICES = [
         ('UNASSIGNED', 'Unassigned'),
@@ -163,6 +220,13 @@ class Lead(TenantModel):
     )
     category = models.ForeignKey(
         LeadCategory,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='leads'
+    )
+    task = models.ForeignKey(
+        CallingTask,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,

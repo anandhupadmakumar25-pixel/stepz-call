@@ -4,12 +4,13 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from django.db.models import Q
 
-from apps.leads.models import Lead, Branch, LeadCategory, ImportBatch, PermanentPhoneNumberRegistry
+from apps.leads.models import Lead, Branch, LeadCategory, CallingTask, ImportBatch, PermanentPhoneNumberRegistry
 from apps.leads.serializers import (
     LeadSerializer,
     LeadDetailSerializer,
     BranchSerializer,
     LeadCategorySerializer,
+    CallingTaskSerializer,
     ImportBatchSerializer,
     PermanentPhoneNumberRegistrySerializer,
     BulkAssignSerializer
@@ -339,3 +340,198 @@ class PermanentRegistryListView(views.APIView):
         if search:
             numbers = numbers.filter(normalized_phone__icontains=search)
         return Response(PermanentPhoneNumberRegistrySerializer(numbers[:200], many=True).data)
+
+class CallingTaskListCreateView(views.APIView):
+    permission_classes = [IsEmployee]
+
+    def get(self, request):
+        user = request.user
+        company = user.company
+        if not company:
+            return Response([])
+
+        tasks = CallingTask.objects.filter(company=company)
+        if user.role == 'EMPLOYEE':
+            tasks = tasks.filter(assigned_to=user)
+        else:
+            # Filters for Admin / Manager
+            assigned_to = request.query_params.get('assigned_to')
+            if assigned_to and assigned_to != 'ALL':
+                tasks = tasks.filter(assigned_to_id=assigned_to)
+
+        branch_id = request.query_params.get('branch')
+        if branch_id and branch_id != 'ALL':
+            tasks = tasks.filter(branch_id=branch_id)
+
+        category_id = request.query_params.get('category')
+        if category_id and category_id != 'ALL':
+            tasks = tasks.filter(category_id=category_id)
+
+        status_param = request.query_params.get('status')
+        if status_param and status_param != 'ALL':
+            tasks = tasks.filter(status=status_param)
+
+        search = request.query_params.get('search')
+        if search:
+            tasks = tasks.filter(
+                Q(title__icontains=search) |
+                Q(description__icontains=search)
+            )
+
+        tasks = tasks.select_related('branch', 'category', 'assigned_to', 'created_by').prefetch_related('leads').order_by('-created_at')
+        return Response(CallingTaskSerializer(tasks, many=True).data)
+
+    def post(self, request):
+        from django.contrib.auth import get_user_model
+        from django.utils import timezone
+        from apps.leads.models import LeadAssignmentHistory
+        from django.db import transaction
+
+        user = request.user
+        company = user.company
+        if not company or not user.is_company_admin:
+            return Response({"error": "Admin permission required to create calling tasks."}, status=status.HTTP_403_FORBIDDEN)
+
+        title = request.data.get('title', '').strip()
+        if not title:
+            return Response({"title": ["Task title is required."]}, status=status.HTTP_400_BAD_REQUEST)
+
+        assigned_to_id = request.data.get('assigned_to_id')
+        User = get_user_model()
+        assigned_user = User.objects.filter(id=assigned_to_id, company=company).first()
+        if not assigned_user:
+            return Response({"assigned_to_id": ["Target employee not found in your company."]}, status=status.HTTP_400_BAD_REQUEST)
+
+        branch_id = request.data.get('branch_id')
+        branch = Branch.objects.filter(id=branch_id, company=company).first() if branch_id else None
+
+        category_id = request.data.get('category_id')
+        category = LeadCategory.objects.filter(id=category_id, company=company).first() if category_id else None
+
+        priority = request.data.get('priority', 'MEDIUM')
+        due_date = request.data.get('due_date') or None
+        description = request.data.get('description', '').strip()
+
+        with transaction.atomic():
+            task = CallingTask.objects.create(
+                company=company,
+                title=title,
+                description=description,
+                branch=branch,
+                category=category,
+                assigned_to=assigned_user,
+                created_by=user,
+                priority=priority,
+                due_date=due_date,
+                status='PENDING'
+            )
+
+            # Determine leads to attach to this task
+            lead_ids = request.data.get('lead_ids', [])
+            lead_count = int(request.data.get('lead_count', 0) or 0)
+
+            leads_to_assign = []
+            if lead_ids:
+                leads_to_assign = list(Lead.objects.filter(id__in=lead_ids, company=company))
+            elif lead_count > 0:
+                qs = Lead.objects.filter(company=company, status='UNASSIGNED')
+                if branch:
+                    qs = qs.filter(branch=branch)
+                if category:
+                    qs = qs.filter(category=category)
+                leads_to_assign = list(qs[:lead_count])
+
+            now = timezone.now()
+            registries_to_create = []
+            history_to_create = []
+
+            for lead in leads_to_assign:
+                lead.task = task
+                lead.assigned_to = assigned_user
+                lead.assigned_at = now
+                lead.status = 'ASSIGNED'
+                lead.is_assigned_ever = True
+                lead.save(update_fields=['task', 'assigned_to', 'assigned_at', 'status', 'is_assigned_ever'])
+
+                # Permanent Registry Invariant
+                if not PermanentPhoneNumberRegistry.objects.filter(company=company, normalized_phone=lead.normalized_phone).exists():
+                    registries_to_create.append(PermanentPhoneNumberRegistry(
+                        company=company,
+                        normalized_phone=lead.normalized_phone,
+                        first_assigned_to=assigned_user,
+                        original_lead_id=lead.id,
+                        notes=f"Auto-registered via Task '{task.title}'"
+                    ))
+
+                history_to_create.append(LeadAssignmentHistory(
+                    company=company,
+                    lead=lead,
+                    assigned_to=assigned_user,
+                    assigned_by=user,
+                    assignment_method='CUSTOM',
+                    notes=f"Assigned via Calling Task: {task.title}"
+                ))
+
+            if registries_to_create:
+                PermanentPhoneNumberRegistry.objects.bulk_create(registries_to_create, ignore_conflicts=True)
+            if history_to_create:
+                LeadAssignmentHistory.objects.bulk_create(history_to_create)
+
+            task.target_count = len(leads_to_assign)
+            task.save(update_fields=['target_count'])
+
+        return Response(CallingTaskSerializer(task).data, status=status.HTTP_201_CREATED)
+
+class CallingTaskDetailView(views.APIView):
+    permission_classes = [IsEmployee]
+
+    def get(self, request, pk):
+        user = request.user
+        company = user.company
+        task = CallingTask.objects.filter(id=pk, company=company).first()
+        if not task:
+            return Response({"error": "Calling task not found."}, status=status.HTTP_404_NOT_FOUND)
+        if user.role == 'EMPLOYEE' and task.assigned_to_id != user.id:
+            return Response({"error": "Permission denied."}, status=status.HTTP_403_FORBIDDEN)
+
+        data = CallingTaskSerializer(task).data
+        # Include task leads
+        leads = task.leads.select_related('branch', 'category').order_by('-created_at')
+        data['leads'] = LeadSerializer(leads, many=True).data
+        return Response(data)
+
+    def patch(self, request, pk):
+        user = request.user
+        company = user.company
+        task = CallingTask.objects.filter(id=pk, company=company).first()
+        if not task:
+            return Response({"error": "Calling task not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        if user.role == 'EMPLOYEE' and task.assigned_to_id != user.id:
+            return Response({"error": "Permission denied."}, status=status.HTTP_403_FORBIDDEN)
+
+        if 'status' in request.data:
+            task.status = request.data['status']
+        if user.is_company_admin:
+            if 'priority' in request.data:
+                task.priority = request.data['priority']
+            if 'title' in request.data:
+                task.title = request.data['title']
+            if 'description' in request.data:
+                task.description = request.data['description']
+            if 'due_date' in request.data:
+                task.due_date = request.data['due_date'] or None
+
+        task.save()
+        return Response(CallingTaskSerializer(task).data)
+
+    def delete(self, request, pk):
+        user = request.user
+        if not user.is_company_admin:
+            return Response({"error": "Admin permission required."}, status=status.HTTP_403_FORBIDDEN)
+        task = CallingTask.objects.filter(id=pk, company=user.company).first()
+        if not task:
+            return Response({"error": "Calling task not found."}, status=status.HTTP_404_NOT_FOUND)
+        task.status = 'CANCELLED'
+        task.save(update_fields=['status'])
+        return Response({"message": "Task cancelled successfully."})

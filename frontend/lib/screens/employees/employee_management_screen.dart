@@ -5,6 +5,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/widgets/empty_state.dart';
 import '../../core/responsive/responsive_layout.dart';
 import '../../providers/employee_provider.dart';
+import '../../providers/lead_provider.dart';
 
 class EmployeeManagementScreen extends StatefulWidget {
   const EmployeeManagementScreen({super.key});
@@ -14,21 +15,41 @@ class EmployeeManagementScreen extends StatefulWidget {
 }
 
 class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
+  String _selectedBranch = 'ALL';
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<EmployeeProvider>().fetchEmployees();
+      _loadData();
     });
   }
 
+  void _loadData() {
+    context.read<LeadProvider>().fetchBranches();
+    context.read<EmployeeProvider>().fetchEmployees(
+      branchId: _selectedBranch,
+      search: _searchQuery,
+    );
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
   void _showAddEmployeeDialog() {
+    final leadProvider = context.read<LeadProvider>();
     final emailController = TextEditingController();
     final passwordController = TextEditingController();
     final firstNameController = TextEditingController();
     final lastNameController = TextEditingController();
     final targetController = TextEditingController(text: '50');
     String role = 'EMPLOYEE';
+    String? selectedBranchId;
 
     showDialog(
       context: context,
@@ -36,36 +57,78 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
         builder: (context, setDialogState) => AlertDialog(
           backgroundColor: AppColors.surface,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          title: Text('Add New Employee / Telecaller', style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700)),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                TextField(controller: emailController, decoration: const InputDecoration(labelText: 'Email Address *')),
-                const SizedBox(height: 12),
-                TextField(controller: passwordController, obscureText: true, decoration: const InputDecoration(labelText: 'Initial Password *')),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(child: TextField(controller: firstNameController, decoration: const InputDecoration(labelText: 'First Name *'))),
-                    const SizedBox(width: 10),
-                    Expanded(child: TextField(controller: lastNameController, decoration: const InputDecoration(labelText: 'Last Name'))),
-                  ],
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.accentVioletLight,
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  initialValue: role,
-                  decoration: const InputDecoration(labelText: 'Role'),
-                  items: const [
-                    DropdownMenuItem(value: 'EMPLOYEE', child: Text('Employee / Telecaller')),
-                    DropdownMenuItem(value: 'MANAGER', child: Text('Team Manager')),
-                  ],
-                  onChanged: (v) => setDialogState(() => role = v!),
-                ),
-                const SizedBox(height: 12),
-                TextField(controller: targetController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Daily Call Target')),
-              ],
+                child: const Icon(Icons.person_add_outlined, color: AppColors.accentViolet, size: 20),
+              ),
+              const SizedBox(width: 10),
+              Text('Add New Employee / Telecaller', style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700)),
+            ],
+          ),
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  TextField(controller: emailController, decoration: const InputDecoration(labelText: 'Email Address *')),
+                  const SizedBox(height: 12),
+                  TextField(controller: passwordController, obscureText: true, decoration: const InputDecoration(labelText: 'Initial Password *')),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(child: TextField(controller: firstNameController, decoration: const InputDecoration(labelText: 'First Name *'))),
+                      const SizedBox(width: 10),
+                      Expanded(child: TextField(controller: lastNameController, decoration: const InputDecoration(labelText: 'Last Name'))),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  // Dynamic Branch Assignment
+                  DropdownButtonFormField<String?>(
+                    initialValue: selectedBranchId,
+                    decoration: const InputDecoration(
+                      labelText: 'Assigned Branch (Optional)',
+                      prefixIcon: Icon(Icons.storefront, size: 18),
+                    ),
+                    items: [
+                      const DropdownMenuItem(value: null, child: Text('No Branch (Headquarters)')),
+                      ...leadProvider.branches.map((b) => DropdownMenuItem(value: b.id, child: Text(b.name))),
+                    ],
+                    onChanged: (v) => setDialogState(() => selectedBranchId = v),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          initialValue: role,
+                          decoration: const InputDecoration(labelText: 'Role'),
+                          items: const [
+                            DropdownMenuItem(value: 'EMPLOYEE', child: Text('Employee / Telecaller')),
+                            DropdownMenuItem(value: 'MANAGER', child: Text('Team Manager')),
+                          ],
+                          onChanged: (v) => setDialogState(() => role = v!),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextField(
+                          controller: targetController,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(labelText: 'Daily Call Target'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
           actions: [
@@ -83,12 +146,13 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                   'first_name': firstNameController.text.trim(),
                   'last_name': lastNameController.text.trim(),
                   'role': role,
+                  'branch_id': selectedBranchId,
                   'daily_call_target': int.tryParse(targetController.text) ?? 50,
                 });
                 if (success) {
                   nav.pop();
                   scaffold.showSnackBar(
-                    const SnackBar(content: Text('Employee created successfully.'), backgroundColor: AppColors.success),
+                    const SnackBar(content: Text('Employee created & assigned to branch successfully.'), backgroundColor: AppColors.success),
                   );
                 }
               },
@@ -100,9 +164,59 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
     );
   }
 
+  void _showChangeBranchDialog(Map<String, dynamic> emp) {
+    final leadProvider = context.read<LeadProvider>();
+    String? currentBranchId = emp['branch']?.toString() ?? emp['branch_id']?.toString();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDlgState) => AlertDialog(
+          backgroundColor: AppColors.surface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          title: Text('Assign Branch for ${emp['full_name'] ?? emp['email']}', style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w700)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Select the branch location this employee will be calling for:', style: GoogleFonts.inter(fontSize: 12, color: AppColors.textSecondary)),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String?>(
+                initialValue: currentBranchId,
+                decoration: const InputDecoration(labelText: 'Branch'),
+                items: [
+                  const DropdownMenuItem(value: null, child: Text('No Branch (Headquarters)')),
+                  ...leadProvider.branches.map((b) => DropdownMenuItem(value: b.id, child: Text(b.name))),
+                ],
+                onChanged: (v) => setDlgState(() => currentBranchId = v),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () async {
+                final nav = Navigator.of(ctx);
+                final scaf = ScaffoldMessenger.of(context);
+                final ok = await context.read<EmployeeProvider>().updateEmployeeBranch(emp['id'], currentBranchId);
+                if (ok) {
+                  nav.pop();
+                  scaf.showSnackBar(
+                    const SnackBar(content: Text('Employee branch updated!'), backgroundColor: AppColors.success),
+                  );
+                }
+              },
+              child: const Text('Save Branch'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final empProvider = context.watch<EmployeeProvider>();
+    final leadProvider = context.watch<LeadProvider>();
     final isMobile = ResponsiveLayout.isMobile(context);
 
     return Scaffold(
@@ -111,6 +225,7 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
         padding: EdgeInsets.all(isMobile ? 12 : 20),
         child: Column(
           children: [
+            // Header
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -120,7 +235,7 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                     children: [
                       Text('Employee & Telecaller Team', style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700)),
                       Text(
-                        'Manage telecallers, managers, and monitor targets',
+                        'Manage telecallers, assign branch locations, and monitor targets',
                         style: GoogleFonts.inter(fontSize: 12, color: AppColors.textSecondary),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -130,13 +245,76 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                 ),
                 ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    backgroundColor: AppColors.accentViolet,
+                    foregroundColor: Colors.white,
                   ),
                   onPressed: _showAddEmployeeDialog,
                   icon: const Icon(Icons.add, size: 16),
                   label: const Text('Add Employee'),
                 ),
               ],
+            ),
+            const SizedBox(height: 14),
+
+            // Toolbar with Branch Filter & Search
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  SizedBox(
+                    width: isMobile ? double.infinity : 220,
+                    height: 38,
+                    child: TextField(
+                      controller: _searchController,
+                      decoration: InputDecoration(
+                        hintText: 'Search employees...',
+                        prefixIcon: const Icon(Icons.search, size: 16),
+                        contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 8),
+                        isDense: true,
+                        suffixIcon: _searchQuery.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear, size: 14),
+                                onPressed: () {
+                                  _searchController.clear();
+                                  setState(() => _searchQuery = '');
+                                  _loadData();
+                                },
+                              )
+                            : null,
+                      ),
+                      onChanged: (val) {
+                        setState(() => _searchQuery = val.trim());
+                        _loadData();
+                      },
+                    ),
+                  ),
+                  SizedBox(
+                    width: 170,
+                    height: 38,
+                    child: DropdownButtonFormField<String>(
+                      initialValue: _selectedBranch,
+                      decoration: const InputDecoration(isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8)),
+                      items: [
+                        const DropdownMenuItem(value: 'ALL', child: Text('All Branches')),
+                        ...leadProvider.branches.map((b) => DropdownMenuItem(value: b.id, child: Text(b.name, overflow: TextOverflow.ellipsis))),
+                      ],
+                      onChanged: (v) {
+                        setState(() => _selectedBranch = v ?? 'ALL');
+                        _loadData();
+                      },
+                    ),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 14),
 
@@ -148,8 +326,8 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                     : empProvider.employees.isEmpty
                         ? EmptyState(
                             icon: Icons.badge_outlined,
-                            title: 'No employees created yet',
-                            description: 'Add your first telecaller or manager to begin assigning leads.',
+                            title: 'No employees found',
+                            description: 'Add your first telecaller or manager and assign them to a branch.',
                             actionLabel: 'Add Employee',
                             onAction: _showAddEmployeeDialog,
                           )
@@ -174,7 +352,7 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
         controller: horizontalScrollController,
         scrollDirection: Axis.horizontal,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(minWidth: 850),
+          constraints: const BoxConstraints(minWidth: 950),
           child: SingleChildScrollView(
             scrollDirection: Axis.vertical,
             child: DataTable(
@@ -184,6 +362,7 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
               columns: const [
                 DataColumn(label: Text('EMPLOYEE', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11, letterSpacing: 0.5))),
                 DataColumn(label: Text('ROLE', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11, letterSpacing: 0.5))),
+                DataColumn(label: Text('BRANCH', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11, letterSpacing: 0.5))),
                 DataColumn(label: Text('ASSIGNED LEADS', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11, letterSpacing: 0.5))),
                 DataColumn(label: Text('CALLS TODAY', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11, letterSpacing: 0.5))),
                 DataColumn(label: Text('DAILY TARGET', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11, letterSpacing: 0.5))),
@@ -191,6 +370,7 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
               ],
               rows: employees.map((emp) {
                 final isActive = emp['is_active'] == true;
+                final branchName = emp['branch_name'];
 
                 return DataRow(
                   cells: [
@@ -254,6 +434,40 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                         ),
                       ),
                     ),
+                    // Branch Column with Click-to-Reassign
+                    DataCell(
+                      InkWell(
+                        onTap: () => _showChangeBranchDialog(emp),
+                        borderRadius: BorderRadius.circular(6),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: branchName != null ? AppColors.accentVioletLight : AppColors.surfaceSecondary,
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: branchName != null ? AppColors.accentViolet.withValues(alpha: 0.3) : AppColors.border,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.storefront, size: 12, color: branchName != null ? AppColors.accentViolet : AppColors.textMuted),
+                              const SizedBox(width: 4),
+                              Text(
+                                branchName ?? 'Unassigned',
+                                style: GoogleFonts.inter(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: branchName != null ? AppColors.accentViolet : AppColors.textSecondary,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              const Icon(Icons.edit, size: 10, color: AppColors.textMuted),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
                     DataCell(Text('${emp['assigned_leads_count'] ?? 0}', style: GoogleFonts.inter(fontWeight: FontWeight.w600))),
                     DataCell(
                       Container(
@@ -312,6 +526,7 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
       itemBuilder: (context, index) {
         final emp = employees[index];
         final isActive = emp['is_active'] == true;
+        final branchName = emp['branch_name'];
 
         return ListTile(
           leading: CircleAvatar(
@@ -335,17 +550,18 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                 emp['full_name'] ?? emp['email'],
                 style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceSecondary,
-                  borderRadius: BorderRadius.circular(4),
+              if (branchName != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppColors.accentVioletLight,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    branchName,
+                    style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.accentViolet),
+                  ),
                 ),
-                child: Text(
-                  emp['role']?.replaceAll('_', ' ') ?? '',
-                  style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w600),
-                ),
-              ),
             ],
           ),
           subtitle: Text(

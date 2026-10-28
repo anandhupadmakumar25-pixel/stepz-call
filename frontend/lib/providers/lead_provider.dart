@@ -10,6 +10,9 @@ class LeadProvider extends ChangeNotifier {
 
   List<BranchModel> _branches = [];
   List<LeadCategoryModel> _categories = [];
+  List<CallingTaskModel> _tasks = [];
+  CallingTaskModel? _selectedTask;
+  List<LeadModel> _taskLeads = [];
 
   ImportBatchModel? _activeImportBatch;
   bool _isImporting = false;
@@ -20,6 +23,9 @@ class LeadProvider extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
   List<BranchModel> get branches => _branches;
   List<LeadCategoryModel> get categories => _categories;
+  List<CallingTaskModel> get tasks => _tasks;
+  CallingTaskModel? get selectedTask => _selectedTask;
+  List<LeadModel> get taskLeads => _taskLeads;
   ImportBatchModel? get activeImportBatch => _activeImportBatch;
   bool get isImporting => _isImporting;
 
@@ -251,6 +257,120 @@ class LeadProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
       return null;
+    }
+  }
+
+  Future<void> fetchTasks({String? branchId, String? categoryId, String? assignedToId, String? status, String? search}) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final params = <String>[];
+      if (branchId != null && branchId.isNotEmpty && branchId != 'ALL') {
+        params.add('branch=$branchId');
+      }
+      if (categoryId != null && categoryId.isNotEmpty && categoryId != 'ALL') {
+        params.add('category=$categoryId');
+      }
+      if (assignedToId != null && assignedToId.isNotEmpty && assignedToId != 'ALL') {
+        params.add('assigned_to=$assignedToId');
+      }
+      if (status != null && status.isNotEmpty && status != 'ALL') {
+        params.add('status=$status');
+      }
+      if (search != null && search.isNotEmpty) {
+        params.add('search=${Uri.encodeComponent(search)}');
+      }
+
+      String query = '';
+      if (params.isNotEmpty) {
+        query = '?${params.join('&')}';
+      }
+
+      final res = await ApiClient.get('/leads/tasks/$query');
+      if (res is List) {
+        _tasks = res.map((item) => CallingTaskModel.fromJson(item)).toList();
+      }
+    } on ApiException catch (e) {
+      _errorMessage = e.message;
+    } catch (e) {
+      _errorMessage = e.toString();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<CallingTaskModel?> fetchTaskDetail(String taskId) async {
+    try {
+      final res = await ApiClient.get('/leads/tasks/$taskId/');
+      _selectedTask = CallingTaskModel.fromJson(res);
+      if (res['leads'] is List) {
+        _taskLeads = (res['leads'] as List).map((l) => LeadModel.fromJson(l)).toList();
+      }
+      notifyListeners();
+      return _selectedTask;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<bool> createTask(Map<String, dynamic> data) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final res = await ApiClient.post('/leads/tasks/', data);
+      final task = CallingTaskModel.fromJson(res);
+      _tasks.insert(0, task);
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } on ApiException catch (e) {
+      _errorMessage = e.message;
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    } catch (e) {
+      _errorMessage = e.toString();
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> updateTaskStatus(String taskId, String status) async {
+    try {
+      final res = await ApiClient.patch('/leads/tasks/$taskId/', {'status': status});
+      final updated = CallingTaskModel.fromJson(res);
+      final idx = _tasks.indexWhere((t) => t.id == taskId);
+      if (idx != -1) {
+        _tasks[idx] = updated;
+      }
+      if (_selectedTask?.id == taskId) {
+        _selectedTask = updated;
+      }
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> deleteTask(String taskId) async {
+    try {
+      await ApiClient.delete('/leads/tasks/$taskId/');
+      _tasks.removeWhere((t) => t.id == taskId);
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
+      return false;
     }
   }
 }

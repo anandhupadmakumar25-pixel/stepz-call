@@ -11,6 +11,8 @@ import '../dashboard/telecaller_dashboard_screen.dart';
 import '../leads/lead_directory_screen.dart';
 import '../callbacks/callback_screen.dart';
 import '../calls/call_history_screen.dart';
+import '../branches/branch_management_screen.dart';
+import '../tasks/calling_tasks_screen.dart';
 import '../employees/employee_management_screen.dart';
 import '../companies/company_directory_screen.dart';
 import '../notifications/notification_drawer.dart';
@@ -60,6 +62,12 @@ class _MainLayoutState extends State<MainLayout> {
         screen: const LeadDirectoryScreen(),
       ),
       _NavItem(
+        title: isTelecaller ? 'My Tasks' : 'Calling Tasks',
+        icon: Icons.assignment_outlined,
+        activeIcon: Icons.assignment,
+        screen: const CallingTasksScreen(),
+      ),
+      _NavItem(
         title: 'Callbacks',
         icon: Icons.event_available_outlined,
         activeIcon: Icons.event_available,
@@ -74,6 +82,14 @@ class _MainLayoutState extends State<MainLayout> {
     ];
 
     if (!isTelecaller) {
+      navItems.add(
+        _NavItem(
+          title: 'Branches & Categories',
+          icon: Icons.storefront_outlined,
+          activeIcon: Icons.storefront,
+          screen: const BranchManagementScreen(),
+        ),
+      );
       navItems.add(
         _NavItem(
           title: 'Employees',

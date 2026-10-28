@@ -50,6 +50,14 @@ class User(AbstractBaseUser, PermissionsMixin, TimeStampedModel):
         related_name='users',
         db_index=True
     )
+    branch = models.ForeignKey(
+        'leads.Branch',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='employees',
+        db_index=True
+    )
     is_active = models.BooleanField(default=True, db_index=True)
     is_staff = models.BooleanField(default=False)
 

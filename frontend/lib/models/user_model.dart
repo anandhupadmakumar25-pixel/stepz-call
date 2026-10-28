@@ -8,6 +8,8 @@ class UserModel {
   final String? phone;
   final String? companyId;
   final String? companyName;
+  final String? branchId;
+  final String? branchName;
   final bool isStaff;
 
   UserModel({
@@ -20,6 +22,8 @@ class UserModel {
     this.phone,
     this.companyId,
     this.companyName,
+    this.branchId,
+    this.branchName,
     this.isStaff = false,
   });
 
@@ -39,6 +43,8 @@ class UserModel {
       phone: json['phone'],
       companyId: json['company_id']?.toString() ?? json['company']?.toString(),
       companyName: json['company_name'],
+      branchId: json['branch_id']?.toString() ?? json['branch']?.toString(),
+      branchName: json['branch_name'],
       isStaff: json['is_staff'] ?? false,
     );
   }
@@ -53,6 +59,8 @@ class UserModel {
     'phone': phone,
     'company_id': companyId,
     'company_name': companyName,
+    'branch_id': branchId,
+    'branch_name': branchName,
     'is_staff': isStaff,
   };
 }

@@ -3,6 +3,7 @@ from apps.leads.models import (
     Lead,
     Branch,
     LeadCategory,
+    CallingTask,
     ImportBatch,
     ImportRowError,
     PermanentPhoneNumberRegistry,
@@ -11,14 +12,18 @@ from apps.leads.models import (
 
 class BranchSerializer(serializers.ModelSerializer):
     lead_count = serializers.SerializerMethodField()
+    employee_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Branch
-        fields = ['id', 'name', 'code', 'address', 'is_active', 'lead_count', 'created_at']
-        read_only_fields = ['id', 'created_at', 'lead_count']
+        fields = ['id', 'name', 'code', 'address', 'is_active', 'lead_count', 'employee_count', 'created_at']
+        read_only_fields = ['id', 'created_at', 'lead_count', 'employee_count']
 
     def get_lead_count(self, obj):
         return obj.leads.count()
+
+    def get_employee_count(self, obj):
+        return obj.employees.count()
 
 class LeadCategorySerializer(serializers.ModelSerializer):
     lead_count = serializers.SerializerMethodField()
@@ -31,11 +36,51 @@ class LeadCategorySerializer(serializers.ModelSerializer):
     def get_lead_count(self, obj):
         return obj.leads.count()
 
+class CallingTaskSerializer(serializers.ModelSerializer):
+    branch_name = serializers.CharField(source='branch.name', read_only=True)
+    category_name = serializers.CharField(source='category.name', read_only=True)
+    category_color = serializers.CharField(source='category.color_code', read_only=True)
+    assigned_to_name = serializers.CharField(source='assigned_to.full_name', read_only=True)
+    created_by_name = serializers.CharField(source='created_by.full_name', read_only=True)
+    total_leads_count = serializers.SerializerMethodField()
+    completed_leads_count = serializers.SerializerMethodField()
+    in_progress_leads_count = serializers.SerializerMethodField()
+    progress_percent = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CallingTask
+        fields = [
+            'id', 'title', 'description', 'branch', 'branch_name',
+            'category', 'category_name', 'category_color',
+            'assigned_to', 'assigned_to_name', 'created_by', 'created_by_name',
+            'priority', 'status', 'due_date', 'target_count',
+            'total_leads_count', 'completed_leads_count', 'in_progress_leads_count',
+            'progress_percent', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def get_total_leads_count(self, obj):
+        return obj.leads.count()
+
+    def get_completed_leads_count(self, obj):
+        return obj.leads.filter(status__in=['COMPLETED', 'QUALIFIED', 'NOT_INTERESTED']).count()
+
+    def get_in_progress_leads_count(self, obj):
+        return obj.leads.filter(status__in=['IN_PROGRESS', 'CALLBACK_REQUESTED', 'BUSY', 'NO_ANSWER']).count()
+
+    def get_progress_percent(self, obj):
+        total = obj.leads.count()
+        if total == 0:
+            return 0
+        done = obj.leads.filter(status__in=['COMPLETED', 'QUALIFIED', 'NOT_INTERESTED']).count()
+        return round((done / total) * 100, 1)
+
 class LeadSerializer(serializers.ModelSerializer):
     assigned_to_name = serializers.CharField(source='assigned_to.full_name', read_only=True)
     branch_name = serializers.CharField(source='branch.name', read_only=True)
     category_name = serializers.CharField(source='category.name', read_only=True)
     category_color = serializers.CharField(source='category.color_code', read_only=True)
+    task_title = serializers.CharField(source='task.title', read_only=True)
     full_name = serializers.CharField(read_only=True)
 
     class Meta:
@@ -43,7 +88,8 @@ class LeadSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'first_name', 'last_name', 'full_name', 'raw_phone', 'normalized_phone',
             'email', 'city', 'state', 'source', 'status', 'branch', 'branch_name',
-            'category', 'category_name', 'category_color', 'assigned_to', 'assigned_to_name',
+            'category', 'category_name', 'category_color', 'task', 'task_title',
+            'assigned_to', 'assigned_to_name',
             'assigned_at', 'is_assigned_ever', 'custom_fields', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'normalized_phone', 'assigned_at', 'is_assigned_ever', 'created_at', 'updated_at']

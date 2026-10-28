@@ -10,7 +10,9 @@ from apps.leads.views import (
     LeadImportConfirmView,
     ImportBatchListView,
     LeadBulkAssignView,
-    PermanentRegistryListView
+    PermanentRegistryListView,
+    CallingTaskListCreateView,
+    CallingTaskDetailView
 )
 
 urlpatterns = [
@@ -20,6 +22,8 @@ urlpatterns = [
     path('branches/<uuid:pk>/', BranchDetailView.as_view(), name='branch_detail'),
     path('categories/', LeadCategoryListCreateView.as_view(), name='category_list_create'),
     path('categories/<uuid:pk>/', LeadCategoryDetailView.as_view(), name='category_detail'),
+    path('tasks/', CallingTaskListCreateView.as_view(), name='calling_task_list_create'),
+    path('tasks/<uuid:pk>/', CallingTaskDetailView.as_view(), name='calling_task_detail'),
     path('import/upload/', LeadImportUploadView.as_view(), name='lead_import_upload'),
     path('import/confirm/<uuid:pk>/', LeadImportConfirmView.as_view(), name='lead_import_confirm'),
     path('import/batches/', ImportBatchListView.as_view(), name='import_batch_list'),

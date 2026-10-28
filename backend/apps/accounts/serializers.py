@@ -28,19 +28,23 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             'phone': user.phone,
             'company_id': str(user.company.id) if user.company else None,
             'company_name': user.company.name if user.company else None,
+            'branch_id': str(user.branch.id) if user.branch else None,
+            'branch_name': user.branch.name if user.branch else None,
             'is_staff': user.is_staff,
         }
         return data
 
 class UserProfileSerializer(serializers.ModelSerializer):
     company_name = serializers.CharField(source='company.name', read_only=True)
+    branch_name = serializers.CharField(source='branch.name', read_only=True)
     full_name = serializers.CharField(read_only=True)
 
     class Meta:
         model = User
         fields = [
             'id', 'email', 'first_name', 'last_name', 'full_name',
-            'phone', 'role', 'company', 'company_name', 'is_active', 'created_at'
+            'phone', 'role', 'company', 'company_name', 'branch', 'branch_name',
+            'is_active', 'created_at'
         ]
         read_only_fields = ['id', 'email', 'role', 'company', 'company_name', 'created_at']
 
@@ -66,6 +70,8 @@ class EmployeeProfileSerializer(serializers.ModelSerializer):
 
 class EmployeeListSerializer(serializers.ModelSerializer):
     employee_profile = EmployeeProfileSerializer(read_only=True)
+    branch_name = serializers.CharField(source='branch.name', read_only=True)
+    branch_code = serializers.CharField(source='branch.code', read_only=True)
     assigned_leads_count = serializers.SerializerMethodField()
     calls_today_count = serializers.SerializerMethodField()
 
@@ -73,8 +79,8 @@ class EmployeeListSerializer(serializers.ModelSerializer):
         model = User
         fields = [
             'id', 'email', 'first_name', 'last_name', 'full_name', 'phone',
-            'role', 'is_active', 'employee_profile', 'assigned_leads_count',
-            'calls_today_count', 'created_at'
+            'role', 'branch', 'branch_name', 'branch_code', 'is_active',
+            'employee_profile', 'assigned_leads_count', 'calls_today_count', 'created_at'
         ]
 
     def get_assigned_leads_count(self, obj):
@@ -92,6 +98,7 @@ class EmployeeCreateSerializer(serializers.Serializer):
     last_name = serializers.CharField(max_length=150, required=False, allow_blank=True)
     phone = serializers.CharField(max_length=32, required=False, allow_blank=True)
     role = serializers.ChoiceField(choices=[('MANAGER', 'Manager'), ('EMPLOYEE', 'Employee / Telecaller')])
+    branch_id = serializers.UUIDField(required=False, allow_null=True)
     team_id = serializers.UUIDField(required=False, allow_null=True)
     manager_id = serializers.UUIDField(required=False, allow_null=True)
     employee_code = serializers.CharField(max_length=64, required=False, allow_blank=True)
