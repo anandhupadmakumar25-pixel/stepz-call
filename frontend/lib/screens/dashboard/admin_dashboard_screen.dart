@@ -29,6 +29,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     final dash = context.watch<DashboardProvider>();
     final kpis = dash.adminKpis;
     final isDesktop = ResponsiveLayout.isDesktop(context);
+    final isMobile = ResponsiveLayout.isMobile(context);
 
     if (dash.isLoading && dash.activityTimeline.isEmpty) {
       return const Center(child: CircularProgressIndicator());
@@ -37,7 +38,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     return RefreshIndicator(
       onRefresh: () => context.read<DashboardProvider>().fetchAdminDashboard(),
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+        padding: EdgeInsets.all(isMobile ? 14 : 20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -45,18 +46,22 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Operational Overview',
-                      style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.w700),
-                    ),
-                    Text(
-                      'Real-time telephony performance and lead pipeline metrics',
-                      style: GoogleFonts.inter(fontSize: 12, color: AppColors.textSecondary),
-                    ),
-                  ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Operational Overview',
+                        style: GoogleFonts.inter(fontSize: isMobile ? 16 : 18, fontWeight: FontWeight.w700),
+                      ),
+                      Text(
+                        'Real-time telephony performance & lead pipeline',
+                        style: GoogleFonts.inter(fontSize: 12, color: AppColors.textSecondary),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
                 ),
                 IconButton(
                   icon: const Icon(Icons.refresh, size: 20),
@@ -65,16 +70,16 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
 
             // KPI Grid
             GridView.count(
               crossAxisCount: isDesktop ? 4 : (ResponsiveLayout.isTablet(context) ? 2 : 1),
-              crossAxisSpacing: 16,
-              mainAxisSpacing: 16,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              childAspectRatio: 2.2,
+              childAspectRatio: isDesktop ? 2.3 : (ResponsiveLayout.isTablet(context) ? 2.0 : 2.5),
               children: [
                 KpiCard(
                   title: 'Total Registered Leads',
@@ -106,7 +111,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 20),
 
             // Charts Section
             if (isDesktop)
@@ -114,16 +119,16 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(flex: 3, child: _buildWeeklyActivityChart(dash.activityTimeline)),
-                  const SizedBox(width: 16),
+                  const SizedBox(width: 14),
                   Expanded(flex: 2, child: _buildOutcomesChart(dash.outcomeCounts)),
                 ],
               )
             else ...[
               _buildWeeklyActivityChart(dash.activityTimeline),
-              const SizedBox(height: 16),
+              const SizedBox(height: 14),
               _buildOutcomesChart(dash.outcomeCounts),
             ],
-            const SizedBox(height: 24),
+            const SizedBox(height: 20),
 
             // Employee Performance Table
             _buildEmployeeTable(dash.employeePerformance),
@@ -136,14 +141,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   Widget _buildWeeklyActivityChart(List<dynamic> timeline) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Call Activity (Last 7 Days)', style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600)),
             const SizedBox(height: 16),
             SizedBox(
-              height: 200,
+              height: 190,
               child: timeline.isEmpty
                   ? Center(child: Text('No call activity logged yet', style: GoogleFonts.inter(fontSize: 12, color: AppColors.textMuted)))
                   : BarChart(
@@ -185,7 +190,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                               BarChartRodData(
                                 toY: count > 0 ? count : 0.5,
                                 color: AppColors.accentViolet,
-                                width: 18,
+                                width: 16,
                                 borderRadius: BorderRadius.circular(4),
                               ),
                             ],
@@ -203,7 +208,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   Widget _buildOutcomesChart(List<dynamic> outcomes) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -211,7 +216,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             const SizedBox(height: 16),
             if (outcomes.isEmpty)
               SizedBox(
-                height: 200,
+                height: 190,
                 child: Center(
                   child: Text('No calls logged yet', style: GoogleFonts.inter(fontSize: 12, color: AppColors.textMuted)),
                 ),
@@ -222,18 +227,15 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   final outcome = o['outcome'] ?? 'OTHER';
                   final count = o['count'] ?? 0;
                   return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    padding: const EdgeInsets.symmetric(vertical: 5),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Row(
-                          children: [
-                            StatusBadge(status: outcome),
-                          ],
-                        ),
+                        Flexible(child: StatusBadge(status: outcome)),
+                        const SizedBox(width: 8),
                         Text(
                           '$count calls',
-                          style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600),
+                          style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600),
                         ),
                       ],
                     ),
@@ -249,7 +251,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   Widget _buildEmployeeTable(List<dynamic> employees) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -260,13 +262,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 Text('${employees.length} active callers', style: GoogleFonts.inter(fontSize: 12, color: AppColors.textSecondary)),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: DataTable(
-                headingRowHeight: 40,
-                dataRowMinHeight: 48,
-                dataRowMaxHeight: 52,
+                headingRowHeight: 38,
+                dataRowMinHeight: 44,
+                dataRowMaxHeight: 50,
                 columns: const [
                   DataColumn(label: Text('Employee')),
                   DataColumn(label: Text('Assigned Leads')),

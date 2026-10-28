@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/status_badge.dart';
 import '../../core/widgets/empty_state.dart';
+import '../../core/responsive/responsive_layout.dart';
 import '../../providers/call_provider.dart';
 
 class CallHistoryScreen extends StatefulWidget {
@@ -25,30 +26,38 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
   @override
   Widget build(BuildContext context) {
     final callProvider = context.watch<CallProvider>();
+    final isMobile = ResponsiveLayout.isMobile(context);
 
     return Scaffold(
       backgroundColor: AppColors.background,
       body: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: EdgeInsets.all(isMobile ? 12 : 20),
         child: Column(
           children: [
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Call History Log', style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700)),
-                    Text('Comprehensive log of every telecalling attempt and outcome notes', style: GoogleFonts.inter(fontSize: 12, color: AppColors.textSecondary)),
-                  ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Call History Log', style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700)),
+                      Text(
+                        'Comprehensive log of every telecalling attempt and outcome',
+                        style: GoogleFonts.inter(fontSize: 12, color: AppColors.textSecondary),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.refresh),
+                  icon: const Icon(Icons.refresh, size: 20),
                   onPressed: () => context.read<CallProvider>().fetchCalls(),
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
 
             Expanded(
               child: Card(
@@ -72,20 +81,21 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
                                     color: AppColors.surfaceSecondary,
                                     borderRadius: BorderRadius.circular(8),
                                   ),
-                                  child: const Icon(Icons.phone_outlined, size: 20),
+                                  child: const Icon(Icons.phone_outlined, size: 18),
                                 ),
-                                title: Row(
+                                title: Wrap(
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  spacing: 8,
+                                  runSpacing: 4,
                                   children: [
                                     Text(
                                       call.leadName,
                                       style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700),
                                     ),
-                                    const SizedBox(width: 8),
                                     Text(
                                       '(${call.leadPhone})',
                                       style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, fontFamily: 'monospace'),
                                     ),
-                                    const SizedBox(width: 12),
                                     StatusBadge(status: call.outcome),
                                   ],
                                 ),
@@ -95,11 +105,11 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
                                     const SizedBox(height: 4),
                                     Text(
                                       call.notes,
-                                      style: GoogleFonts.inter(fontSize: 13, color: AppColors.textPrimary),
+                                      style: GoogleFonts.inter(fontSize: 12, color: AppColors.textPrimary),
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
-                                      'Called by ${call.employeeName} • ${call.createdAt.substring(0, 16).replaceAll('T', ' ')} • Duration: ${call.durationSeconds}s',
+                                      'Caller: ${call.employeeName} • ${call.createdAt.substring(0, 16).replaceAll('T', ' ')} • ${call.durationSeconds}s',
                                       style: GoogleFonts.inter(fontSize: 11, color: AppColors.textMuted),
                                     ),
                                   ],

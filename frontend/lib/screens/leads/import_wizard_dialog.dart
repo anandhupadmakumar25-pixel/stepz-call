@@ -88,7 +88,7 @@ class _ImportWizardDialogState extends State<ImportWizardDialog> {
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 800, maxHeight: 680),
         child: Padding(
-          padding: const EdgeInsets.all(28),
+          padding: const EdgeInsets.all(22),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -104,14 +104,14 @@ class _ImportWizardDialogState extends State<ImportWizardDialog> {
                           color: AppColors.accentVioletLight,
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: const Icon(Icons.file_upload_outlined, color: AppColors.accentViolet, size: 22),
+                        child: const Icon(Icons.file_upload_outlined, color: AppColors.accentViolet, size: 20),
                       ),
                       const SizedBox(width: 12),
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text('Import Leads Wizard', style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700)),
-                          Text('Support for .xlsx and .csv files with permanent number verification', style: GoogleFonts.inter(fontSize: 12, color: AppColors.textSecondary)),
+                          Text('Support for .xlsx and .csv files with permanent registry check', style: GoogleFonts.inter(fontSize: 11, color: AppColors.textSecondary)),
                         ],
                       ),
                     ],
@@ -122,17 +122,20 @@ class _ImportWizardDialogState extends State<ImportWizardDialog> {
                   ),
                 ],
               ),
-              const Divider(height: 28),
+              const Divider(height: 20),
 
               // Content according to current step
               Expanded(
                 child: _buildStepContent(leadProvider),
               ),
 
-              const Divider(height: 28),
+              const Divider(height: 20),
               // Bottom Action Controls
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                runSpacing: 8,
                 children: [
                   if (_currentStep > 0 && _currentStep < 2)
                     OutlinedButton(
@@ -146,7 +149,7 @@ class _ImportWizardDialogState extends State<ImportWizardDialog> {
                       onPressed: leadProvider.isImporting ? null : _pickFile,
                       icon: leadProvider.isImporting
                           ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                          : const Icon(Icons.folder_open, size: 18),
+                          : const Icon(Icons.folder_open, size: 16),
                       label: Text(leadProvider.isImporting ? 'Processing File...' : 'Select .XLSX / .CSV File'),
                     )
                   else if (_currentStep == 1)
@@ -154,7 +157,7 @@ class _ImportWizardDialogState extends State<ImportWizardDialog> {
                       onPressed: leadProvider.isImporting ? null : _confirmImport,
                       icon: leadProvider.isImporting
                           ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                          : const Icon(Icons.check, size: 18),
+                          : const Icon(Icons.check, size: 16),
                       label: Text('Confirm & Import (${_batchPreview?.validNewCount ?? 0} Leads)'),
                     )
                   else
@@ -174,35 +177,40 @@ class _ImportWizardDialogState extends State<ImportWizardDialog> {
   Widget _buildStepContent(LeadProvider leadProvider) {
     if (_currentStep == 0) {
       return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: AppColors.surfaceSecondary,
-                shape: BoxShape.circle,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: const BoxDecoration(
+                  color: AppColors.surfaceSecondary,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.cloud_upload_outlined, size: 44, color: AppColors.accentViolet),
               ),
-              child: const Icon(Icons.cloud_upload_outlined, size: 48, color: AppColors.accentViolet),
-            ),
-            const SizedBox(height: 20),
-            Text('Upload Lead Spreadsheet', style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w600)),
-            const SizedBox(height: 6),
-            Text(
-              'Supports columns: Name, Phone (with or without +91), Email, City, State.\nStrict deduplication and permanent phone registry validation are applied automatically.',
-              style: GoogleFonts.inter(fontSize: 13, color: AppColors.textSecondary),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 20),
-            if (leadProvider.isImporting)
-              const CircularProgressIndicator()
-            else
-              OutlinedButton.icon(
-                onPressed: _pickFile,
-                icon: const Icon(Icons.upload_file),
-                label: const Text('Browse Computer'),
+              const SizedBox(height: 16),
+              Text('Upload Lead Spreadsheet', style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 6),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Text(
+                  'Supports columns: Name, Phone (with or without country code), Email, City, State.\nStrict deduplication and permanent registry validation are applied automatically.',
+                  style: GoogleFonts.inter(fontSize: 12, color: AppColors.textSecondary),
+                  textAlign: TextAlign.center,
+                ),
               ),
-          ],
+              const SizedBox(height: 16),
+              if (leadProvider.isImporting)
+                const CircularProgressIndicator()
+              else
+                OutlinedButton.icon(
+                  onPressed: _pickFile,
+                  icon: const Icon(Icons.upload_file),
+                  label: const Text('Browse Computer'),
+                ),
+            ],
+          ),
         ),
       );
     } else if (_currentStep == 1 && _batchPreview != null) {
@@ -212,23 +220,21 @@ class _ImportWizardDialogState extends State<ImportWizardDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Validation & Inspection Summary', style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600)),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
 
-            // Summary Badges / Metrics
-            Row(
+            // Summary Badges in Wrap to prevent overflow
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
               children: [
                 _buildMetricBox('Total Rows', '${b.totalRows}', AppColors.textPrimary),
-                const SizedBox(width: 10),
                 _buildMetricBox('Valid New', '${b.validNewCount}', AppColors.success),
-                const SizedBox(width: 10),
                 _buildMetricBox('Blocked in Registry', '${b.permanentlyBlockedCount}', AppColors.danger),
-                const SizedBox(width: 10),
                 _buildMetricBox('Duplicate in File', '${b.duplicateInFileCount}', AppColors.warning),
-                const SizedBox(width: 10),
                 _buildMetricBox('Invalid Format', '${b.invalidRowsCount}', AppColors.danger),
               ],
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
 
             if (b.permanentlyBlockedCount > 0) ...[
               Container(
@@ -236,62 +242,57 @@ class _ImportWizardDialogState extends State<ImportWizardDialog> {
                 decoration: BoxDecoration(
                   color: AppColors.dangerLight,
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppColors.danger.withOpacity(0.3)),
+                  border: Border.all(color: AppColors.danger.withValues(alpha: 0.3)),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.security, color: AppColors.danger, size: 20),
-                    const SizedBox(width: 10),
+                    const Icon(Icons.security, color: AppColors.danger, size: 18),
+                    const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'CRITICAL INVARIANT ENFORCED: ${b.permanentlyBlockedCount} phone number(s) were previously assigned in your company and are permanently blocked from re-allocation.',
+                        'PERMANENT INVARIANT: ${b.permanentlyBlockedCount} phone number(s) were previously assigned in your company and are permanently blocked from re-allocation.',
                         style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.danger),
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 14),
             ],
 
             Text('Sample Staged Records for Import', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600)),
             const SizedBox(height: 8),
-            Container(
-              decoration: BoxDecoration(
-                border: Border.all(color: AppColors.border),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Table(
-                columnWidths: const {
-                  0: FlexColumnWidth(1),
-                  1: FlexColumnWidth(2),
-                  2: FlexColumnWidth(2),
-                  3: FlexColumnWidth(2),
-                  4: FlexColumnWidth(2),
-                },
-                children: [
-                  TableRow(
-                    decoration: const BoxDecoration(color: AppColors.surfaceSecondary),
-                    children: [
-                      _cell('Row', isHeader: true),
-                      _cell('Name', isHeader: true),
-                      _cell('Normalized Phone', isHeader: true),
-                      _cell('City', isHeader: true),
-                      _cell('Status', isHeader: true),
-                    ],
-                  ),
-                  ...b.stagingData.take(5).map((row) {
-                    return TableRow(
-                      children: [
-                        _cell('${row['row_number']}'),
-                        _cell(row['name'] ?? ''),
-                        _cell(row['normalized_phone'] ?? ''),
-                        _cell(row['city'] ?? ''),
-                        _cell('Valid', color: AppColors.success),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Container(
+                constraints: const BoxConstraints(minWidth: 500),
+                decoration: BoxDecoration(
+                  border: Border.all(color: AppColors.border),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: DataTable(
+                  headingRowHeight: 36,
+                  dataRowMinHeight: 38,
+                  dataRowMaxHeight: 44,
+                  columns: const [
+                    DataColumn(label: Text('Row')),
+                    DataColumn(label: Text('Name')),
+                    DataColumn(label: Text('Normalized Phone')),
+                    DataColumn(label: Text('City')),
+                    DataColumn(label: Text('Status')),
+                  ],
+                  rows: b.stagingData.take(5).map((row) {
+                    return DataRow(
+                      cells: [
+                        DataCell(Text('${row['row_number']}')),
+                        DataCell(Text(row['name'] ?? '')),
+                        DataCell(Text(row['normalized_phone'] ?? '', style: const TextStyle(fontFamily: 'monospace', fontSize: 11))),
+                        DataCell(Text(row['city'] ?? '—')),
+                        DataCell(Text('Valid', style: GoogleFonts.inter(color: AppColors.success, fontWeight: FontWeight.w600))),
                       ],
                     );
                   }).toList(),
-                ],
+                ),
               ),
             ),
           ],
@@ -302,10 +303,10 @@ class _ImportWizardDialogState extends State<ImportWizardDialog> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.check_circle_outline, color: AppColors.success, size: 64),
-            const SizedBox(height: 16),
+            const Icon(Icons.check_circle_outline, color: AppColors.success, size: 56),
+            const SizedBox(height: 14),
             Text('Import Confirmed', style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.w700)),
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             Text(
               _importSuccessMessage ?? 'Leads imported successfully.',
               style: GoogleFonts.inter(fontSize: 13, color: AppColors.textSecondary),
@@ -318,34 +319,19 @@ class _ImportWizardDialogState extends State<ImportWizardDialog> {
   }
 
   Widget _buildMetricBox(String label, String value, Color color) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.08),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: color.withOpacity(0.2)),
-        ),
-        child: Column(
-          children: [
-            Text(value, style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.w800, color: color)),
-            Text(label, style: GoogleFonts.inter(fontSize: 11, color: AppColors.textSecondary), textAlign: TextAlign.center),
-          ],
-        ),
+    return Container(
+      width: 130,
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
       ),
-    );
-  }
-
-  Widget _cell(String text, {bool isHeader = false, Color? color}) {
-    return Padding(
-      padding: const EdgeInsets.all(10),
-      child: Text(
-        text,
-        style: GoogleFonts.inter(
-          fontSize: 12,
-          fontWeight: isHeader ? FontWeight.w600 : FontWeight.w400,
-          color: color ?? (isHeader ? AppColors.textPrimary : AppColors.textSecondary),
-        ),
+      child: Column(
+        children: [
+          Text(value, style: GoogleFonts.inter(fontSize: 17, fontWeight: FontWeight.w800, color: color)),
+          Text(label, style: GoogleFonts.inter(fontSize: 10, color: AppColors.textSecondary), textAlign: TextAlign.center),
+        ],
       ),
     );
   }

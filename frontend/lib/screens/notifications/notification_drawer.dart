@@ -67,7 +67,7 @@ class NotificationDrawer extends StatelessWidget {
                       itemBuilder: (context, index) {
                         final item = notifProvider.notifications[index];
                         return ListTile(
-                          tileColor: item.isRead ? Colors.transparent : AppColors.accentVioletLight.withOpacity(0.3),
+                          tileColor: item.isRead ? Colors.transparent : AppColors.accentVioletLight.withValues(alpha: 0.4),
                           leading: CircleAvatar(
                             radius: 16,
                             backgroundColor: item.notificationType == 'CALLBACK_OVERDUE'

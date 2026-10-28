@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/status_badge.dart';
 import '../../core/widgets/empty_state.dart';
+import '../../core/responsive/responsive_layout.dart';
 import '../../providers/callback_provider.dart';
 import '../../providers/call_provider.dart';
 import '../../models/callback_model.dart';
@@ -192,19 +193,19 @@ class _CallbackScreenState extends State<CallbackScreen> with SingleTickerProvid
   @override
   Widget build(BuildContext context) {
     final cbProvider = context.watch<CallbackProvider>();
+    final isMobile = ResponsiveLayout.isMobile(context);
 
     return Scaffold(
       backgroundColor: AppColors.background,
       body: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: EdgeInsets.all(isMobile ? 12 : 20),
         child: Column(
           children: [
-            // Tabs Bar with Check Reminders Button
+            // Tabs Bar with Sync Reminders
             Card(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Expanded(
                       child: TabBar(
@@ -216,7 +217,7 @@ class _CallbackScreenState extends State<CallbackScreen> with SingleTickerProvid
                         indicatorColor: AppColors.accentViolet,
                         labelStyle: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 13),
                         tabs: const [
-                          Tab(text: 'All Callbacks'),
+                          Tab(text: 'All'),
                           Tab(text: 'Due Now'),
                           Tab(text: 'Upcoming'),
                           Tab(text: 'Overdue'),
@@ -224,23 +225,22 @@ class _CallbackScreenState extends State<CallbackScreen> with SingleTickerProvid
                         ],
                       ),
                     ),
-                    OutlinedButton.icon(
+                    IconButton(
+                      icon: const Icon(Icons.sync, size: 18),
+                      tooltip: 'Sync Reminders',
                       onPressed: () async {
+                        final scaffold = ScaffoldMessenger.of(context);
                         await cbProvider.checkReminders();
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Reminder engine checked & synchronized.')),
-                          );
-                        }
+                        scaffold.showSnackBar(
+                          const SnackBar(content: Text('Reminder engine checked & synchronized.')),
+                        );
                       },
-                      icon: const Icon(Icons.sync, size: 16),
-                      label: const Text('Sync Reminders'),
                     ),
                   ],
                 ),
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
 
             // Callback List
             Expanded(
@@ -254,102 +254,137 @@ class _CallbackScreenState extends State<CallbackScreen> with SingleTickerProvid
                         )
                       : ListView.separated(
                           itemCount: cbProvider.callbacks.length,
-                          separatorBuilder: (_, __) => const SizedBox(height: 12),
+                          separatorBuilder: (_, __) => const SizedBox(height: 10),
                           itemBuilder: (context, index) {
                             final cb = cbProvider.callbacks[index];
+
                             return Card(
                               child: Padding(
                                 padding: const EdgeInsets.all(16),
-                                child: Row(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Container(
-                                      padding: const EdgeInsets.all(12),
-                                      decoration: BoxDecoration(
-                                        color: cb.status == 'OVERDUE'
-                                            ? AppColors.dangerLight
-                                            : cb.status == 'DUE'
-                                                ? AppColors.warningLight
-                                                : AppColors.accentVioletLight,
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                      child: Icon(
-                                        cb.status == 'OVERDUE'
-                                            ? Icons.warning_amber_rounded
-                                            : Icons.alarm,
-                                        color: cb.status == 'OVERDUE'
-                                            ? AppColors.danger
-                                            : cb.status == 'DUE'
-                                                ? AppColors.warning
-                                                : AppColors.accentViolet,
-                                        size: 22,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 16),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Row(
+                                    Row(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.all(10),
+                                          decoration: BoxDecoration(
+                                            color: cb.status == 'OVERDUE'
+                                                ? AppColors.dangerLight
+                                                : cb.status == 'DUE'
+                                                    ? AppColors.warningLight
+                                                    : AppColors.accentVioletLight,
+                                            borderRadius: BorderRadius.circular(8),
+                                          ),
+                                          child: Icon(
+                                            cb.status == 'OVERDUE'
+                                                ? Icons.warning_amber_rounded
+                                                : Icons.alarm,
+                                            color: cb.status == 'OVERDUE'
+                                                ? AppColors.danger
+                                                : cb.status == 'DUE'
+                                                    ? AppColors.warning
+                                                    : AppColors.accentViolet,
+                                            size: 20,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
                                             children: [
-                                              Text(
-                                                cb.leadName,
-                                                style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w700),
+                                              Wrap(
+                                                spacing: 8,
+                                                runSpacing: 4,
+                                                crossAxisAlignment: WrapCrossAlignment.center,
+                                                children: [
+                                                  Text(
+                                                    cb.leadName,
+                                                    style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700),
+                                                  ),
+                                                  Text(
+                                                    '(${cb.leadPhone})',
+                                                    style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, fontFamily: 'monospace'),
+                                                  ),
+                                                  StatusBadge(status: cb.status, isCallback: true),
+                                                ],
                                               ),
-                                              const SizedBox(width: 8),
-                                              Text(
-                                                '(${cb.leadPhone})',
-                                                style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, fontFamily: 'monospace'),
+                                              const SizedBox(height: 6),
+                                              Wrap(
+                                                spacing: 12,
+                                                runSpacing: 4,
+                                                children: [
+                                                  Row(
+                                                    mainAxisSize: MainAxisSize.min,
+                                                    children: [
+                                                      const Icon(Icons.schedule, size: 13, color: AppColors.textMuted),
+                                                      const SizedBox(width: 4),
+                                                      Text(
+                                                        'Scheduled: ${cb.scheduledAt.replaceAll('T', ' ').substring(0, 16)}',
+                                                        style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                  Row(
+                                                    mainAxisSize: MainAxisSize.min,
+                                                    children: [
+                                                      const Icon(Icons.person_outline, size: 13, color: AppColors.textMuted),
+                                                      const SizedBox(width: 4),
+                                                      Text(
+                                                        'Caller: ${cb.assignedEmployeeName}',
+                                                        style: GoogleFonts.inter(fontSize: 12, color: AppColors.textSecondary),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ],
                                               ),
-                                              const SizedBox(width: 10),
-                                              StatusBadge(status: cb.status, isCallback: true),
+                                              if (cb.initialNotes.isNotEmpty) ...[
+                                                const SizedBox(height: 4),
+                                                Text(
+                                                  'Notes: ${cb.initialNotes}',
+                                                  style: GoogleFonts.inter(fontSize: 12, color: AppColors.textSecondary),
+                                                ),
+                                              ],
                                             ],
                                           ),
-                                          const SizedBox(height: 6),
-                                          Row(
-                                            children: [
-                                              const Icon(Icons.schedule, size: 14, color: AppColors.textMuted),
-                                              const SizedBox(width: 4),
-                                              Text(
-                                                'Scheduled: ${cb.scheduledAt.replaceAll('T', ' ').substring(0, 16)}',
-                                                style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
-                                              ),
-                                              const SizedBox(width: 16),
-                                              const Icon(Icons.person_outline, size: 14, color: AppColors.textMuted),
-                                              const SizedBox(width: 4),
-                                              Text(
-                                                'Caller: ${cb.assignedEmployeeName}',
-                                                style: GoogleFonts.inter(fontSize: 12, color: AppColors.textSecondary),
-                                              ),
-                                            ],
-                                          ),
-                                          if (cb.initialNotes.isNotEmpty) ...[
-                                            const SizedBox(height: 4),
-                                            Text(
-                                              'Notes: ${cb.initialNotes}',
-                                              style: GoogleFonts.inter(fontSize: 12, color: AppColors.textSecondary),
-                                            ),
-                                          ],
-                                        ],
-                                      ),
+                                        ),
+                                      ],
                                     ),
 
-                                    // Action Buttons
+                                    // Action Buttons Row (Responsive Wrap to prevent overflow)
                                     if (cb.status != 'COMPLETED') ...[
-                                      ElevatedButton.icon(
-                                        style: ElevatedButton.styleFrom(backgroundColor: AppColors.success),
-                                        onPressed: () => _callLead(cb),
-                                        icon: const Icon(Icons.phone, size: 16, color: Colors.white),
-                                        label: const Text('Call Now'),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      OutlinedButton(
-                                        onPressed: () => _reschedule(cb),
-                                        child: const Text('Reschedule'),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      OutlinedButton(
-                                        onPressed: () => _complete(cb),
-                                        child: const Text('Complete'),
+                                      const SizedBox(height: 12),
+                                      const Divider(height: 1),
+                                      const SizedBox(height: 10),
+                                      Wrap(
+                                        spacing: 8,
+                                        runSpacing: 8,
+                                        children: [
+                                          ElevatedButton.icon(
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: AppColors.success,
+                                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                            ),
+                                            onPressed: () => _callLead(cb),
+                                            icon: const Icon(Icons.phone, size: 14, color: Colors.white),
+                                            label: const Text('Call Now'),
+                                          ),
+                                          OutlinedButton(
+                                            style: OutlinedButton.styleFrom(
+                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                            ),
+                                            onPressed: () => _reschedule(cb),
+                                            child: const Text('Reschedule'),
+                                          ),
+                                          OutlinedButton(
+                                            style: OutlinedButton.styleFrom(
+                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                            ),
+                                            onPressed: () => _complete(cb),
+                                            child: const Text('Complete'),
+                                          ),
+                                        ],
                                       ),
                                     ],
                                   ],

@@ -151,7 +151,7 @@ class _CallOutcomeDialogState extends State<CallOutcomeDialog> {
                   Text('Call Outcome *', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600)),
                   const SizedBox(height: 6),
                   DropdownButtonFormField<String>(
-                    value: _outcome,
+                    initialValue: _outcome,
                     decoration: const InputDecoration(),
                     items: _outcomes.map((o) {
                       return DropdownMenuItem(
@@ -214,9 +214,9 @@ class _CallOutcomeDialogState extends State<CallOutcomeDialog> {
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: AppColors.accentVioletLight.withOpacity(0.4),
+                        color: AppColors.accentVioletLight.withValues(alpha: 0.4),
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: AppColors.accentViolet.withOpacity(0.3)),
+                        border: Border.all(color: AppColors.accentViolet.withValues(alpha: 0.3)),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,

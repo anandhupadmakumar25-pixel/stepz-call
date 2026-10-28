@@ -76,18 +76,18 @@ class _LeadDirectoryScreenState extends State<LeadDirectoryScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       body: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: EdgeInsets.all(isMobile ? 12 : 20),
         child: Column(
           children: [
-            // Top Toolbar & Action Buttons
+            // Top Toolbar & Action Controls
             Card(
               child: Padding(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(14),
                 child: Column(
                   children: [
+                    // Search and Filter Row
                     Row(
                       children: [
-                        // Search Bar
                         Expanded(
                           child: TextField(
                             controller: _searchController,
@@ -95,6 +95,7 @@ class _LeadDirectoryScreenState extends State<LeadDirectoryScreen> {
                             decoration: InputDecoration(
                               hintText: 'Search by name, phone, city...',
                               prefixIcon: const Icon(Icons.search, size: 18),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                               suffixIcon: _searchController.text.isNotEmpty
                                   ? IconButton(
                                       icon: const Icon(Icons.clear, size: 16),
@@ -107,11 +108,11 @@ class _LeadDirectoryScreenState extends State<LeadDirectoryScreen> {
                             ),
                           ),
                         ),
-                        const SizedBox(width: 12),
+                        const SizedBox(width: 8),
 
-                        // Status Filter
+                        // Status Filter Dropdown
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
                           decoration: BoxDecoration(
                             color: AppColors.surface,
                             borderRadius: BorderRadius.circular(8),
@@ -123,7 +124,7 @@ class _LeadDirectoryScreenState extends State<LeadDirectoryScreen> {
                               items: _statusOptions.map((st) {
                                 return DropdownMenuItem(
                                   value: st,
-                                  child: Text(st.replaceAll('_', ' '), style: GoogleFonts.inter(fontSize: 13)),
+                                  child: Text(st.replaceAll('_', ' '), style: GoogleFonts.inter(fontSize: 12)),
                                 );
                               }).toList(),
                               onChanged: _onStatusChanged,
@@ -135,53 +136,67 @@ class _LeadDirectoryScreenState extends State<LeadDirectoryScreen> {
 
                     // Admin Actions (Bulk Assign, Import Wizard, Add Lead)
                     if (!isTelecaller) ...[
-                      const SizedBox(height: 14),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      const SizedBox(height: 12),
+                      Wrap(
+                        alignment: WrapAlignment.spaceBetween,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 8,
+                        runSpacing: 8,
                         children: [
                           Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
                               Text(
-                                '${_selectedLeadIds.length} leads selected',
+                                '${_selectedLeadIds.length} selected',
                                 style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
                               ),
                               if (_selectedLeadIds.isNotEmpty) ...[
-                                const SizedBox(width: 10),
+                                const SizedBox(width: 8),
                                 ElevatedButton.icon(
-                                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.accentViolet),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppColors.accentViolet,
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                  ),
                                   onPressed: () {
                                     showDialog(
                                       context: context,
                                       builder: (_) => BulkAssignDialog(selectedLeadIds: _selectedLeadIds.toList()),
                                     );
                                   },
-                                  icon: const Icon(Icons.assignment_ind, size: 16),
+                                  icon: const Icon(Icons.assignment_ind, size: 15),
                                   label: const Text('Bulk Assign'),
                                 ),
                               ],
                             ],
                           ),
-                          Row(
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 6,
                             children: [
                               OutlinedButton.icon(
+                                style: OutlinedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                ),
                                 onPressed: () {
                                   showDialog(
                                     context: context,
                                     builder: (_) => const ImportWizardDialog(),
                                   );
                                 },
-                                icon: const Icon(Icons.upload_file, size: 16),
-                                label: const Text('Import Excel / CSV'),
+                                icon: const Icon(Icons.upload_file, size: 15),
+                                label: const Text('Import Excel/CSV'),
                               ),
-                              const SizedBox(width: 8),
                               ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                ),
                                 onPressed: () {
                                   showDialog(
                                     context: context,
                                     builder: (_) => const AddLeadDialog(),
                                   );
                                 },
-                                icon: const Icon(Icons.add, size: 16),
+                                icon: const Icon(Icons.add, size: 15),
                                 label: const Text('Add Lead'),
                               ),
                             ],
@@ -193,9 +208,9 @@ class _LeadDirectoryScreenState extends State<LeadDirectoryScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
 
-            // Lead List / Table
+            // Leads Directory List / Table
             Expanded(
               child: Card(
                 child: leadProvider.isLoading && leadProvider.leads.isEmpty
@@ -299,7 +314,7 @@ class _LeadDirectoryScreenState extends State<LeadDirectoryScreen> {
         return ListTile(
           onTap: () => _openLeadDetail(lead.id),
           title: Text(lead.fullName, style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 14)),
-          subtitle: Text('${lead.normalizedPhone} • ${lead.city}', style: GoogleFonts.inter(fontSize: 12)),
+          subtitle: Text('${lead.normalizedPhone} • ${lead.city.isNotEmpty ? lead.city : 'No location'}', style: GoogleFonts.inter(fontSize: 12)),
           trailing: StatusBadge(status: lead.status),
         );
       },

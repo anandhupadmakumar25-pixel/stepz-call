@@ -16,7 +16,7 @@ class BulkAssignDialog extends StatefulWidget {
 
 class _BulkAssignDialogState extends State<BulkAssignDialog> {
   final Set<String> _selectedEmployeeIds = {};
-  String _method = 'EQUAL';
+  final String _method = 'EQUAL';
   bool _isSubmitting = false;
 
   @override
@@ -55,12 +55,10 @@ class _BulkAssignDialogState extends State<BulkAssignDialog> {
       final blocked = result['blocked_count'] ?? 0;
 
       Navigator.of(context).pop();
+      final blockedMsg = blocked > 0 ? ' ($blocked permanently blocked numbers skipped)' : '';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            'Assigned $assigned leads successfully!' +
-                (blocked > 0 ? ' ($blocked permanently blocked numbers skipped)' : ''),
-          ),
+          content: Text('Assigned $assigned leads successfully!$blockedMsg'),
           backgroundColor: AppColors.success,
         ),
       );
@@ -83,9 +81,9 @@ class _BulkAssignDialogState extends State<BulkAssignDialog> {
       backgroundColor: AppColors.surface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 540, maxHeight: 600),
+        constraints: const BoxConstraints(maxWidth: 520, maxHeight: 580),
         child: Padding(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(22),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -107,7 +105,7 @@ class _BulkAssignDialogState extends State<BulkAssignDialog> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text('Bulk Lead Assignment', style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700)),
-                          Text('${widget.selectedLeadIds.length} leads selected for allocation', style: GoogleFonts.inter(fontSize: 12, color: AppColors.textSecondary)),
+                          Text('${widget.selectedLeadIds.length} leads selected for allocation', style: GoogleFonts.inter(fontSize: 11, color: AppColors.textSecondary)),
                         ],
                       ),
                     ],
@@ -118,28 +116,28 @@ class _BulkAssignDialogState extends State<BulkAssignDialog> {
                   ),
                 ],
               ),
-              const Divider(height: 24),
+              const Divider(height: 20),
 
               Text('Distribution Mode', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600)),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: RadioListTile<String>(
-                      title: Text('Equal Distribution', style: GoogleFonts.inter(fontSize: 13)),
-                      value: 'EQUAL',
-                      groupValue: _method,
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      onChanged: (v) => setState(() => _method = v!),
-                    ),
-                  ),
-                ],
+              const SizedBox(height: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceSecondary,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.check_circle, size: 16, color: AppColors.accentViolet),
+                    const SizedBox(width: 8),
+                    Text('Equal Distribution (Even split across selected telecallers)', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w500)),
+                  ],
+                ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 14),
 
               Text('Select Target Telecallers', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600)),
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
 
               Expanded(
                 child: activeEmployees.isEmpty
@@ -161,6 +159,7 @@ class _BulkAssignDialogState extends State<BulkAssignDialog> {
                             subtitle: Text('Current assigned: ${emp['assigned_leads_count'] ?? 0} leads', style: GoogleFonts.inter(fontSize: 11, color: AppColors.textMuted)),
                             value: isSelected,
                             dense: true,
+                            contentPadding: EdgeInsets.zero,
                             onChanged: (val) {
                               setState(() {
                                 if (val == true) {
@@ -175,14 +174,17 @@ class _BulkAssignDialogState extends State<BulkAssignDialog> {
                       ),
               ),
 
-              const Divider(height: 24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              const Divider(height: 20),
+              Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                runSpacing: 8,
                 children: [
                   Text(
                     _selectedEmployeeIds.isNotEmpty
-                        ? '~${(widget.selectedLeadIds.length / _selectedEmployeeIds.length).ceil()} leads per caller'
-                        : 'Select telecallers',
+                        ? '~${(widget.selectedLeadIds.length / _selectedEmployeeIds.length).ceil()} leads per telecaller'
+                        : 'Select at least 1 telecaller',
                     style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.accentViolet),
                   ),
                   ElevatedButton(

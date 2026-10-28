@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/status_badge.dart';
 import '../../core/widgets/empty_state.dart';
+import '../../core/responsive/responsive_layout.dart';
 import '../../providers/company_provider.dart';
 
 class CompanyDirectoryScreen extends StatefulWidget {
@@ -56,6 +57,8 @@ class _CompanyDirectoryScreenState extends State<CompanyDirectoryScreen> {
           ElevatedButton(
             onPressed: () async {
               if (compNameController.text.trim().isEmpty || adminEmailController.text.trim().isEmpty) return;
+              final nav = Navigator.of(ctx);
+              final scaffold = ScaffoldMessenger.of(context);
               final success = await context.read<CompanyProvider>().createCompany({
                 'name': compNameController.text.trim(),
                 'contact_email': contactEmailController.text.trim(),
@@ -64,9 +67,9 @@ class _CompanyDirectoryScreenState extends State<CompanyDirectoryScreen> {
                 'admin_first_name': adminFirstNameController.text.trim(),
                 'status': 'ACTIVE',
               });
-              if (success && mounted) {
-                Navigator.of(ctx).pop();
-                ScaffoldMessenger.of(context).showSnackBar(
+              if (success) {
+                nav.pop();
+                scaffold.showSnackBar(
                   const SnackBar(content: Text('Company and Admin created successfully!'), backgroundColor: AppColors.success),
                 );
               }
@@ -81,31 +84,42 @@ class _CompanyDirectoryScreenState extends State<CompanyDirectoryScreen> {
   @override
   Widget build(BuildContext context) {
     final compProvider = context.watch<CompanyProvider>();
+    final isMobile = ResponsiveLayout.isMobile(context);
 
     return Scaffold(
       backgroundColor: AppColors.background,
       body: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: EdgeInsets.all(isMobile ? 12 : 20),
         child: Column(
           children: [
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Tenant Companies Directory', style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700)),
-                    Text('Super Admin platform tenant control and provisioning', style: GoogleFonts.inter(fontSize: 12, color: AppColors.textSecondary)),
-                  ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Tenant Companies Directory', style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700)),
+                      Text(
+                        'Super Admin platform tenant control and provisioning',
+                        style: GoogleFonts.inter(fontSize: 12, color: AppColors.textSecondary),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
                 ),
                 ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  ),
                   onPressed: _showCreateCompanyDialog,
                   icon: const Icon(Icons.add_business, size: 16),
                   label: const Text('New Company'),
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
 
             Expanded(
               child: Card(
@@ -124,17 +138,19 @@ class _CompanyDirectoryScreenState extends State<CompanyDirectoryScreen> {
                               final comp = compProvider.companies[index];
                               return ListTile(
                                 leading: Container(
-                                  padding: const EdgeInsets.all(10),
+                                  padding: const EdgeInsets.all(8),
                                   decoration: BoxDecoration(
                                     color: AppColors.navBackground,
                                     borderRadius: BorderRadius.circular(8),
                                   ),
-                                  child: const Icon(Icons.business, color: Colors.white, size: 20),
+                                  child: const Icon(Icons.business, color: Colors.white, size: 18),
                                 ),
-                                title: Row(
+                                title: Wrap(
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  spacing: 8,
+                                  runSpacing: 4,
                                   children: [
                                     Text(comp.name, style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600)),
-                                    const SizedBox(width: 8),
                                     StatusBadge(status: comp.status),
                                   ],
                                 ),

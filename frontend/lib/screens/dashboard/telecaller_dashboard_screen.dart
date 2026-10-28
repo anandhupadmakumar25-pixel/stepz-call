@@ -27,6 +27,7 @@ class _TelecallerDashboardScreenState extends State<TelecallerDashboardScreen> {
   Widget build(BuildContext context) {
     final dash = context.watch<DashboardProvider>();
     final isDesktop = ResponsiveLayout.isDesktop(context);
+    final isMobile = ResponsiveLayout.isMobile(context);
 
     final targetPct = dash.telecallerDailyTarget > 0
         ? (dash.telecallerCallsToday / dash.telecallerDailyTarget).clamp(0.0, 1.0)
@@ -35,7 +36,7 @@ class _TelecallerDashboardScreenState extends State<TelecallerDashboardScreen> {
     return RefreshIndicator(
       onRefresh: () => context.read<DashboardProvider>().fetchTelecallerDashboard(),
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+        padding: EdgeInsets.all(isMobile ? 14 : 20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -43,7 +44,7 @@ class _TelecallerDashboardScreenState extends State<TelecallerDashboardScreen> {
             Card(
               color: AppColors.primaryDark,
               child: Padding(
-                padding: const EdgeInsets.all(24),
+                padding: EdgeInsets.all(isMobile ? 18 : 24),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -53,7 +54,7 @@ class _TelecallerDashboardScreenState extends State<TelecallerDashboardScreen> {
                         Text(
                           "Today's Calling Target",
                           style: GoogleFonts.inter(
-                            fontSize: 16,
+                            fontSize: isMobile ? 14 : 16,
                             fontWeight: FontWeight.w600,
                             color: Colors.white,
                           ),
@@ -66,25 +67,26 @@ class _TelecallerDashboardScreenState extends State<TelecallerDashboardScreen> {
                           ),
                           child: Text(
                             '${(targetPct * 100).toInt()}% Done',
-                            style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+                            style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white),
                           ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 12),
-                    Row(
+                    Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         Text(
                           '${dash.telecallerCallsToday}',
                           style: GoogleFonts.inter(
-                            fontSize: 32,
+                            fontSize: isMobile ? 26 : 32,
                             fontWeight: FontWeight.w800,
                             color: Colors.white,
                           ),
                         ),
                         Text(
                           ' / ${dash.telecallerDailyTarget} calls completed',
-                          style: GoogleFonts.inter(fontSize: 14, color: Colors.white70),
+                          style: GoogleFonts.inter(fontSize: 13, color: Colors.white70),
                         ),
                       ],
                     ),
@@ -102,16 +104,16 @@ class _TelecallerDashboardScreenState extends State<TelecallerDashboardScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
 
             // KPI Grid
             GridView.count(
-              crossAxisCount: isDesktop ? 4 : 2,
-              crossAxisSpacing: 14,
-              mainAxisSpacing: 14,
+              crossAxisCount: isDesktop ? 4 : (ResponsiveLayout.isTablet(context) ? 2 : 1),
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              childAspectRatio: isDesktop ? 2.2 : 1.4,
+              childAspectRatio: isDesktop ? 2.3 : (ResponsiveLayout.isTablet(context) ? 2.0 : 2.5),
               children: [
                 KpiCard(
                   title: 'Assigned Leads',
@@ -143,18 +145,18 @@ class _TelecallerDashboardScreenState extends State<TelecallerDashboardScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 20),
 
             // Recent Calls Logged
             Card(
               child: Padding(
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.all(18),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       'Recent Calls Logged',
-                      style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w600),
+                      style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(height: 12),
                     if (dash.telecallerRecentCalls.isEmpty)
@@ -188,6 +190,8 @@ class _TelecallerDashboardScreenState extends State<TelecallerDashboardScreen> {
                             title: Text(
                               call.leadName,
                               style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                             subtitle: Text(
                               call.notes,
