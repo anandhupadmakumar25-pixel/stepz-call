@@ -1,0 +1,17 @@
+[Unit]
+Description=Stepz Call Django Production API
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/var/www/stepz_call/backend
+ExecStart=/var/www/stepz_call/backend/venv/bin/gunicorn --config gunicorn_config.py config.wsgi:application
+Restart=always
+RestartSec=5
+KillMode=mixed
+TimeoutStopSec=10
+EnvironmentFile=/var/www/stepz_call/backend/.env
+
+[Install]
+WantedBy=multi-user.target

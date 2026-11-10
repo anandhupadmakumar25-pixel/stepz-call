@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    container_name: stepz_call_backend
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - DEBUG=False
+      - ALLOWED_HOSTS=*
+      - DJANGO_SECRET_KEY=stepz-call-docker-super-secret-production-key
+    volumes:
+      - media_volume:/app/media
+      - static_volume:/app/staticfiles
+      - db_volume:/app/db
+
+volumes:
+  media_volume:
+  static_volume:
+  db_volume:
