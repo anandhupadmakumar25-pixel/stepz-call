@@ -13,9 +13,10 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
 
-    // Verify Telecaller CRM branding is displayed
-    expect(find.text('Telecaller CRM'), findsOneWidget);
-    expect(find.text('Sign In to Workspace'), findsOneWidget);
+    // Verify Telecaller CRM branding and Welcome Back card is displayed
+    expect(find.text('Telecaller CRM'), findsWidgets);
+    expect(find.text('Welcome Back'), findsOneWidget);
+    expect(find.text('Sign in to your account'), findsOneWidget);
     expect(find.text('Email Address'), findsOneWidget);
     expect(find.text('Password'), findsOneWidget);
 

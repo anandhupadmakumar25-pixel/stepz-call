@@ -3,11 +3,16 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme/app_theme.dart';
-import '../../core/widgets/status_badge.dart';
-import '../../core/widgets/empty_state.dart';
+import '../../core/widgets/glass/glass_card.dart';
+import '../../core/widgets/glass/gradient_button.dart';
+import '../../core/widgets/glass/glass_text_field.dart';
+import '../../core/widgets/glass/animated_status_badge.dart';
+import '../../core/widgets/app_back_button.dart';
 import '../../core/responsive/responsive_layout.dart';
+import '../../routes/app_routes.dart';
 import '../../providers/callback_provider.dart';
 import '../../providers/call_provider.dart';
+import '../../providers/recording_provider.dart';
 import '../../models/callback_model.dart';
 import '../calls/call_outcome_dialog.dart';
 
@@ -82,31 +87,88 @@ class _CallbackScreenState extends State<CallbackScreen> with SingleTickerProvid
         final reasonController = TextEditingController();
         final confirmed = await showDialog<bool>(
           context: context,
-          builder: (ctx) => AlertDialog(
-            title: Text('Reschedule Callback', style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 16)),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('New scheduled time: ${DateFormat('EEE, MMM d, yyyy @ h:mm a').format(newDateTime)}'),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: reasonController,
-                  decoration: const InputDecoration(labelText: 'Reason for Rescheduling *'),
+          barrierColor: Colors.black.withValues(alpha: 0.7),
+          builder: (ctx) => Dialog(
+            backgroundColor: Colors.transparent,
+            insetPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 20),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 480),
+              child: GlassCard(
+                blur: 24,
+                opacity: 0.18,
+                borderRadius: BorderRadius.circular(20),
+                borderColor: AppColors.glassBorderHighlight,
+                padding: const EdgeInsets.all(20),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              gradient: AppColors.coralGradient,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Icon(Icons.alarm_add_rounded, color: Colors.white, size: 20),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'Reschedule Callback',
+                              style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 16, color: const Color(0xFF0F172A)),
+                            ),
+                          ),
+                          DialogCloseButton(onPressed: () => Navigator.of(ctx).pop(false)),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'New time: ${DateFormat('EEE, MMM d, yyyy @ h:mm a').format(newDateTime)}',
+                        style: GoogleFonts.inter(fontSize: 13, color: AppColors.neonCyan, fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 16),
+                      GlassTextField(
+                        label: 'Reason for Rescheduling *',
+                        hintText: 'e.g. Lead requested call next morning.',
+                        controller: reasonController,
+                        maxLines: 2,
+                      ),
+                      Container(
+                        margin: const EdgeInsets.only(top: 24),
+                        padding: const EdgeInsets.only(top: 18),
+                        decoration: const BoxDecoration(
+                          border: Border(top: BorderSide(color: Color(0x33D4AF37), width: 1)),
+                        ),
+                        child: Wrap(
+                          alignment: WrapAlignment.end,
+                          spacing: 12,
+                          runSpacing: 8,
+                          children: [
+                            GlassSecondaryButton(
+                              text: 'Cancel',
+                              onPressed: () => Navigator.of(ctx).pop(false),
+                            ),
+                            GradientPrimaryButton(
+                              text: 'Confirm Reschedule',
+                              icon: Icons.check_rounded,
+                              gradient: AppColors.coralGradient,
+                              onPressed: () {
+                                if (reasonController.text.trim().isNotEmpty) {
+                                  Navigator.of(ctx).pop(true);
+                                }
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ],
-            ),
-            actions: [
-              TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
-              ElevatedButton(
-                onPressed: () {
-                  if (reasonController.text.trim().isNotEmpty) {
-                    Navigator.of(ctx).pop(true);
-                  }
-                },
-                child: const Text('Confirm Reschedule'),
               ),
-            ],
+            ),
           ),
         );
 
@@ -130,63 +192,135 @@ class _CallbackScreenState extends State<CallbackScreen> with SingleTickerProvid
     final notesController = TextEditingController();
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Complete Callback', style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 16)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Record notes for completed callback with ${cb.leadName}:'),
-            const SizedBox(height: 12),
-            TextField(
-              controller: notesController,
-              maxLines: 3,
-              decoration: const InputDecoration(labelText: 'Completion Notes *'),
+      barrierColor: Colors.black.withValues(alpha: 0.7),
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 20),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 480),
+          child: GlassCard(
+            blur: 24,
+            opacity: 0.18,
+            borderRadius: BorderRadius.circular(20),
+            borderColor: AppColors.glassBorderHighlight,
+            padding: const EdgeInsets.all(20),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          gradient: AppColors.cyanGradient,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(Icons.check_circle_outline_rounded, color: Colors.white, size: 20),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Complete Callback',
+                          style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 16, color: const Color(0xFF0F172A)),
+                        ),
+                      ),
+                      DialogCloseButton(onPressed: () => Navigator.of(ctx).pop(false)),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Record notes for completed callback with ${cb.leadName}:',
+                    style: GoogleFonts.inter(fontSize: 13, color: AppColors.textSecondary),
+                  ),
+                  const SizedBox(height: 16),
+                  GlassTextField(
+                    label: 'Completion Notes *',
+                    hintText: 'e.g. Connected successfully. Converted to customer.',
+                    controller: notesController,
+                    maxLines: 3,
+                  ),
+                  Container(
+                    margin: const EdgeInsets.only(top: 24),
+                    padding: const EdgeInsets.only(top: 18),
+                    decoration: const BoxDecoration(
+                      border: Border(top: BorderSide(color: Color(0x33D4AF37), width: 1)),
+                    ),
+                    child: Wrap(
+                      alignment: WrapAlignment.end,
+                      spacing: 12,
+                      runSpacing: 8,
+                      children: [
+                        GlassSecondaryButton(
+                          text: 'Cancel',
+                          onPressed: () => Navigator.of(ctx).pop(false),
+                        ),
+                        GradientPrimaryButton(
+                          text: 'Mark Completed',
+                          icon: Icons.check_circle_rounded,
+                          onPressed: () {
+                            if (notesController.text.trim().isNotEmpty) {
+                              Navigator.of(ctx).pop(true);
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () {
-              if (notesController.text.trim().isNotEmpty) {
-                Navigator.of(ctx).pop(true);
-              }
-            },
-            child: const Text('Mark Completed'),
           ),
-        ],
+        ),
       ),
     );
 
     if (confirmed == true && mounted) {
-      final success = await context.read<CallbackProvider>().completeCallback(
-            cb.id,
-            notesController.text.trim(),
-          );
+      final success = await context.read<CallbackProvider>().completeCallback(cb.id, notesController.text.trim());
       if (success && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Callback marked completed.'), backgroundColor: AppColors.success),
+          const SnackBar(content: Text('Callback marked as completed.'), backgroundColor: AppColors.success),
         );
       }
     }
   }
 
   Future<void> _callLead(CallbackModel cb) async {
-    final callProvider = context.read<CallProvider>();
-    await callProvider.launchDialer(cb.leadPhone);
+    final recProv = context.read<RecordingProvider>();
+    final callProv = context.read<CallProvider>();
+    await recProv.ensurePermissions();
+    await recProv.startRecording(
+      leadId: cb.leadId,
+      leadName: cb.leadName,
+      leadPhone: cb.leadPhone,
+    );
+    await callProv.initiateCall(cb.leadId, cb.leadPhone);
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => CallOutcomeDialog(
+        leadId: cb.leadId,
+        leadName: cb.leadName,
+        leadPhone: cb.leadPhone,
+      ),
+    ).then((_) {
+      if (!mounted) return;
+      context.read<CallbackProvider>().fetchCallbacks(status: _tabs[_tabController.index]);
+    });
+  }
 
-    if (mounted) {
-      await showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => CallOutcomeDialog(
-          leadId: cb.leadId,
-          leadName: cb.leadName,
-          phoneNumber: cb.leadPhone,
-        ),
-      );
-      _fetchTabCallbacks(_tabs[_tabController.index]);
+  Color _getCallbackColor(String status) {
+    switch (status.toUpperCase()) {
+      case 'OVERDUE':
+        return AppColors.neonCoral;
+      case 'DUE':
+        return const Color(0xFFF59E0B);
+      case 'COMPLETED':
+        return const Color(0xFF10B981);
+      default:
+        return AppColors.neonCyan;
     }
   }
 
@@ -196,207 +330,301 @@ class _CallbackScreenState extends State<CallbackScreen> with SingleTickerProvid
     final isMobile = ResponsiveLayout.isMobile(context);
 
     return Scaffold(
-      backgroundColor: AppColors.background,
-      body: Padding(
-        padding: EdgeInsets.all(isMobile ? 12 : 20),
-        child: Column(
-          children: [
-            // Tabs Bar with Sync Reminders
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: TabBar(
-                        controller: _tabController,
-                        isScrollable: true,
-                        tabAlignment: TabAlignment.start,
-                        labelColor: AppColors.accentViolet,
-                        unselectedLabelColor: AppColors.textSecondary,
-                        indicatorColor: AppColors.accentViolet,
-                        labelStyle: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 13),
-                        tabs: const [
-                          Tab(text: 'All'),
-                          Tab(text: 'Due Now'),
-                          Tab(text: 'Upcoming'),
-                          Tab(text: 'Overdue'),
-                          Tab(text: 'Completed'),
-                        ],
+      backgroundColor: Colors.transparent,
+      body: SafeArea(
+        top: false,
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+            isMobile ? 12 : 24,
+            isMobile ? 6 : 16,
+            isMobile ? 12 : 24,
+            isMobile ? 10 : 20,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header with Back Button
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Row(
+                      children: [
+                        const AppBackButton(fallbackRoute: AppRoutes.dashboard),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Callback Scheduling & Reminders',
+                                style: GoogleFonts.inter(
+                                  fontSize: isMobile ? 18 : 22,
+                                  fontWeight: FontWeight.w800,
+                                  color: const Color(0xFF0F172A),
+                                  letterSpacing: -0.3,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Active follow-up queue with automated reminders and priority ordering',
+                                style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                    ),
+                    child: IconButton(
+                      icon: const Icon(Icons.refresh_rounded, size: 20, color: AppColors.neonCyan),
+                      onPressed: () => _fetchTabCallbacks(_tabs[_tabController.index]),
+                      tooltip: 'Refresh Callbacks',
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+
+              // Frosted Glass Tabs
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                padding: const EdgeInsets.all(5),
+                child: TabBar(
+                  controller: _tabController,
+                  isScrollable: isMobile,
+                  tabAlignment: isMobile ? TabAlignment.start : null,
+                  dividerColor: Colors.transparent,
+                  indicator: BoxDecoration(
+                    gradient: AppColors.primaryGradient,
+                    borderRadius: BorderRadius.circular(10),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.neonViolet.withValues(alpha: 0.4),
+                        blurRadius: 10,
+                        offset: const Offset(0, 2),
                       ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.sync, size: 18),
-                      tooltip: 'Sync Reminders',
-                      onPressed: () async {
-                        final scaffold = ScaffoldMessenger.of(context);
-                        await cbProvider.checkReminders();
-                        scaffold.showSnackBar(
-                          const SnackBar(content: Text('Reminder engine checked & synchronized.')),
-                        );
-                      },
-                    ),
+                    ],
+                  ),
+                  indicatorSize: TabBarIndicatorSize.tab,
+                  labelColor: Colors.white,
+                  unselectedLabelColor: const Color(0xFF64748B),
+                  labelStyle: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700),
+                  unselectedLabelStyle: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w500),
+                  tabs: const [
+                    Tab(text: 'ALL'),
+                    Tab(text: 'DUE TODAY'),
+                    Tab(text: 'UPCOMING'),
+                    Tab(text: 'OVERDUE'),
+                    Tab(text: 'COMPLETED'),
                   ],
                 ),
               ),
-            ),
-            const SizedBox(height: 14),
+                const SizedBox(height: 16),
 
-            // Callback List
-            Expanded(
-              child: cbProvider.isLoading && cbProvider.callbacks.isEmpty
-                  ? const Center(child: CircularProgressIndicator())
-                  : cbProvider.callbacks.isEmpty
-                      ? const EmptyState(
-                          icon: Icons.event_available,
-                          title: 'No callbacks found',
-                          description: 'No callbacks are scheduled in this category.',
-                        )
-                      : ListView.separated(
-                          itemCount: cbProvider.callbacks.length,
-                          separatorBuilder: (_, __) => const SizedBox(height: 10),
-                          itemBuilder: (context, index) {
-                            final cb = cbProvider.callbacks[index];
-
-                            return Card(
-                              child: Padding(
-                                padding: const EdgeInsets.all(16),
+                // Callback List
+                Expanded(
+                  child: cbProvider.isLoading
+                      ? const Center(child: CircularProgressIndicator())
+                      : cbProvider.callbacks.isEmpty
+                          ? Center(
+                              child: GlassCard(
+                                blur: 16,
+                                opacity: 0.12,
+                                borderColor: AppColors.glassBorderHighlight,
+                                padding: const EdgeInsets.all(36),
                                 child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Row(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Container(
-                                          padding: const EdgeInsets.all(10),
-                                          decoration: BoxDecoration(
-                                            color: cb.status == 'OVERDUE'
-                                                ? AppColors.dangerLight
-                                                : cb.status == 'DUE'
-                                                    ? AppColors.warningLight
-                                                    : AppColors.accentVioletLight,
-                                            borderRadius: BorderRadius.circular(8),
-                                          ),
-                                          child: Icon(
-                                            cb.status == 'OVERDUE'
-                                                ? Icons.warning_amber_rounded
-                                                : Icons.alarm,
-                                            color: cb.status == 'OVERDUE'
-                                                ? AppColors.danger
-                                                : cb.status == 'DUE'
-                                                    ? AppColors.warning
-                                                    : AppColors.accentViolet,
-                                            size: 20,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 12),
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              Wrap(
-                                                spacing: 8,
-                                                runSpacing: 4,
-                                                crossAxisAlignment: WrapCrossAlignment.center,
-                                                children: [
-                                                  Text(
-                                                    cb.leadName,
-                                                    style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700),
-                                                  ),
-                                                  Text(
-                                                    '(${cb.leadPhone})',
-                                                    style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, fontFamily: 'monospace'),
-                                                  ),
-                                                  StatusBadge(status: cb.status, isCallback: true),
-                                                ],
-                                              ),
-                                              const SizedBox(height: 6),
-                                              Wrap(
-                                                spacing: 12,
-                                                runSpacing: 4,
-                                                children: [
-                                                  Row(
-                                                    mainAxisSize: MainAxisSize.min,
-                                                    children: [
-                                                      const Icon(Icons.schedule, size: 13, color: AppColors.textMuted),
-                                                      const SizedBox(width: 4),
-                                                      Text(
-                                                        'Scheduled: ${cb.scheduledAt.replaceAll('T', ' ').substring(0, 16)}',
-                                                        style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                  Row(
-                                                    mainAxisSize: MainAxisSize.min,
-                                                    children: [
-                                                      const Icon(Icons.person_outline, size: 13, color: AppColors.textMuted),
-                                                      const SizedBox(width: 4),
-                                                      Text(
-                                                        'Caller: ${cb.assignedEmployeeName}',
-                                                        style: GoogleFonts.inter(fontSize: 12, color: AppColors.textSecondary),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                ],
-                                              ),
-                                              if (cb.initialNotes.isNotEmpty) ...[
-                                                const SizedBox(height: 4),
-                                                Text(
-                                                  'Notes: ${cb.initialNotes}',
-                                                  style: GoogleFonts.inter(fontSize: 12, color: AppColors.textSecondary),
-                                                ),
-                                              ],
-                                            ],
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-
-                                    // Action Buttons Row (Responsive Wrap to prevent overflow)
-                                    if (cb.status != 'COMPLETED') ...[
-                                      const SizedBox(height: 12),
-                                      const Divider(height: 1),
-                                      const SizedBox(height: 10),
-                                      Wrap(
-                                        spacing: 8,
-                                        runSpacing: 8,
-                                        children: [
-                                          ElevatedButton.icon(
-                                            style: ElevatedButton.styleFrom(
-                                              backgroundColor: AppColors.success,
-                                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                                            ),
-                                            onPressed: () => _callLead(cb),
-                                            icon: const Icon(Icons.phone, size: 14, color: Colors.white),
-                                            label: const Text('Call Now'),
-                                          ),
-                                          OutlinedButton(
-                                            style: OutlinedButton.styleFrom(
-                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                            ),
-                                            onPressed: () => _reschedule(cb),
-                                            child: const Text('Reschedule'),
-                                          ),
-                                          OutlinedButton(
-                                            style: OutlinedButton.styleFrom(
-                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                            ),
-                                            onPressed: () => _complete(cb),
-                                            child: const Text('Complete'),
-                                          ),
-                                        ],
+                                    Container(
+                                      padding: const EdgeInsets.all(16),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.neonCyan.withValues(alpha: 0.12),
+                                        shape: BoxShape.circle,
                                       ),
-                                    ],
+                                      child: const Icon(Icons.event_available_rounded, size: 44, color: AppColors.neonCyan),
+                                    ),
+                                    const SizedBox(height: 14),
+                                    Text(
+                                      'No Callbacks Found',
+                                      style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      'No callbacks scheduled in this category.',
+                                      style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
+                                    ),
                                   ],
                                 ),
                               ),
-                            );
-                          },
-                        ),
+                            )
+                          : ListView.separated(
+                              itemCount: cbProvider.callbacks.length,
+                              separatorBuilder: (_, __) => const SizedBox(height: 12),
+                              itemBuilder: (context, index) {
+                                final cb = cbProvider.callbacks[index];
+                                final statusColor = _getCallbackColor(cb.status);
+
+                                return GlassCard(
+                                  blur: 20,
+                                  opacity: 0.12,
+                                  borderRadius: BorderRadius.circular(16),
+                                  borderColor: AppColors.glassBorder,
+                                  padding: const EdgeInsets.all(20),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.all(12),
+                                            decoration: BoxDecoration(
+                                              color: statusColor.withValues(alpha: 0.12),
+                                              borderRadius: BorderRadius.circular(14),
+                                              border: Border.all(color: statusColor.withValues(alpha: 0.3)),
+                                            ),
+                                            child: Icon(
+                                              cb.status == 'OVERDUE' ? Icons.warning_amber_rounded : Icons.alarm_rounded,
+                                              color: statusColor,
+                                              size: 22,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 14),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Wrap(
+                                                  spacing: 10,
+                                                  runSpacing: 6,
+                                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                                  children: [
+                                                    Text(
+                                                      cb.leadName,
+                                                      style: GoogleFonts.inter(
+                                                        fontSize: 15,
+                                                        fontWeight: FontWeight.w800,
+                                                        color: const Color(0xFF0F172A),
+                                                      ),
+                                                    ),
+                                                    Container(
+                                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                                      decoration: BoxDecoration(
+                                                        color: AppColors.neonCyan.withValues(alpha: 0.12),
+                                                        borderRadius: BorderRadius.circular(6),
+                                                        border: Border.all(color: AppColors.neonCyan.withValues(alpha: 0.3)),
+                                                      ),
+                                                      child: Text(
+                                                        cb.leadPhone,
+                                                        style: GoogleFonts.robotoMono(
+                                                          fontSize: 12,
+                                                          color: AppColors.neonCyan,
+                                                          fontWeight: FontWeight.w700,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    AnimatedStatusBadge(label: cb.status, statusColor: statusColor),
+                                                  ],
+                                                ),
+                                                const SizedBox(height: 8),
+                                                Wrap(
+                                                  spacing: 14,
+                                                  runSpacing: 6,
+                                                  children: [
+                                                    Row(
+                                                      mainAxisSize: MainAxisSize.min,
+                                                      children: [
+                                                        const Icon(Icons.schedule_rounded, size: 14, color: AppColors.neonViolet),
+                                                        const SizedBox(width: 5),
+                                                        Text(
+                                                          'Scheduled: ${cb.scheduledAt.replaceAll('T', ' ').substring(0, 16)}',
+                                                          style: GoogleFonts.inter(
+                                                            fontSize: 12,
+                                                            fontWeight: FontWeight.w600,
+                                                            color: const Color(0xFF475569),
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                    Row(
+                                                      mainAxisSize: MainAxisSize.min,
+                                                      children: [
+                                                        const Icon(Icons.person_outline_rounded, size: 14, color: Color(0xFF64748B)),
+                                                        const SizedBox(width: 5),
+                                                        Text(
+                                                          'Caller: ${cb.assignedEmployeeName}',
+                                                          style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ],
+                                                ),
+                                                if (cb.initialNotes.isNotEmpty) ...[
+                                                  const SizedBox(height: 6),
+                                                  Text(
+                                                    'Notes: ${cb.initialNotes}',
+                                                    style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
+                                                  ),
+                                                ],
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+
+                                      if (cb.status != 'COMPLETED') ...[
+                                        const SizedBox(height: 14),
+                                        Divider(color: const Color(0xFFE2E8F0), height: 1),
+                                        const SizedBox(height: 14),
+                                        Wrap(
+                                          spacing: 10,
+                                          runSpacing: 10,
+                                          children: [
+                                            GradientPrimaryButton(
+                                              text: 'Call Now',
+                                              icon: Icons.phone_in_talk_rounded,
+                                              gradient: AppColors.primaryGradient,
+                                              onPressed: () => _callLead(cb),
+                                            ),
+                                            GlassSecondaryButton(
+                                              text: 'Reschedule',
+                                              icon: Icons.alarm_add_rounded,
+                                              onPressed: () => _reschedule(cb),
+                                            ),
+                                            GlassSecondaryButton(
+                                              text: 'Mark Complete',
+                                              icon: Icons.check_circle_outline_rounded,
+                                              onPressed: () => _complete(cb),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
-      ),
     );
   }
 }

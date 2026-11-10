@@ -7,10 +7,12 @@ class CallProvider extends ChangeNotifier {
   List<CallAttemptModel> _calls = [];
   bool _isLoading = false;
   String? _errorMessage;
+  String? _lastCreatedCallId;
 
   List<CallAttemptModel> get calls => _calls;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
+  String? get lastCreatedCallId => _lastCreatedCallId;
 
   Future<bool> launchDialer(String phoneNumber) async {
     try {
@@ -29,6 +31,10 @@ class CallProvider extends ChangeNotifier {
       notifyListeners();
       return false;
     }
+  }
+
+  Future<bool> initiateCall(String leadId, String phoneNumber) async {
+    return await launchDialer(phoneNumber);
   }
 
   Future<void> fetchCalls({String? leadId, String? employeeId}) async {
@@ -84,6 +90,7 @@ class CallProvider extends ChangeNotifier {
 
       final res = await ApiClient.post('/calls/', payload);
       final newCall = CallAttemptModel.fromJson(res);
+      _lastCreatedCallId = newCall.id;
       _calls.insert(0, newCall);
 
       _isLoading = false;

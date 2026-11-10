@@ -10,8 +10,14 @@ import 'providers/callback_provider.dart';
 import 'providers/employee_provider.dart';
 import 'providers/company_provider.dart';
 import 'providers/notification_provider.dart';
+import 'providers/recording_provider.dart';
+import 'providers/department_provider.dart';
+import 'providers/attendance_provider.dart';
+import 'providers/role_provider.dart';
+import 'providers/billing_provider.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/layout/main_layout.dart';
+import 'routes/app_routes.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -33,6 +39,11 @@ class TelecallerCrmApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => EmployeeProvider()),
         ChangeNotifierProvider(create: (_) => CompanyProvider()),
         ChangeNotifierProvider(create: (_) => NotificationProvider()),
+        ChangeNotifierProvider(create: (_) => RecordingProvider()),
+        ChangeNotifierProvider(create: (_) => DepartmentProvider()),
+        ChangeNotifierProvider(create: (_) => AttendanceProvider()),
+        ChangeNotifierProvider(create: (_) => RoleProvider()),
+        ChangeNotifierProvider(create: (_) => BillingProvider()),
       ],
       child: ScreenUtilInit(
         designSize: const Size(1440, 900),
@@ -54,6 +65,7 @@ class TelecallerCrmApp extends StatelessWidget {
                     : auth.isAuthenticated
                         ? const MainLayout()
                         : const LoginScreen(),
+                onGenerateRoute: AppRoutes.onGenerateRoute,
               );
             },
           );

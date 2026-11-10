@@ -1,5 +1,7 @@
 from django.contrib import admin
 from django.urls import path, include
+from django.conf import settings
+from django.conf.urls.static import static
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView
 
 urlpatterns = [
@@ -18,4 +20,5 @@ urlpatterns = [
     path('api/v1/callbacks/', include('apps.callbacks.urls')),
     path('api/v1/notifications/', include('apps.notifications.urls')),
     path('api/v1/analytics/', include('apps.analytics.urls')),
-]
+    path('api/v1/billing/', include('apps.billing.urls')),
+] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

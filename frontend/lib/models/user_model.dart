@@ -11,6 +11,12 @@ class UserModel {
   final String? branchId;
   final String? branchName;
   final bool isStaff;
+  final List<String> companyAllowedMenus;
+  final bool canManageBranches;
+  final String companyPlanName;
+  final List<String> customRoleIds;
+  final List<String> customRoleNames;
+  final List<String> resolvedPermissions;
 
   UserModel({
     required this.id,
@@ -25,14 +31,67 @@ class UserModel {
     this.branchId,
     this.branchName,
     this.isStaff = false,
+    this.companyAllowedMenus = const [],
+    this.canManageBranches = true,
+    this.companyPlanName = 'Default',
+    this.customRoleIds = const [],
+    this.customRoleNames = const [],
+    this.resolvedPermissions = const [],
   });
 
   bool get isSuperAdmin => role == 'SUPER_ADMIN';
-  bool get isCompanyAdmin => role == 'COMPANY_ADMIN' || role == 'SUPER_ADMIN';
-  bool get isManager => role == 'MANAGER' || isCompanyAdmin;
+  bool get isCompanyAdmin => role == 'COMPANY_ADMIN';
+  bool get isManager => role == 'MANAGER';
   bool get isEmployee => role == 'EMPLOYEE';
+  bool get canManageCompany => role == 'SUPER_ADMIN' || role == 'COMPANY_ADMIN' || role == 'MANAGER';
+
+  bool hasMenuPermission(String menuKey) {
+    if (isSuperAdmin) return true;
+    if (companyAllowedMenus.isEmpty) return true; // Default fallback if not initialized
+    return companyAllowedMenus.contains(menuKey);
+  }
+
+  bool hasPermission(String permKey) {
+    if (isSuperAdmin || isCompanyAdmin) return true;
+    if (resolvedPermissions.contains('*') || resolvedPermissions.contains(permKey)) return true;
+    final domain = permKey.split('.').first;
+    if (resolvedPermissions.contains('$domain.*')) return true;
+    // Fallback if legacy manager
+    if (isManager) return true;
+    return false;
+  }
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
+    final rawMenus = json['company_allowed_menus'] as List<dynamic>?;
+    final List<String> parsedMenus = rawMenus != null
+        ? rawMenus.map((e) => e.toString()).toList()
+        : [
+            'branches',
+            'employees',
+            'attendance',
+            'leads',
+            'tasks',
+            'recordings',
+            'callbacks',
+            'call_history',
+            'analytics',
+          ];
+
+    final rawRoleIds = json['custom_role_ids'] as List<dynamic>?;
+    final List<String> parsedRoleIds = rawRoleIds != null
+        ? rawRoleIds.map((e) => e.toString()).toList()
+        : [];
+
+    final rawRoleNames = json['custom_role_names'] as List<dynamic>?;
+    final List<String> parsedRoleNames = rawRoleNames != null
+        ? rawRoleNames.map((e) => e.toString()).toList()
+        : [];
+
+    final rawPerms = json['resolved_permissions'] as List<dynamic>?;
+    final List<String> parsedPerms = rawPerms != null
+        ? rawPerms.map((e) => e.toString()).toList()
+        : [];
+
     return UserModel(
       id: json['id']?.toString() ?? '',
       email: json['email'] ?? '',
@@ -46,6 +105,12 @@ class UserModel {
       branchId: json['branch_id']?.toString() ?? json['branch']?.toString(),
       branchName: json['branch_name'],
       isStaff: json['is_staff'] ?? false,
+      companyAllowedMenus: parsedMenus,
+      canManageBranches: json['can_manage_branches'] ?? parsedMenus.contains('branches'),
+      companyPlanName: json['company_plan_name'] ?? 'Default',
+      customRoleIds: parsedRoleIds,
+      customRoleNames: parsedRoleNames,
+      resolvedPermissions: parsedPerms,
     );
   }
 
@@ -62,5 +127,11 @@ class UserModel {
     'branch_id': branchId,
     'branch_name': branchName,
     'is_staff': isStaff,
+    'company_allowed_menus': companyAllowedMenus,
+    'can_manage_branches': canManageBranches,
+    'company_plan_name': companyPlanName,
+    'custom_role_ids': customRoleIds,
+    'custom_role_names': customRoleNames,
+    'resolved_permissions': resolvedPermissions,
   };
 }

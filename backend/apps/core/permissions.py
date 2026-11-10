@@ -53,3 +53,19 @@ class TenantObjectPermission(permissions.BasePermission):
             return True
             
         return request.user.company_id == obj_company.id
+
+def require_permission(perm_key: str):
+    """
+    Factory function returning a DRF BasePermission class that checks
+    granular custom role permissions on request.user.
+    """
+    class GranularPermission(permissions.BasePermission):
+        message = f"Access denied: Action requires '{perm_key}' permission."
+
+        def has_permission(self, request, view):
+            if not (request.user and request.user.is_authenticated and request.user.is_active):
+                return False
+            return request.user.has_permission(perm_key)
+
+    return GranularPermission
+

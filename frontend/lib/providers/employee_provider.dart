@@ -90,6 +90,33 @@ class EmployeeProvider extends ChangeNotifier {
     }
   }
 
+  Future<bool> updateEmployee(String employeeId, Map<String, dynamic> data) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final res = await ApiClient.patch('/accounts/employees/$employeeId/', data);
+      final idx = _employees.indexWhere((e) => e['id'] == employeeId);
+      if (idx != -1) {
+        _employees[idx] = res;
+      }
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } on ApiException catch (e) {
+      _errorMessage = e.message;
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    } catch (e) {
+      _errorMessage = e.toString();
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
   Future<bool> toggleEmployeeStatus(String employeeId, bool isActive) async {
     try {
       final res = await ApiClient.patch('/accounts/employees/$employeeId/', {

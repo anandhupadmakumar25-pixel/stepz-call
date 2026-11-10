@@ -33,3 +33,6 @@ frontend/android/local.properties
 *~
 .DS_Store
 Thumbs.db
+
+# Firebase
+.firebase/

@@ -8,15 +8,36 @@ class ApiClient {
   static const String _refreshKey = 'refresh_token';
   static const String _userKey = 'auth_user';
 
-  // Base URL: In Flutter Web or Desktop, 127.0.0.1 works directly. On Android emulator 10.0.2.2.
-  static String get baseUrl {
-    if (kIsWeb) {
-      return 'http://127.0.0.1:8000/api/v1';
-    } else if (defaultTargetPlatform == TargetPlatform.android) {
-      return 'http://10.0.2.2:8000/api/v1';
-    } else {
-      return 'http://127.0.0.1:8000/api/v1';
+  // Compile-time environment override: flutter build web --dart-define=API_URL=https://stepz-call-api.onrender.com
+  static const String _envApiUrl = String.fromEnvironment('API_URL');
+
+  static String get serverOrigin {
+    if (_envApiUrl.isNotEmpty) {
+      return _envApiUrl.endsWith('/') ? _envApiUrl.substring(0, _envApiUrl.length - 1) : _envApiUrl;
     }
+    if (kIsWeb ||
+        defaultTargetPlatform == TargetPlatform.windows ||
+        defaultTargetPlatform == TargetPlatform.macOS ||
+        defaultTargetPlatform == TargetPlatform.linux) {
+      return 'http://127.0.0.1:8000';
+    }
+    return 'http://10.224.188.176:8000';
+  }
+
+  static String get baseUrl => '$serverOrigin/api/v1';
+
+  static String? resolveMediaUrl(String? rawUrl) {
+    if (rawUrl == null || rawUrl.isEmpty) return null;
+    if (rawUrl.startsWith('http://') || rawUrl.startsWith('https://')) {
+      return rawUrl
+          .replaceFirst('http://127.0.0.1:8000', serverOrigin)
+          .replaceFirst('http://localhost:8000', serverOrigin)
+          .replaceFirst('http://10.0.2.2:8000', serverOrigin);
+    }
+    if (rawUrl.startsWith('/')) {
+      return '$serverOrigin$rawUrl';
+    }
+    return '$serverOrigin/$rawUrl';
   }
 
   // Token Management
@@ -25,7 +46,11 @@ class ApiClient {
     return prefs.getString(_tokenKey);
   }
 
-  static Future<void> saveSession(String accessToken, String refreshToken, Map<String, dynamic> user) async {
+  static Future<void> saveSession(
+    String accessToken,
+    String refreshToken,
+    Map<String, dynamic> user,
+  ) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_tokenKey, accessToken);
     await prefs.setString(_refreshKey, refreshToken);
@@ -95,7 +120,11 @@ class ApiClient {
   }
 
   // HTTP Multipart Upload (for Excel / CSV)
-  static Future<dynamic> uploadFile(String endpoint, List<int> fileBytes, String filename) async {
+  static Future<dynamic> uploadFile(
+    String endpoint,
+    List<int> fileBytes,
+    String filename,
+  ) async {
     final url = Uri.parse('$baseUrl$endpoint');
     final request = http.MultipartRequest('POST', url);
     final headers = await _headers(isJson: false);
@@ -104,6 +133,34 @@ class ApiClient {
     request.files.add(
       http.MultipartFile.fromBytes('file', fileBytes, filename: filename),
     );
+
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+    return _processResponse(response);
+  }
+
+  // HTTP Multipart Upload with Fields & Optional Audio File Bytes
+  static Future<dynamic> uploadRecordingMultipart(
+    String endpoint, {
+    required Map<String, String> fields,
+    List<int>? fileBytes,
+    String? filename,
+  }) async {
+    final url = Uri.parse('$baseUrl$endpoint');
+    final request = http.MultipartRequest('POST', url);
+    final headers = await _headers(isJson: false);
+    request.headers.addAll(headers);
+    request.fields.addAll(fields);
+
+    if (fileBytes != null && fileBytes.isNotEmpty) {
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'audio_file',
+          fileBytes,
+          filename: filename ?? 'call_recording.m4a',
+        ),
+      );
+    }
 
     final streamedResponse = await request.send();
     final response = await http.Response.fromStream(streamedResponse);

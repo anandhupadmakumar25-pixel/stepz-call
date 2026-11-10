@@ -9,6 +9,10 @@ class DashboardKpis {
   final int scheduledCallbacks;
   final int completedCallbacks;
   final int overdueCallbacks;
+  final int totalCompanies;
+  final int activeCompanies;
+  final int suspendedCompanies;
+  final int totalEmployees;
 
   DashboardKpis({
     this.totalRegisteredLeads = 0,
@@ -21,6 +25,10 @@ class DashboardKpis {
     this.scheduledCallbacks = 0,
     this.completedCallbacks = 0,
     this.overdueCallbacks = 0,
+    this.totalCompanies = 0,
+    this.activeCompanies = 0,
+    this.suspendedCompanies = 0,
+    this.totalEmployees = 0,
   });
 
   factory DashboardKpis.fromJson(Map<String, dynamic> json) {
@@ -35,6 +43,42 @@ class DashboardKpis {
       scheduledCallbacks: json['scheduled_callbacks'] ?? 0,
       completedCallbacks: json['completed_callbacks'] ?? 0,
       overdueCallbacks: json['overdue_callbacks'] ?? 0,
+      totalCompanies: json['total_companies'] ?? 0,
+      activeCompanies: json['active_companies'] ?? 0,
+      suspendedCompanies: json['suspended_companies'] ?? 0,
+      totalEmployees: json['total_employees'] ?? 0,
+    );
+  }
+}
+
+class RecentCompanyItem {
+  final String id;
+  final String name;
+  final String status;
+  final String email;
+  final int userCount;
+  final int leadCount;
+  final DateTime? createdAt;
+
+  RecentCompanyItem({
+    required this.id,
+    required this.name,
+    required this.status,
+    required this.email,
+    required this.userCount,
+    required this.leadCount,
+    this.createdAt,
+  });
+
+  factory RecentCompanyItem.fromJson(Map<String, dynamic> json) {
+    return RecentCompanyItem(
+      id: json['id']?.toString() ?? '',
+      name: json['name'] ?? 'Company',
+      status: json['status'] ?? 'ACTIVE',
+      email: json['contact_email'] ?? '',
+      userCount: json['user_count'] ?? 0,
+      leadCount: json['lead_count'] ?? 0,
+      createdAt: json['created_at'] != null ? DateTime.tryParse(json['created_at'].toString()) : null,
     );
   }
 }

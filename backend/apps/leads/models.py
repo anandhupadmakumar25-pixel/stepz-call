@@ -104,6 +104,10 @@ class Branch(TenantModel):
     name = models.CharField(max_length=150)
     code = models.CharField(max_length=50, blank=True)
     address = models.CharField(max_length=255, blank=True)
+    latitude = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True)
+    longitude = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True)
+    radius_meters = models.PositiveIntegerField(default=100)
+    geofence_enabled = models.BooleanField(default=True)
     is_active = models.BooleanField(default=True)
 
     class Meta:
@@ -202,6 +206,7 @@ class Lead(TenantModel):
         ('ASSIGNED', 'Assigned'),
         ('IN_PROGRESS', 'In Progress'),
         ('CALLBACK_REQUESTED', 'Callback Requested'),
+        ('INTERESTED', 'Interested'),
         ('QUALIFIED', 'Qualified'),
         ('NOT_INTERESTED', 'Not Interested'),
         ('BUSY', 'Busy'),
@@ -232,7 +237,7 @@ class Lead(TenantModel):
         on_delete=models.SET_NULL,
         related_name='leads'
     )
-    first_name = models.CharField(max_length=128)
+    first_name = models.CharField(max_length=128, blank=True, default='')
     last_name = models.CharField(max_length=128, blank=True)
     raw_phone = models.CharField(max_length=32)
     normalized_phone = models.CharField(max_length=32, db_index=True)
@@ -267,7 +272,8 @@ class Lead(TenantModel):
 
     @property
     def full_name(self):
-        return f"{self.first_name} {self.last_name}".strip() or "Unnamed Lead"
+        name = f"{self.first_name} {self.last_name}".strip()
+        return name if name else (self.raw_phone or "Unnamed Lead")
 
 class LeadAssignmentHistory(TenantModel):
     METHOD_CHOICES = [

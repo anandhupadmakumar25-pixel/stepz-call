@@ -25,6 +25,9 @@ class LeadProvider extends ChangeNotifier {
   List<LeadCategoryModel> get categories => _categories;
   List<CallingTaskModel> get tasks => _tasks;
   CallingTaskModel? get selectedTask => _selectedTask;
+  CallingTaskModel? get activeTaskDetail => _selectedTask;
+  bool get isLoadingTaskDetail => _isLoading;
+  int get totalCount => _leads.length;
   List<LeadModel> get taskLeads => _taskLeads;
   ImportBatchModel? get activeImportBatch => _activeImportBatch;
   bool get isImporting => _isImporting;
@@ -39,16 +42,63 @@ class LeadProvider extends ChangeNotifier {
     } catch (_) {}
   }
 
-  Future<bool> createBranch({required String name, String code = '', String address = ''}) async {
+  Future<bool> createBranch({
+    required String name,
+    String code = '',
+    String address = '',
+    double? latitude,
+    double? longitude,
+    int radiusMeters = 100,
+    bool geofenceEnabled = true,
+  }) async {
     try {
       final res = await ApiClient.post('/leads/branches/', {
         'name': name.trim(),
         'code': code.trim(),
         'address': address.trim(),
+        'latitude': latitude,
+        'longitude': longitude,
+        'radius_meters': radiusMeters,
+        'geofence_enabled': geofenceEnabled,
       });
       final b = BranchModel.fromJson(res);
       _branches.add(b);
       notifyListeners();
+      return true;
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> updateBranch({
+    required String branchId,
+    String? name,
+    String? code,
+    String? address,
+    double? latitude,
+    double? longitude,
+    int? radiusMeters,
+    bool? geofenceEnabled,
+  }) async {
+    try {
+      final payload = <String, dynamic>{};
+      if (name != null) payload['name'] = name.trim();
+      if (code != null) payload['code'] = code.trim();
+      if (address != null) payload['address'] = address.trim();
+      if (latitude != null) payload['latitude'] = latitude;
+      if (longitude != null) payload['longitude'] = longitude;
+      if (radiusMeters != null) payload['radius_meters'] = radiusMeters;
+      if (geofenceEnabled != null) payload['geofence_enabled'] = geofenceEnabled;
+
+      final res = await ApiClient.patch('/leads/branches/$branchId/', payload);
+      final updated = BranchModel.fromJson(res);
+      final idx = _branches.indexWhere((b) => b.id == branchId);
+      if (idx != -1) {
+        _branches[idx] = updated;
+        notifyListeners();
+      }
       return true;
     } catch (e) {
       _errorMessage = e.toString();
@@ -78,11 +128,12 @@ class LeadProvider extends ChangeNotifier {
     } catch (_) {}
   }
 
-  Future<bool> createCategory({required String name, String colorCode = '#6366F1', String description = ''}) async {
+  Future<bool> createCategory({required String name, String? colorCode, String? color, String description = ''}) async {
     try {
+      final code = colorCode ?? color ?? '#6366F1';
       final res = await ApiClient.post('/leads/categories/', {
         'name': name.trim(),
-        'color_code': colorCode.trim(),
+        'color_code': code.trim(),
         'description': description.trim(),
       });
       final c = LeadCategoryModel.fromJson(res);
@@ -316,13 +367,36 @@ class LeadProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> createTask(Map<String, dynamic> data) async {
+  Future<bool> createTask({
+    String? title,
+    String description = '',
+    String priority = 'MEDIUM',
+    String? branchId,
+    String? categoryId,
+    String? assignedToId,
+    String? dueDate,
+    List<String> leadIds = const [],
+    Map<String, dynamic>? data,
+  }) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
 
     try {
-      final res = await ApiClient.post('/leads/tasks/', data);
+      final payload = data ?? {
+        if (title != null) 'title': title,
+        'description': description,
+        'priority': priority,
+        if (branchId != null) 'branch_id': branchId,
+        if (branchId != null) 'branch': branchId,
+        if (categoryId != null) 'category_id': categoryId,
+        if (categoryId != null) 'category': categoryId,
+        if (assignedToId != null) 'assigned_to_id': assignedToId,
+        if (assignedToId != null) 'assigned_to': assignedToId,
+        if (dueDate != null) 'due_date': dueDate,
+        'lead_ids': leadIds,
+      };
+      final res = await ApiClient.post('/leads/tasks/', payload);
       final task = CallingTaskModel.fromJson(res);
       _tasks.insert(0, task);
       _isLoading = false;
@@ -395,6 +469,41 @@ class LeadProvider extends ChangeNotifier {
     }
   }
 
+  Future<LeadModel?> updateLead(String leadId, Map<String, dynamic> data) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final res = await ApiClient.patch('/leads/$leadId/', data);
+      final updated = LeadModel.fromJson(res);
+      final taskIdx = _taskLeads.indexWhere((l) => l.id == leadId);
+      if (taskIdx != -1) {
+        _taskLeads[taskIdx] = updated;
+      }
+      final leadIdx = _leads.indexWhere((l) => l.id == leadId);
+      if (leadIdx != -1) {
+        _leads[leadIdx] = updated;
+      }
+      if (_selectedLead?.id == leadId) {
+        _selectedLead = updated;
+      }
+      _isLoading = false;
+      notifyListeners();
+      return updated;
+    } on ApiException catch (e) {
+      _errorMessage = e.message;
+      _isLoading = false;
+      notifyListeners();
+      return null;
+    } catch (e) {
+      _errorMessage = e.toString();
+      _isLoading = false;
+      notifyListeners();
+      return null;
+    }
+  }
+
   Future<bool> updateLeadStatus(String leadId, String status) async {
     try {
       final res = await ApiClient.patch('/leads/$leadId/', {'status': status});
@@ -432,6 +541,17 @@ class LeadProvider extends ChangeNotifier {
       }
       notifyListeners();
       return true;
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> rescheduleLeadCallback(String leadId, String scheduledAtIso, String note) async {
+    try {
+      final dt = DateTime.tryParse(scheduledAtIso) ?? DateTime.now().add(const Duration(days: 1));
+      return await scheduleLeadCallback(leadId, dt, note);
     } catch (e) {
       _errorMessage = e.toString();
       notifyListeners();

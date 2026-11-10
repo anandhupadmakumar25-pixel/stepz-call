@@ -16,7 +16,11 @@ class BranchSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Branch
-        fields = ['id', 'name', 'code', 'address', 'is_active', 'lead_count', 'employee_count', 'created_at']
+        fields = [
+            'id', 'name', 'code', 'address', 'latitude', 'longitude',
+            'radius_meters', 'geofence_enabled', 'is_active',
+            'lead_count', 'employee_count', 'created_at'
+        ]
         read_only_fields = ['id', 'created_at', 'lead_count', 'employee_count']
 
     def get_lead_count(self, obj):
@@ -76,6 +80,8 @@ class CallingTaskSerializer(serializers.ModelSerializer):
         return round((done / total) * 100, 1)
 
 class LeadSerializer(serializers.ModelSerializer):
+    first_name = serializers.CharField(required=False, allow_blank=True, default='')
+    raw_phone = serializers.CharField(required=True)
     assigned_to_name = serializers.CharField(source='assigned_to.full_name', read_only=True)
     branch_name = serializers.CharField(source='branch.name', read_only=True)
     category_name = serializers.CharField(source='category.name', read_only=True)

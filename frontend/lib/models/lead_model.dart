@@ -3,6 +3,10 @@ class BranchModel {
   final String name;
   final String code;
   final String address;
+  final double? latitude;
+  final double? longitude;
+  final int radiusMeters;
+  final bool geofenceEnabled;
   final bool isActive;
   final int leadCount;
   final int employeeCount;
@@ -12,17 +16,31 @@ class BranchModel {
     required this.name,
     this.code = '',
     this.address = '',
+    this.latitude,
+    this.longitude,
+    this.radiusMeters = 100,
+    this.geofenceEnabled = true,
     this.isActive = true,
     this.leadCount = 0,
     this.employeeCount = 0,
   });
 
   factory BranchModel.fromJson(Map<String, dynamic> json) {
+    double? parseCoord(dynamic val) {
+      if (val == null) return null;
+      if (val is num) return val.toDouble();
+      return double.tryParse(val.toString());
+    }
+
     return BranchModel(
       id: json['id']?.toString() ?? '',
       name: json['name'] ?? '',
       code: json['code'] ?? '',
       address: json['address'] ?? '',
+      latitude: parseCoord(json['latitude']),
+      longitude: parseCoord(json['longitude']),
+      radiusMeters: json['radius_meters'] is int ? json['radius_meters'] : (int.tryParse(json['radius_meters']?.toString() ?? '100') ?? 100),
+      geofenceEnabled: json['geofence_enabled'] ?? true,
       isActive: json['is_active'] ?? true,
       leadCount: json['lead_count'] ?? 0,
       employeeCount: json['employee_count'] ?? 0,
@@ -37,6 +55,8 @@ class LeadCategoryModel {
   final String description;
   final bool isActive;
   final int leadCount;
+
+  String get color => colorCode;
 
   LeadCategoryModel({
     required this.id,
@@ -157,6 +177,9 @@ class LeadModel {
   final int callAttemptsCount;
   final int callbacksCount;
   final String createdAt;
+
+  String get phoneNumber => normalizedPhone.isNotEmpty ? normalizedPhone : rawPhone;
+  String get phone => phoneNumber;
 
   LeadModel({
     required this.id,

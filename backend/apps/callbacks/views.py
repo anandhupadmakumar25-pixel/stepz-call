@@ -86,6 +86,8 @@ class CallbackDetailView(views.APIView):
             return Response({"error": "Callback not found"}, status=status.HTTP_404_NOT_FOUND)
         if not request.user.is_super_admin and cb.company_id != request.user.company_id:
             return Response({"error": "Unauthorized"}, status=status.HTTP_403_FORBIDDEN)
+        if request.user.role == 'EMPLOYEE' and cb.assigned_employee_id != request.user.id:
+            return Response({"error": "Unauthorized"}, status=status.HTTP_403_FORBIDDEN)
         return Response(CallbackSerializer(cb).data)
 
 class CallbackRescheduleView(views.APIView):

@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: stepz-call-api
+    runtime: python
+    rootDir: backend
+    buildCommand: "./build.sh"
+    startCommand: "gunicorn config.wsgi:application --bind 0.0.0.0:$PORT"
+    envVars:
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: "False"
+      - key: ALLOWED_HOSTS
+        value: "*"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: stepz-call-db
+          property: connectionString
+
+databases:
+  - name: stepz-call-db
+    databaseName: stepz_call
+    user: stepz_user
+    plan: free

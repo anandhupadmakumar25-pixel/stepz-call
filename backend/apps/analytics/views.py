@@ -1,6 +1,6 @@
 from datetime import timedelta
 from django.utils import timezone
-from django.db.models import Count, Q, Max
+from django.db.models import Count, Q, Max, Sum
 from rest_framework import views
 from rest_framework.response import Response
 from apps.leads.models import Lead, ImportBatch
@@ -8,6 +8,9 @@ from apps.calls.models import CallAttempt
 from apps.callbacks.models import Callback
 from apps.accounts.models import User
 from apps.core.permissions import IsCompanyAdmin, IsEmployee
+
+from apps.companies.models import Company
+from apps.companies.serializers import CompanySerializer
 
 class AdminDashboardMetricsView(views.APIView):
     permission_classes = [IsCompanyAdmin]
@@ -37,6 +40,13 @@ class AdminDashboardMetricsView(views.APIView):
         scheduled_callbacks = cb_qs.filter(status__in=['SCHEDULED', 'RESCHEDULED']).count()
         completed_callbacks = cb_qs.filter(status='COMPLETED').count()
         overdue_callbacks = cb_qs.filter(status='OVERDUE').count()
+
+        # Platform-level Company metrics
+        total_companies = Company.objects.count()
+        active_companies = Company.objects.filter(status='ACTIVE').count()
+        suspended_companies = Company.objects.filter(status='SUSPENDED').count()
+        total_employees = User.objects.filter(role__in=['EMPLOYEE', 'MANAGER', 'COMPANY_ADMIN']).count()
+        recent_companies = CompanySerializer(Company.objects.all().order_by('-created_at')[:5], many=True).data
 
         # 2. Call Outcomes Distribution
         outcome_counts = list(
@@ -102,11 +112,17 @@ class AdminDashboardMetricsView(views.APIView):
                 'scheduled_callbacks': scheduled_callbacks,
                 'completed_callbacks': completed_callbacks,
                 'overdue_callbacks': overdue_callbacks,
+                'total_companies': total_companies,
+                'active_companies': active_companies,
+                'suspended_companies': suspended_companies,
+                'total_employees': total_employees,
             },
             'outcomes': outcome_counts,
             'lead_statuses': status_counts,
             'activity_timeline': activity_timeline,
             'employee_performance': employee_performance,
+            'recent_companies': recent_companies,
+            'onboarding_rate': 75,
         })
 
 class TelecallerDashboardMetricsView(views.APIView):
@@ -163,9 +179,30 @@ class TelecallerDashboardMetricsView(views.APIView):
         recent_calls = CallAttempt.objects.filter(
             company=company,
             employee=user
-        ).order_by('-created_at')[:5]
+        ).order_by('-created_at')[:8]
+
+        interested_count = CallAttempt.objects.filter(
+            company=company,
+            employee=user,
+            created_at__date=today,
+            outcome='INTERESTED'
+        ).count()
+
+        total_duration = CallAttempt.objects.filter(
+            company=company,
+            employee=user,
+            created_at__date=today
+        ).aggregate(tot=Sum('duration_seconds'))['tot'] or 0
+        talk_time_minutes = round(total_duration / 60, 1)
+
+        due_callbacks = Callback.objects.filter(
+            company=company,
+            assigned_employee=user,
+            status__in=['SCHEDULED', 'DUE', 'RESCHEDULED', 'OVERDUE']
+        ).select_related('lead', 'assigned_employee').order_by('scheduled_at')[:5]
 
         from apps.calls.serializers import CallAttemptSerializer
+        from apps.callbacks.serializers import CallbackSerializer
 
         return Response({
             'kpis': {
@@ -176,6 +213,9 @@ class TelecallerDashboardMetricsView(views.APIView):
                 'callbacks_due_today': callbacks_due_today,
                 'callbacks_upcoming': callbacks_upcoming,
                 'callbacks_overdue': callbacks_overdue,
+                'interested_count': interested_count,
+                'talk_time_minutes': talk_time_minutes,
             },
-            'recent_calls': CallAttemptSerializer(recent_calls, many=True).data
+            'recent_calls': CallAttemptSerializer(recent_calls, many=True).data,
+            'due_callbacks': CallbackSerializer(due_callbacks, many=True).data,
         })

@@ -14,7 +14,6 @@ class StatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Color bg;
     Color fg;
 
     switch (status.toUpperCase()) {
@@ -22,30 +21,26 @@ class StatusBadge extends StatelessWidget {
       case 'QUALIFIED':
       case 'INTERESTED':
       case 'COMPLETED':
-        bg = AppColors.successLight;
-        fg = AppColors.success;
+      case 'ACTIVE':
+        fg = AppColors.neonTeal;
         break;
       case 'DUE':
       case 'CALLBACK_REQUESTED':
       case 'IN_PROGRESS':
-        bg = AppColors.warningLight;
-        fg = AppColors.warning;
+        fg = AppColors.neonSunset;
         break;
       case 'OVERDUE':
       case 'BLOCKED':
       case 'NOT_INTERESTED':
-        bg = AppColors.dangerLight;
-        fg = AppColors.danger;
+        fg = AppColors.neonCoral;
         break;
       case 'SCHEDULED':
       case 'RESCHEDULED':
-        bg = AppColors.accentVioletLight;
-        fg = AppColors.accentViolet;
+        fg = AppColors.neonViolet;
         break;
       case 'UNASSIGNED':
       default:
-        bg = AppColors.surfaceSecondary;
-        fg = AppColors.textSecondary;
+        fg = const Color(0xFF94A3B8);
         break;
     }
 
@@ -54,9 +49,16 @@ class StatusBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: bg,
+        color: fg.withValues(alpha: 0.16),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: fg.withValues(alpha: 0.25), width: 1),
+        border: Border.all(color: fg.withValues(alpha: 0.35), width: 0.9),
+        boxShadow: [
+          BoxShadow(
+            color: fg.withValues(alpha: 0.15),
+            blurRadius: 6,
+            offset: const Offset(0, 1),
+          ),
+        ],
       ),
       child: Text(
         label,
