@@ -33,6 +33,22 @@ class Command(BaseCommand):
         super_admin.save()
         self.stdout.write(f"Super Admin: {super_admin.email} (Password: SuperAdmin123!)")
 
+        # Super Admin Alias (matches platform demo button)
+        super_admin_alt, _ = User.objects.get_or_create(
+            email='superadmin@platform.com',
+            defaults={
+                'first_name': 'Platform',
+                'last_name': 'Admin',
+                'role': 'SUPER_ADMIN',
+                'is_staff': True,
+                'is_superuser': True,
+                'is_active': True,
+            }
+        )
+        super_admin_alt.set_password('superadmin123')
+        super_admin_alt.save()
+        self.stdout.write(f"Super Admin Alt: {super_admin_alt.email} (Password: superadmin123)")
+
         # 2. Company 1: Apex Global Solutions
         apex, _ = Company.objects.get_or_create(
             name='Apex Global Solutions',
@@ -58,6 +74,21 @@ class Command(BaseCommand):
         )
         apex_admin.set_password('Admin123!')
         apex_admin.save()
+
+        # Company Admin Alias (matches quick demo chip)
+        company_admin_alt, _ = User.objects.get_or_create(
+            email='admin@company.com',
+            defaults={
+                'first_name': 'Apex',
+                'last_name': 'Admin',
+                'role': 'COMPANY_ADMIN',
+                'company': apex,
+                'is_active': True,
+            }
+        )
+        company_admin_alt.set_password('admin123')
+        company_admin_alt.save()
+        self.stdout.write(f"Company Admin Alt: {company_admin_alt.email} (Password: admin123)")
 
         # Sales Team
         team, _ = Team.objects.get_or_create(
@@ -100,6 +131,30 @@ class Command(BaseCommand):
                 'team': team,
                 'manager': manager,
                 'employee_code': 'APX-TC-01',
+                'daily_call_target': 60,
+                'status': 'ACTIVE',
+            }
+        )
+
+        # Telecaller Alias (matches quick demo chip)
+        caller_alt, _ = User.objects.get_or_create(
+            email='telecaller@company.com',
+            defaults={
+                'first_name': 'Demo',
+                'last_name': 'Telecaller',
+                'role': 'EMPLOYEE',
+                'company': apex,
+                'is_active': True,
+            }
+        )
+        caller_alt.set_password('telecaller123')
+        caller_alt.save()
+        EmployeeProfile.objects.update_or_create(
+            user=caller_alt,
+            defaults={
+                'team': team,
+                'manager': manager,
+                'employee_code': 'APX-TC-DEMO',
                 'daily_call_target': 60,
                 'status': 'ACTIVE',
             }

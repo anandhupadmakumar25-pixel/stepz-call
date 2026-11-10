@@ -9,6 +9,11 @@ User = get_user_model()
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     def validate(self, attrs):
+        username_field = self.username_field
+        if username_field in attrs and isinstance(attrs[username_field], str):
+            attrs[username_field] = attrs[username_field].strip().lower()
+        if 'email' in attrs and isinstance(attrs['email'], str):
+            attrs['email'] = attrs['email'].strip().lower()
         data = super().validate(attrs)
         user = self.user
 
