@@ -37,8 +37,8 @@ class AuthProvider extends ChangeNotifier {
 
     try {
       final res = await ApiClient.post('/accounts/login/', {
-        'email': email.trim(),
-        'password': password,
+        'email': email.trim().toLowerCase(),
+        'password': password.trim(),
       });
 
       final accessToken = res['access'];
@@ -56,7 +56,7 @@ class AuthProvider extends ChangeNotifier {
       notifyListeners();
       return false;
     } catch (e) {
-      _errorMessage = 'Connection error. Please ensure backend is reachable.';
+      _errorMessage = 'Connection error: ${e.toString()}';
       _isLoading = false;
       notifyListeners();
       return false;

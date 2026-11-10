@@ -183,15 +183,25 @@ class ApiClient {
     } else {
       String errorMessage = 'Request failed with status ${response.statusCode}';
       if (body is Map) {
-        if (body.containsKey('error')) {
-          errorMessage = body['error'].toString();
-        } else if (body.containsKey('detail')) {
-          errorMessage = body['detail'].toString();
-        } else if (body.containsKey('message')) {
+        if (body.containsKey('message') && body['message'] != null && body['message'].toString().isNotEmpty) {
           errorMessage = body['message'].toString();
+        } else if (body.containsKey('detail') && body['detail'] != null && body['detail'].toString().isNotEmpty) {
+          errorMessage = body['detail'].toString();
+        } else if (body.containsKey('error') && body['error'] != null && body['error'].toString().isNotEmpty) {
+          errorMessage = body['error'].toString();
+        } else if (body.containsKey('errors')) {
+          final errs = body['errors'];
+          if (errs is Map) {
+            errorMessage = errs.values.map((v) => v is List ? v.join(', ') : v.toString()).join('; ');
+          } else {
+            errorMessage = errs.toString();
+          }
         } else {
           errorMessage = body.values.join(', ');
         }
+      }
+      if (response.statusCode == 401 && (errorMessage.contains('401') || errorMessage.contains('credentials'))) {
+        errorMessage = 'Invalid email or password. Please verify your credentials.';
       }
       throw ApiException(errorMessage, response.statusCode);
     }
