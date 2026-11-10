@@ -50,3 +50,4 @@ echo "=========================================="
 echo "  Stepz Call Backend Service is LIVE!"
 echo "=========================================="
 sudo systemctl status stepz-call --no-pager
+

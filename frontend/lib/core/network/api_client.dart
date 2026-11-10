@@ -76,7 +76,10 @@ class ApiClient {
   // Headers
   static Future<Map<String, String>> _headers({bool isJson = true}) async {
     final token = await getToken();
-    final headers = <String, String>{};
+    final headers = <String, String>{
+      'bypass-tunnel-reminder': 'true',
+      'ngrok-skip-browser-warning': 'true',
+    };
     if (isJson) {
       headers['Content-Type'] = 'application/json';
       headers['Accept'] = 'application/json';

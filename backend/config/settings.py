@@ -172,11 +172,17 @@ SPECTACULAR_SETTINGS = {
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
 
+from corsheaders.defaults import default_headers
+CORS_ALLOW_HEADERS = list(default_headers) + [
+    'bypass-tunnel-reminder',
+    'ngrok-skip-browser-warning',
+]
+
 CSRF_TRUSTED_ORIGINS = [
     o.strip()
     for o in os.environ.get(
         'CSRF_TRUSTED_ORIGINS',
-        'https://*.onrender.com,https://*.web.app,https://*.firebaseapp.com,http://localhost:8000,http://127.0.0.1:8000'
+        'https://*.onrender.com,https://*.web.app,https://*.firebaseapp.com,https://*.up.railway.app,https://*.loca.lt,https://*.ngrok-free.app,https://*.ngrok.io,http://localhost:8000,http://127.0.0.1:8000'
     ).split(',')
     if o.strip()
 ]

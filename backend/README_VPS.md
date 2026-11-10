@@ -52,3 +52,4 @@ Your API is now live on `http://YOUR_VPS_IP:8000/api/v1/`!
 - **Restart service**: `sudo systemctl restart stepz-call`
 - **View live logs**: `sudo journalctl -u stepz-call -f`
 - **Stop service**: `sudo systemctl stop stepz-call`
+

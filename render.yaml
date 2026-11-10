@@ -22,3 +22,4 @@ databases:
     databaseName: stepz_call
     user: stepz_user
     plan: free
+
