@@ -188,13 +188,19 @@ class BillingProvider extends ChangeNotifier {
     }
   }
 
-  Future<InvoiceModel?> convertQuotationToInvoice(String quotationId) async {
+  Future<InvoiceModel?> convertQuotationToInvoice(
+    String quotationId, {
+    Map<String, dynamic>? overrideData,
+  }) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
 
     try {
-      final res = await ApiClient.post('/billing/quotations/$quotationId/convert-to-invoice/', {});
+      final res = await ApiClient.post(
+        '/billing/quotations/$quotationId/convert-to-invoice/',
+        overrideData ?? {},
+      );
       final invoice = InvoiceModel.fromJson(res);
       _invoices.insert(0, invoice);
       final qIdx = _quotations.indexWhere((q) => q.id == quotationId);
@@ -209,6 +215,7 @@ class BillingProvider extends ChangeNotifier {
       // Background sync overview & invoices
       fetchBillingOverview();
       fetchInvoices();
+      fetchQuotations();
       return invoice;
     } on ApiException catch (e) {
       _errorMessage = e.message;

@@ -12,10 +12,12 @@ import '../../providers/billing_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../quotations/quotation_form_dialog.dart';
 import '../quotations/quotation_detail_dialog.dart';
+import '../quotations/convert_quotation_dialog.dart';
 import 'record_payment_dialog.dart';
 
 class InvoiceListScreen extends StatefulWidget {
-  const InvoiceListScreen({super.key});
+  final int initialTab;
+  const InvoiceListScreen({super.key, this.initialTab = 0});
 
   @override
   State<InvoiceListScreen> createState() => _InvoiceListScreenState();
@@ -23,7 +25,7 @@ class InvoiceListScreen extends StatefulWidget {
 
 class _InvoiceListScreenState extends State<InvoiceListScreen> {
   // 0 = Bills & Invoices (Fixed Price), 1 = Quotations & Estimates (Approximate)
-  int _selectedViewTab = 0;
+  late int _selectedViewTab;
   String _selectedInvoiceStatus = 'ALL';
   String _selectedQuoteStatus = 'ALL';
   final TextEditingController _searchController = TextEditingController();
@@ -31,9 +33,20 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
   @override
   void initState() {
     super.initState();
+    _selectedViewTab = widget.initialTab;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadData();
     });
+  }
+
+  @override
+  void didUpdateWidget(covariant InvoiceListScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialTab != widget.initialTab) {
+      setState(() {
+        _selectedViewTab = widget.initialTab;
+      });
+    }
   }
 
   Future<void> _loadData() async {
@@ -52,64 +65,31 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
   }
 
   Future<void> _handleConvertQuotation(QuotationModel quote) async {
-    final confirm = await showDialog<bool>(
+    final invoice = await showDialog<InvoiceModel>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Row(
-          children: [
-            const Icon(Icons.receipt_long_rounded, color: Color(0xFF059669)),
-            const SizedBox(width: 8),
-            Text('Convert to Fixed Price Bill', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 16)),
-          ],
-        ),
-        content: Text(
-          'This will convert Quotation ${quote.quotationNumber} (Approximate ₹${quote.grandTotal.toStringAsFixed(2)}) into an official Tax Invoice with FIXED PRICING. Proceed?',
-          style: GoogleFonts.inter(fontSize: 13),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF059669)),
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Yes, Generate Fixed Bill', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
+      builder: (_) => ConvertQuotationDialog(quotation: quote),
     );
 
-    if (confirm != true || !mounted) return;
-
-    final provider = context.read<BillingProvider>();
-    final invoice = await provider.convertQuotationToInvoice(quote.id);
-
-    if (mounted) {
-      if (invoice != null) {
-        // Switch to Invoices view tab to show the new bill immediately!
-        setState(() => _selectedViewTab = 0);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Fixed Price Invoice ${invoice.invoiceNumber} generated successfully!'),
-            backgroundColor: const Color(0xFF10B981),
-            action: SnackBarAction(
-              label: 'Record Payment',
-              textColor: Colors.white,
-              onPressed: () {
-                showDialog(
-                  context: context,
-                  builder: (_) => RecordPaymentDialog(invoice: invoice),
-                ).then((_) => _loadData());
-              },
-            ),
+    if (invoice != null && mounted) {
+      // Switch to Invoices view tab to show the new bill immediately!
+      setState(() => _selectedViewTab = 0);
+      _loadData();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Fixed Price Invoice ${invoice.invoiceNumber} generated successfully!'),
+          backgroundColor: const Color(0xFF10B981),
+          action: SnackBarAction(
+            label: 'Record Payment',
+            textColor: Colors.white,
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (_) => RecordPaymentDialog(invoice: invoice),
+              ).then((_) => _loadData());
+            },
           ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(provider.errorMessage ?? 'Failed to convert quotation to invoice'),
-            backgroundColor: const Color(0xFFEF4444),
-          ),
-        );
-      }
+        ),
+      );
     }
   }
 
@@ -980,7 +960,25 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                       ).then((_) => _loadData());
                     },
                   ),
-                  if (!isConverted)
+                  if (!isConverted) ...[
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        side: const BorderSide(color: Color(0xFF3B82F6)),
+                      ),
+                      icon: const Icon(Icons.edit_outlined, size: 15, color: Color(0xFF2563EB)),
+                      label: Text('Edit Quote', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF2563EB))),
+                      onPressed: () async {
+                        final res = await showDialog(
+                          context: context,
+                          builder: (_) => QuotationFormDialog(quotationToEdit: quote),
+                        );
+                        if (res != null) {
+                          _loadData();
+                        }
+                      },
+                    ),
                     ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF059669),
@@ -993,6 +991,7 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                       label: Text('Convert to Fixed Bill', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700)),
                       onPressed: () => _handleConvertQuotation(quote),
                     ),
+                  ],
                 ],
               ),
             ],

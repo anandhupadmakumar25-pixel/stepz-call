@@ -25,6 +25,7 @@ class AppRoutes {
   static const String companies = '/companies';
   static const String companyDetail = '/companies/detail';
   static const String plans = '/plans';
+  static const String quotations = '/quotations';
   static const String billing = '/billing';
 
   static Route<dynamic> onGenerateRoute(RouteSettings settings) {
@@ -130,6 +131,12 @@ class AppRoutes {
         return MaterialPageRoute(
           settings: settings,
           builder: (_) => const MainLayout(initialRouteKey: 'plans'),
+        );
+
+      case quotations:
+        return MaterialPageRoute(
+          settings: settings,
+          builder: (_) => const MainLayout(initialRouteKey: 'quotations'),
         );
 
       case billing:

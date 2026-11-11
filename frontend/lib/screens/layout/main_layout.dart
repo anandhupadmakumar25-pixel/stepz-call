@@ -269,13 +269,26 @@ class _MainLayoutState extends State<MainLayout> {
       navItems.add(
         _NavItem(
           section: 'SALES & BILLING',
-          title: isTelecaller ? 'My Invoices & Quotes' : 'Billing & Invoices',
+          title: 'Quotations & Estimates',
+          icon: Icons.request_quote_outlined,
+          activeIcon: Icons.request_quote_rounded,
+          badge: 'Estimate',
+          badgeColor: const Color(0xFFD97706),
+          routeKey: 'quotations',
+          screen: const InvoiceListScreen(initialTab: 1),
+        ),
+      );
+
+      navItems.add(
+        _NavItem(
+          section: 'SALES & BILLING',
+          title: isTelecaller ? 'Bills & Invoices' : 'Bills & Tax Invoices',
           icon: Icons.receipt_long_outlined,
           activeIcon: Icons.receipt_long_rounded,
-          badge: 'GST',
+          badge: 'Fixed',
           badgeColor: const Color(0xFF10B981),
           routeKey: 'billing',
-          screen: const InvoiceListScreen(),
+          screen: const InvoiceListScreen(initialTab: 0),
         ),
       );
 

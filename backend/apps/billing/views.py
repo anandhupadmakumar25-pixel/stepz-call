@@ -240,6 +240,14 @@ class QuotationConvertToInvoiceView(views.APIView):
         if user.role == 'EMPLOYEE' and quote.created_by_id != user.id and (not quote.lead or quote.lead.assigned_to_id != user.id):
             return Response({"error": "Unauthorized. You can only convert your own quotations."}, status=status.HTTP_403_FORBIDDEN)
 
+        items = request.data.get('items', quote.items)
+        subtotal = request.data.get('subtotal', quote.subtotal)
+        tax_amount = request.data.get('tax_amount', quote.tax_amount)
+        discount_amount = request.data.get('discount_amount', quote.discount_amount)
+        grand_total = request.data.get('grand_total', quote.grand_total)
+        due_date = request.data.get('due_date') or (datetime.date.today() + datetime.timedelta(days=15))
+        notes = request.data.get('notes', quote.notes)
+
         invoice_num = generate_invoice_number(company)
         invoice = Invoice.objects.create(
             company=company,
@@ -251,14 +259,14 @@ class QuotationConvertToInvoiceView(views.APIView):
             customer_email=quote.customer_email,
             customer_address=quote.customer_address,
             created_by=request.user,
-            due_date=datetime.date.today() + datetime.timedelta(days=15),
-            items=quote.items,
-            subtotal=quote.subtotal,
-            tax_amount=quote.tax_amount,
-            discount_amount=quote.discount_amount,
-            grand_total=quote.grand_total,
+            due_date=due_date,
+            items=items,
+            subtotal=subtotal,
+            tax_amount=tax_amount,
+            discount_amount=discount_amount,
+            grand_total=grand_total,
             payment_status='PENDING',
-            notes=quote.notes,
+            notes=notes,
             terms_and_conditions=quote.terms_and_conditions,
         )
         quote.status = 'CONVERTED'

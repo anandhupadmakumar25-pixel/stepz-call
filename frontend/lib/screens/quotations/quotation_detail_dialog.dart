@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:provider/provider.dart';
 import '../../core/widgets/glass/glass_card.dart';
 import '../../core/widgets/glass/gradient_button.dart';
 import '../../core/services/pdf_invoice_service.dart';
 import '../../models/quotation_model.dart';
-import '../../providers/billing_provider.dart';
+import '../../models/invoice_model.dart';
 import '../billing/record_payment_dialog.dart';
+import 'convert_quotation_dialog.dart';
+import 'quotation_form_dialog.dart';
 
 class QuotationDetailDialog extends StatefulWidget {
   final QuotationModel quotation;
@@ -19,7 +20,6 @@ class QuotationDetailDialog extends StatefulWidget {
 
 class _QuotationDetailDialogState extends State<QuotationDetailDialog> {
   late QuotationModel _quotation;
-  bool _isConverting = false;
 
   @override
   void initState() {
@@ -28,66 +28,30 @@ class _QuotationDetailDialogState extends State<QuotationDetailDialog> {
   }
 
   Future<void> _handleConvertToInvoice() async {
-    final confirm = await showDialog<bool>(
+    final invoice = await showDialog<InvoiceModel>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Row(
-          children: [
-            const Icon(Icons.receipt_long_rounded, color: Color(0xFF059669)),
-            const SizedBox(width: 8),
-            Text('Convert to Fixed Price Bill', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 16)),
-          ],
-        ),
-        content: Text(
-          'This will convert Quotation ${_quotation.quotationNumber} (Approximate ₹${_quotation.grandTotal.toStringAsFixed(2)}) into an official Tax Invoice with FIXED PRICING. Proceed?',
-          style: GoogleFonts.inter(fontSize: 13),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF059669)),
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Yes, Generate Fixed Bill', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
+      builder: (_) => ConvertQuotationDialog(quotation: _quotation),
     );
 
-    if (confirm != true || !mounted) return;
+    if (!mounted || invoice == null) return;
 
-    setState(() => _isConverting = true);
-    final provider = context.read<BillingProvider>();
-    final invoice = await provider.convertQuotationToInvoice(_quotation.id);
-    setState(() => _isConverting = false);
-
-    if (mounted) {
-      if (invoice != null) {
-        Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Fixed Price Invoice ${invoice.invoiceNumber} generated successfully!'),
-            backgroundColor: const Color(0xFF10B981),
-            action: SnackBarAction(
-              label: 'Record Payment',
-              textColor: Colors.white,
-              onPressed: () {
-                showDialog(
-                  context: context,
-                  builder: (_) => RecordPaymentDialog(invoice: invoice),
-                );
-              },
-            ),
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(provider.errorMessage ?? 'Failed to convert quotation to invoice'),
-            backgroundColor: const Color(0xFFEF4444),
-          ),
-        );
-      }
-    }
+    Navigator.of(context).pop(invoice);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Fixed Price Invoice ${invoice.invoiceNumber} generated successfully at agreed price ₹${invoice.grandTotal.toStringAsFixed(2)}!'),
+        backgroundColor: const Color(0xFF10B981),
+        action: SnackBarAction(
+          label: 'Record Payment',
+          textColor: Colors.white,
+          onPressed: () {
+            showDialog(
+              context: context,
+              builder: (_) => RecordPaymentDialog(invoice: invoice),
+            );
+          },
+        ),
+      ),
+    );
   }
 
   @override
@@ -345,13 +309,29 @@ class _QuotationDetailDialogState extends State<QuotationDetailDialog> {
                         icon: Icons.print_outlined,
                         onPressed: () => PdfInvoiceService.printQuotation(q),
                       ),
-                      if (q.status != 'CONVERTED')
+                      if (q.status != 'CONVERTED') ...[
+                        GlassSecondaryButton(
+                          text: 'Edit Quote',
+                          icon: Icons.edit_outlined,
+                          onPressed: () async {
+                            final updated = await showDialog<QuotationModel>(
+                              context: context,
+                              builder: (_) => QuotationFormDialog(quotationToEdit: _quotation),
+                            );
+                            if (updated != null && mounted) {
+                              setState(() {
+                                _quotation = updated;
+                              });
+                            }
+                          },
+                        ),
                         GradientPrimaryButton(
-                          text: _isConverting ? 'Converting...' : 'Convert to Fixed Price Bill',
+                          text: 'Convert to Fixed Price Bill',
                           icon: Icons.receipt_long_rounded,
                           gradient: const LinearGradient(colors: [Color(0xFF059669), Color(0xFF10B981)]),
-                          onPressed: _isConverting ? null : _handleConvertToInvoice,
+                          onPressed: _handleConvertToInvoice,
                         ),
+                      ],
                     ],
                   ),
                 ],

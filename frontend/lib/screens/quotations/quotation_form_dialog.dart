@@ -15,8 +15,14 @@ import '../../providers/lead_provider.dart';
 class QuotationFormDialog extends StatefulWidget {
   final LeadModel? lead;
   final bool isBill;
+  final QuotationModel? quotationToEdit;
 
-  const QuotationFormDialog({super.key, this.lead, this.isBill = false});
+  const QuotationFormDialog({
+    super.key,
+    this.lead,
+    this.isBill = false,
+    this.quotationToEdit,
+  });
 
   @override
   State<QuotationFormDialog> createState() => _QuotationFormDialogState();
@@ -80,26 +86,44 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
   void initState() {
     super.initState();
     _createAsInvoice = widget.isBill;
+    final editQ = widget.quotationToEdit;
     final lead = widget.lead;
     _selectedLead = lead;
-    _nameController = TextEditingController(text: lead?.fullName ?? '');
-    _phoneController = TextEditingController(text: lead?.phoneNumber ?? '');
-    _emailController = TextEditingController(text: lead?.email ?? '');
+    _nameController = TextEditingController(text: editQ?.customerName ?? lead?.fullName ?? '');
+    _phoneController = TextEditingController(text: editQ?.customerPhone ?? lead?.phoneNumber ?? '');
+    _emailController = TextEditingController(text: editQ?.customerEmail ?? lead?.email ?? '');
     _addressController = TextEditingController(
-      text: [lead?.city, lead?.state].where((s) => s != null && s.isNotEmpty).join(', '),
+      text: editQ?.customerAddress.isNotEmpty == true
+          ? editQ!.customerAddress
+          : [lead?.city, lead?.state].where((s) => s != null && s.isNotEmpty).join(', '),
     );
     _notesController = TextEditingController(
-      text: lead?.notes.isNotEmpty == true ? 'Regarding: ${lead!.notes}' : '',
+      text: editQ?.notes.isNotEmpty == true
+          ? editQ!.notes
+          : (lead?.notes.isNotEmpty == true ? 'Regarding: ${lead!.notes}' : ''),
     );
     _termsController = TextEditingController(
-      text: _createAsInvoice
-          ? '1. Payment due within 15 days of invoice date.\n2. Applicable GST and duties included.\n3. Goods/Services once rendered are governed by standard service agreements.'
-          : '1. Quotation is an approximate estimate valid for 15 days.\n2. Final billing price is locked upon Tax Invoice generation.\n3. Applicable GST and duties included.',
+      text: editQ?.termsAndConditions.isNotEmpty == true
+          ? editQ!.termsAndConditions
+          : (_createAsInvoice
+              ? '1. Payment due within 15 days of invoice date.\n2. Applicable GST and duties included.\n3. Goods/Services once rendered are governed by standard service agreements.'
+              : '1. Quotation is an approximate estimate valid for 15 days.\n2. Final billing price is locked upon Tax Invoice generation.\n3. Applicable GST and duties included.'),
     );
     _validUntil = DateTime.now().add(const Duration(days: 15));
 
-    // Add first empty item
-    _addItemRow();
+    if (editQ != null && editQ.items.isNotEmpty) {
+      for (final it in editQ.items) {
+        final row = _LineItemEntry();
+        row.descriptionController.text = it.description;
+        row.qtyController.text = it.quantity == it.quantity.roundToDouble() ? it.quantity.toInt().toString() : it.quantity.toString();
+        row.rateController.text = it.unitPrice.toStringAsFixed(2);
+        row.taxController.text = it.taxPercent.toStringAsFixed(0);
+        row.discountController.text = it.discountPercent.toStringAsFixed(0);
+        _items.add(row);
+      }
+    } else {
+      _addItemRow();
+    }
 
     // Fetch saved product catalog and leads
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -205,7 +229,9 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
       'status': 'SENT',
     };
 
-    final result = await provider.createQuotation(payload);
+    final result = widget.quotationToEdit != null
+        ? await provider.updateQuotation(widget.quotationToEdit!.id, payload)
+        : await provider.createQuotation(payload);
     setState(() => _isSaving = false);
     return result;
   }
@@ -296,7 +322,9 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                             Row(
                               children: [
                                 Text(
-                                  _createAsInvoice ? 'New Fixed Price Bill' : 'Generate Quotation',
+                                  widget.quotationToEdit != null
+                                      ? 'Edit Quotation ${widget.quotationToEdit!.quotationNumber}'
+                                      : (_createAsInvoice ? 'New Fixed Price Bill' : 'Generate Quotation'),
                                   style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
                                 ),
                                 const SizedBox(width: 8),
