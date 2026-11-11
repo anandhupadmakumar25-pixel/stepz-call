@@ -13,6 +13,7 @@ class ProductSerializer(serializers.ModelSerializer):
 
 
 class QuotationSerializer(serializers.ModelSerializer):
+    quotation_number = serializers.CharField(required=False, allow_blank=True, default='')
     created_by_name = serializers.CharField(source='created_by.get_full_name', read_only=True, default='')
     lead_name = serializers.CharField(source='lead.full_name', read_only=True, default='')
 
@@ -29,6 +30,7 @@ class QuotationSerializer(serializers.ModelSerializer):
 
 
 class InvoiceSerializer(serializers.ModelSerializer):
+    invoice_number = serializers.CharField(required=False, allow_blank=True, default='')
     created_by_name = serializers.CharField(source='created_by.get_full_name', read_only=True, default='')
     quotation_number = serializers.CharField(source='quotation.quotation_number', read_only=True, default='')
     balance_due = serializers.FloatField(read_only=True)

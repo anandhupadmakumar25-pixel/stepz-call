@@ -72,7 +72,9 @@ class BillingProvider extends ChangeNotifier {
 
     try {
       final params = <String>[];
-      if (leadId != null && leadId.isNotEmpty) params.add('lead=$leadId');
+      if (leadId != null && leadId.isNotEmpty) {
+        params.add('lead_id=$leadId');
+      }
       if (status != null && status.isNotEmpty && status != 'ALL') params.add('status=$status');
 
       final query = params.isNotEmpty ? '?${params.join('&')}' : '';
@@ -204,6 +206,9 @@ class BillingProvider extends ChangeNotifier {
       }
       _isLoading = false;
       notifyListeners();
+      // Background sync overview & invoices
+      fetchBillingOverview();
+      fetchInvoices();
       return invoice;
     } on ApiException catch (e) {
       _errorMessage = e.message;
@@ -225,7 +230,9 @@ class BillingProvider extends ChangeNotifier {
 
     try {
       final params = <String>[];
-      if (leadId != null && leadId.isNotEmpty) params.add('lead=$leadId');
+      if (leadId != null && leadId.isNotEmpty) {
+        params.add('lead_id=$leadId');
+      }
       if (status != null && status.isNotEmpty && status != 'ALL') params.add('status=$status');
 
       final query = params.isNotEmpty ? '?${params.join('&')}' : '';
@@ -254,6 +261,9 @@ class BillingProvider extends ChangeNotifier {
       _invoices.insert(0, newInv);
       _isLoading = false;
       notifyListeners();
+      // Background sync overview & products
+      fetchBillingOverview();
+      fetchProducts();
       return newInv;
     } on ApiException catch (e) {
       _errorMessage = e.message;

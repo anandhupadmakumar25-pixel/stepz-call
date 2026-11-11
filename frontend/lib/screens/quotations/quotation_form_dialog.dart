@@ -7,14 +7,16 @@ import '../../core/widgets/glass/gradient_button.dart';
 import '../../core/services/pdf_invoice_service.dart';
 import '../../models/lead_model.dart';
 import '../../models/quotation_model.dart';
+import '../../models/invoice_model.dart';
 import '../../models/product_model.dart';
 import '../../providers/billing_provider.dart';
 import '../../providers/lead_provider.dart';
 
 class QuotationFormDialog extends StatefulWidget {
   final LeadModel? lead;
+  final bool isBill;
 
-  const QuotationFormDialog({super.key, this.lead});
+  const QuotationFormDialog({super.key, this.lead, this.isBill = false});
 
   @override
   State<QuotationFormDialog> createState() => _QuotationFormDialogState();
@@ -61,6 +63,7 @@ class _LineItemEntry {
 class _QuotationFormDialogState extends State<QuotationFormDialog> {
   final _formKey = GlobalKey<FormState>();
 
+  late bool _createAsInvoice;
   LeadModel? _selectedLead;
   late TextEditingController _nameController;
   late TextEditingController _phoneController;
@@ -76,6 +79,7 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
   @override
   void initState() {
     super.initState();
+    _createAsInvoice = widget.isBill;
     final lead = widget.lead;
     _selectedLead = lead;
     _nameController = TextEditingController(text: lead?.fullName ?? '');
@@ -88,7 +92,9 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
       text: lead?.notes.isNotEmpty == true ? 'Regarding: ${lead!.notes}' : '',
     );
     _termsController = TextEditingController(
-      text: '1. Quotation is an approximate estimate valid for 15 days.\n2. Final billing price is locked upon Tax Invoice generation.\n3. Applicable GST and duties included.',
+      text: _createAsInvoice
+          ? '1. Payment due within 15 days of invoice date.\n2. Applicable GST and duties included.\n3. Goods/Services once rendered are governed by standard service agreements.'
+          : '1. Quotation is an approximate estimate valid for 15 days.\n2. Final billing price is locked upon Tax Invoice generation.\n3. Applicable GST and duties included.',
     );
     _validUntil = DateTime.now().add(const Duration(days: 15));
 
@@ -204,6 +210,44 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
     return result;
   }
 
+  Future<InvoiceModel?> _saveInvoice() async {
+    if (!_formKey.currentState!.validate()) return null;
+
+    if (_items.isEmpty || _items.every((i) => i.descriptionController.text.trim().isEmpty)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please add at least one line item with a description.')),
+      );
+      return null;
+    }
+
+    setState(() => _isSaving = true);
+    final provider = context.read<BillingProvider>();
+
+    final payload = <String, dynamic>{
+      if (_selectedLead != null) 'lead': _selectedLead!.id,
+      'customer_name': _nameController.text.trim(),
+      'customer_phone': _phoneController.text.trim(),
+      'customer_email': _emailController.text.trim(),
+      'customer_address': _addressController.text.trim(),
+      if (_validUntil != null) 'due_date': _validUntil!.toIso8601String().split('T').first,
+      'items': _items
+          .where((i) => i.descriptionController.text.trim().isNotEmpty)
+          .map((i) => i.toModel().toJson())
+          .toList(),
+      'subtotal': _calculatedSubtotal,
+      'discount_amount': _calculatedDiscount,
+      'tax_amount': _calculatedTax,
+      'grand_total': _calculatedGrandTotal,
+      'notes': _notesController.text.trim(),
+      'terms_and_conditions': _termsController.text.trim(),
+      'payment_status': 'PENDING',
+    };
+
+    final result = await provider.createInvoice(payload);
+    setState(() => _isSaving = false);
+    return result;
+  }
+
   @override
   Widget build(BuildContext context) {
     final products = context.watch<BillingProvider>().products;
@@ -234,10 +278,16 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                         Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            gradient: AppColors.primaryGradient,
+                            gradient: _createAsInvoice
+                                ? const LinearGradient(colors: [Color(0xFF2563EB), Color(0xFF1D4ED8)])
+                                : AppColors.primaryGradient,
                             borderRadius: BorderRadius.circular(10),
                           ),
-                          child: const Icon(Icons.request_quote_rounded, color: Colors.white, size: 24),
+                          child: Icon(
+                            _createAsInvoice ? Icons.receipt_long_rounded : Icons.request_quote_rounded,
+                            color: Colors.white,
+                            size: 24,
+                          ),
                         ),
                         const SizedBox(width: 12),
                         Column(
@@ -246,26 +296,32 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                             Row(
                               children: [
                                 Text(
-                                  'Generate Quotation',
+                                  _createAsInvoice ? 'New Fixed Price Bill' : 'Generate Quotation',
                                   style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
                                 ),
                                 const SizedBox(width: 8),
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
+                                    color: (_createAsInvoice ? const Color(0xFF059669) : const Color(0xFFF59E0B)).withValues(alpha: 0.15),
                                     borderRadius: BorderRadius.circular(6),
-                                    border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.4)),
+                                    border: Border.all(color: (_createAsInvoice ? const Color(0xFF059669) : const Color(0xFFF59E0B)).withValues(alpha: 0.4)),
                                   ),
                                   child: Text(
-                                    'APPROXIMATE PRICE',
-                                    style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w800, color: const Color(0xFFB45309)),
+                                    _createAsInvoice ? 'FIXED PRICE BILL' : 'APPROXIMATE PRICE',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w800,
+                                      color: _createAsInvoice ? const Color(0xFF047857) : const Color(0xFFB45309),
+                                    ),
                                   ),
                                 ),
                               ],
                             ),
                             Text(
-                              _selectedLead != null ? 'For Lead: ${_selectedLead!.fullName} (${_selectedLead!.phoneNumber})' : 'Create sales estimate with auto-saving catalog',
+                              _selectedLead != null
+                                  ? 'For Lead: ${_selectedLead!.fullName} (${_selectedLead!.phoneNumber})'
+                                  : (_createAsInvoice ? 'Create official tax invoice with fixed pricing' : 'Create sales estimate with auto-saving catalog'),
                               style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
                             ),
                           ],
@@ -280,22 +336,116 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                 ),
                 const SizedBox(height: 12),
 
+                // Mode Toggle Row: Quotation vs Fixed Price Bill
+                Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: InkWell(
+                          onTap: () {
+                            setState(() {
+                              _createAsInvoice = false;
+                              _termsController.text =
+                                  '1. Quotation is an approximate estimate valid for 15 days.\n2. Final billing price is locked upon Tax Invoice generation.\n3. Applicable GST and duties included.';
+                            });
+                          },
+                          borderRadius: BorderRadius.circular(8),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            decoration: BoxDecoration(
+                              color: !_createAsInvoice ? const Color(0xFF059669) : Colors.transparent,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.request_quote_rounded, size: 16, color: !_createAsInvoice ? Colors.white : const Color(0xFF475569)),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Quotation (Estimate)',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12,
+                                    fontWeight: !_createAsInvoice ? FontWeight.w700 : FontWeight.w500,
+                                    color: !_createAsInvoice ? Colors.white : const Color(0xFF475569),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: InkWell(
+                          onTap: () {
+                            setState(() {
+                              _createAsInvoice = true;
+                              _termsController.text =
+                                  '1. Payment due within 15 days of invoice date.\n2. Applicable GST and duties included.\n3. Goods/Services once sold are governed by standard service terms.';
+                            });
+                          },
+                          borderRadius: BorderRadius.circular(8),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            decoration: BoxDecoration(
+                              color: _createAsInvoice ? const Color(0xFF2563EB) : Colors.transparent,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.receipt_long_rounded, size: 16, color: _createAsInvoice ? Colors.white : const Color(0xFF475569)),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Tax Invoice / Bill (Fixed Price)',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12,
+                                    fontWeight: _createAsInvoice ? FontWeight.w700 : FontWeight.w500,
+                                    color: _createAsInvoice ? Colors.white : const Color(0xFF475569),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 10),
+
                 // Note banner explaining Approximate vs Fixed Price
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFEFF6FF),
+                    color: _createAsInvoice ? const Color(0xFFEFF6FF) : const Color(0xFFECFDF5),
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFFBFDBFE)),
+                    border: Border.all(color: _createAsInvoice ? const Color(0xFFBFDBFE) : const Color(0xFFA7F3D0)),
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.info_outline_rounded, size: 16, color: Color(0xFF2563EB)),
+                      Icon(
+                        _createAsInvoice ? Icons.receipt_long_rounded : Icons.info_outline_rounded,
+                        size: 16,
+                        color: _createAsInvoice ? const Color(0xFF2563EB) : const Color(0xFF059669),
+                      ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'Estimated Quote: Product prices here are approximate. When converted to an Invoice / Bill, prices are locked as Fixed Price.',
-                          style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF1E40AF), fontWeight: FontWeight.w500),
+                          _createAsInvoice
+                              ? 'Official Tax Invoice: Product prices entered here will be saved directly as a Fixed Price Bill in Billing & Invoices.'
+                              : 'Estimated Quote: Product prices here are approximate. When converted to an Invoice / Bill, prices are locked as Fixed Price.',
+                          style: GoogleFonts.inter(
+                            fontSize: 11,
+                            color: _createAsInvoice ? const Color(0xFF1E40AF) : const Color(0xFF065F46),
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ),
                     ],
@@ -869,10 +1019,18 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                           ? null
                           : () async {
                               final nav = Navigator.of(context);
-                              final quote = await _saveQuotation();
-                              if (quote != null) {
-                                nav.pop(quote);
-                                await PdfInvoiceService.shareQuotationToWhatsApp(quote);
+                              if (_createAsInvoice) {
+                                final inv = await _saveInvoice();
+                                if (inv != null) {
+                                  nav.pop(inv);
+                                  await PdfInvoiceService.shareInvoiceToWhatsApp(inv);
+                                }
+                              } else {
+                                final quote = await _saveQuotation();
+                                if (quote != null) {
+                                  nav.pop(quote);
+                                  await PdfInvoiceService.shareQuotationToWhatsApp(quote);
+                                }
                               }
                             },
                     ),
@@ -883,34 +1041,66 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                           ? null
                           : () async {
                               final nav = Navigator.of(context);
-                              final quote = await _saveQuotation();
-                              if (quote != null) {
-                                nav.pop(quote);
-                                await PdfInvoiceService.printQuotation(quote);
+                              if (_createAsInvoice) {
+                                final inv = await _saveInvoice();
+                                if (inv != null) {
+                                  nav.pop(inv);
+                                  await PdfInvoiceService.printInvoice(inv);
+                                }
+                              } else {
+                                final quote = await _saveQuotation();
+                                if (quote != null) {
+                                  nav.pop(quote);
+                                  await PdfInvoiceService.printQuotation(quote);
+                                }
                               }
                             },
                     ),
-                    GradientPrimaryButton(
-                      text: _isSaving ? 'Saving...' : 'Save Quotation',
-                      icon: Icons.check_circle_outline_rounded,
-                      gradient: AppColors.primaryGradient,
-                      onPressed: _isSaving
-                          ? null
-                          : () async {
-                              final nav = Navigator.of(context);
-                              final messenger = ScaffoldMessenger.of(context);
-                              final quote = await _saveQuotation();
-                              if (quote != null) {
-                                nav.pop(quote);
-                                messenger.showSnackBar(
-                                  SnackBar(
-                                    content: Text('Approximate Quotation ${quote.quotationNumber} created & products saved!'),
-                                    backgroundColor: const Color(0xFF10B981),
-                                  ),
-                                );
-                              }
-                            },
-                    ),
+                    if (_createAsInvoice) ...[
+                      GradientPrimaryButton(
+                        text: _isSaving ? 'Creating Bill...' : 'Save Fixed Price Bill',
+                        icon: Icons.check_circle_rounded,
+                        gradient: const LinearGradient(colors: [Color(0xFF2563EB), Color(0xFF1D4ED8)]),
+                        onPressed: _isSaving
+                            ? null
+                            : () async {
+                                final nav = Navigator.of(context);
+                                final messenger = ScaffoldMessenger.of(context);
+                                final inv = await _saveInvoice();
+                                if (inv != null) {
+                                  nav.pop(inv);
+                                  messenger.showSnackBar(
+                                    SnackBar(
+                                      content: Text('Fixed Price Bill ${inv.invoiceNumber} created successfully!'),
+                                      backgroundColor: const Color(0xFF10B981),
+                                    ),
+                                  );
+                                }
+                              },
+                      ),
+                    ] else ...[
+                      GradientPrimaryButton(
+                        text: _isSaving ? 'Saving...' : 'Save Quotation',
+                        icon: Icons.check_circle_outline_rounded,
+                        gradient: AppColors.primaryGradient,
+                        onPressed: _isSaving
+                            ? null
+                            : () async {
+                                final nav = Navigator.of(context);
+                                final messenger = ScaffoldMessenger.of(context);
+                                final quote = await _saveQuotation();
+                                if (quote != null) {
+                                  nav.pop(quote);
+                                  messenger.showSnackBar(
+                                    SnackBar(
+                                      content: Text('Approximate Quotation ${quote.quotationNumber} created & products saved!'),
+                                      backgroundColor: const Color(0xFF10B981),
+                                    ),
+                                  );
+                                }
+                              },
+                      ),
+                    ],
                   ],
                 ),
               ],

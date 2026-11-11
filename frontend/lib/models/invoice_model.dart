@@ -72,8 +72,13 @@ class InvoiceModel {
     List<QuotationItemModel> itemsList = [];
     if (rawItems is List) {
       itemsList = rawItems
-          .whereType<Map<String, dynamic>>()
-          .map((item) => QuotationItemModel.fromJson(item))
+          .map((item) {
+            if (item is Map) {
+              return QuotationItemModel.fromJson(Map<String, dynamic>.from(item));
+            }
+            return null;
+          })
+          .whereType<QuotationItemModel>()
           .toList();
     }
 

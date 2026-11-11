@@ -7,9 +7,11 @@ import '../../core/widgets/glass/gradient_button.dart';
 import '../../core/services/pdf_invoice_service.dart';
 import '../../core/responsive/responsive_layout.dart';
 import '../../models/invoice_model.dart';
+import '../../models/quotation_model.dart';
 import '../../providers/billing_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../quotations/quotation_form_dialog.dart';
+import '../quotations/quotation_detail_dialog.dart';
 import 'record_payment_dialog.dart';
 
 class InvoiceListScreen extends StatefulWidget {
@@ -20,7 +22,10 @@ class InvoiceListScreen extends StatefulWidget {
 }
 
 class _InvoiceListScreenState extends State<InvoiceListScreen> {
-  String _selectedStatus = 'ALL';
+  // 0 = Bills & Invoices (Fixed Price), 1 = Quotations & Estimates (Approximate)
+  int _selectedViewTab = 0;
+  String _selectedInvoiceStatus = 'ALL';
+  String _selectedQuoteStatus = 'ALL';
   final TextEditingController _searchController = TextEditingController();
 
   @override
@@ -34,13 +39,78 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
   Future<void> _loadData() async {
     final provider = context.read<BillingProvider>();
     await provider.fetchBillingOverview();
-    await provider.fetchInvoices(status: _selectedStatus == 'ALL' ? null : _selectedStatus);
+    await Future.wait([
+      provider.fetchInvoices(status: _selectedInvoiceStatus == 'ALL' ? null : _selectedInvoiceStatus),
+      provider.fetchQuotations(status: _selectedQuoteStatus == 'ALL' ? null : _selectedQuoteStatus),
+    ]);
   }
 
   @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  Future<void> _handleConvertQuotation(QuotationModel quote) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.receipt_long_rounded, color: Color(0xFF059669)),
+            const SizedBox(width: 8),
+            Text('Convert to Fixed Price Bill', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 16)),
+          ],
+        ),
+        content: Text(
+          'This will convert Quotation ${quote.quotationNumber} (Approximate ₹${quote.grandTotal.toStringAsFixed(2)}) into an official Tax Invoice with FIXED PRICING. Proceed?',
+          style: GoogleFonts.inter(fontSize: 13),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF059669)),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Yes, Generate Fixed Bill', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !mounted) return;
+
+    final provider = context.read<BillingProvider>();
+    final invoice = await provider.convertQuotationToInvoice(quote.id);
+
+    if (mounted) {
+      if (invoice != null) {
+        // Switch to Invoices view tab to show the new bill immediately!
+        setState(() => _selectedViewTab = 0);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Fixed Price Invoice ${invoice.invoiceNumber} generated successfully!'),
+            backgroundColor: const Color(0xFF10B981),
+            action: SnackBarAction(
+              label: 'Record Payment',
+              textColor: Colors.white,
+              onPressed: () {
+                showDialog(
+                  context: context,
+                  builder: (_) => RecordPaymentDialog(invoice: invoice),
+                ).then((_) => _loadData());
+              },
+            ),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(provider.errorMessage ?? 'Failed to convert quotation to invoice'),
+            backgroundColor: const Color(0xFFEF4444),
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -52,11 +122,19 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
     final isMobile = ResponsiveLayout.isMobile(context);
 
     final searchQuery = _searchController.text.trim().toLowerCase();
+
     final filteredInvoices = provider.invoices.where((inv) {
       if (searchQuery.isEmpty) return true;
       return inv.invoiceNumber.toLowerCase().contains(searchQuery) ||
           inv.customerName.toLowerCase().contains(searchQuery) ||
           inv.customerPhone.contains(searchQuery);
+    }).toList();
+
+    final filteredQuotations = provider.quotations.where((q) {
+      if (searchQuery.isEmpty) return true;
+      return q.quotationNumber.toLowerCase().contains(searchQuery) ||
+          q.customerName.toLowerCase().contains(searchQuery) ||
+          q.customerPhone.contains(searchQuery);
     }).toList();
 
     return Scaffold(
@@ -95,7 +173,7 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                                 style: GoogleFonts.inter(fontSize: isMobile ? 20 : 24, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
                               ),
                               Text(
-                                'Manage customer bills, invoices, receipts, and receivables',
+                                'Manage customer bills, invoices, quotations, receipts, and receivables',
                                 style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
                               ),
                             ],
@@ -103,22 +181,44 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                         ],
                       ),
                       Wrap(
-                        spacing: 10,
+                        spacing: 8,
+                        runSpacing: 8,
                         children: [
                           IconButton(
                             icon: const Icon(Icons.refresh_rounded, color: Color(0xFF2563EB)),
                             onPressed: _loadData,
                             tooltip: 'Refresh',
                           ),
-                          GradientPrimaryButton(
-                            text: '+ New Bill / Quote',
-                            icon: Icons.add_rounded,
-                            gradient: const LinearGradient(colors: [Color(0xFF059669), Color(0xFF10B981)]),
+                          // New Quotation Button
+                          OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: const Color(0xFF059669),
+                              side: const BorderSide(color: Color(0xFF059669)),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                            ),
+                            icon: const Icon(Icons.request_quote_rounded, size: 16),
+                            label: Text('+ New Quotation', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 13)),
                             onPressed: () {
                               showDialog(
                                 context: context,
-                                builder: (_) => const QuotationFormDialog(),
+                                builder: (_) => const QuotationFormDialog(isBill: false),
                               ).then((_) => _loadData());
+                            },
+                          ),
+                          // New Fixed Bill Button
+                          GradientPrimaryButton(
+                            text: '+ New Bill / Invoice',
+                            icon: Icons.add_rounded,
+                            gradient: const LinearGradient(colors: [Color(0xFF2563EB), Color(0xFF1D4ED8)]),
+                            onPressed: () {
+                              showDialog(
+                                context: context,
+                                builder: (_) => const QuotationFormDialog(isBill: true),
+                              ).then((_) {
+                                setState(() => _selectedViewTab = 0);
+                                _loadData();
+                              });
                             },
                           ),
                         ],
@@ -164,6 +264,85 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                   ),
                   const SizedBox(height: 24),
 
+                  // Segment Tab Switcher: Bills vs Quotations
+                  Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.02),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: InkWell(
+                            onTap: () => setState(() => _selectedViewTab = 0),
+                            borderRadius: BorderRadius.circular(9),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              decoration: BoxDecoration(
+                                color: _selectedViewTab == 0 ? const Color(0xFF2563EB) : Colors.transparent,
+                                borderRadius: BorderRadius.circular(9),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.receipt_long_rounded, size: 18, color: _selectedViewTab == 0 ? Colors.white : const Color(0xFF64748B)),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Fixed Price Bills & Invoices (${provider.invoices.length})',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 13,
+                                      fontWeight: _selectedViewTab == 0 ? FontWeight.w700 : FontWeight.w600,
+                                      color: _selectedViewTab == 0 ? Colors.white : const Color(0xFF64748B),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: InkWell(
+                            onTap: () => setState(() => _selectedViewTab = 1),
+                            borderRadius: BorderRadius.circular(9),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              decoration: BoxDecoration(
+                                color: _selectedViewTab == 1 ? const Color(0xFF059669) : Colors.transparent,
+                                borderRadius: BorderRadius.circular(9),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.request_quote_rounded, size: 18, color: _selectedViewTab == 1 ? Colors.white : const Color(0xFF64748B)),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Quotations & Estimates (${provider.quotations.length})',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 13,
+                                      fontWeight: _selectedViewTab == 1 ? FontWeight.w700 : FontWeight.w600,
+                                      color: _selectedViewTab == 1 ? Colors.white : const Color(0xFF64748B),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
                   // Search & Filter Tabs
                   GlassCard(
                     blur: 16,
@@ -182,7 +361,9 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                                 onChanged: (_) => setState(() {}),
                                 style: GoogleFonts.inter(fontSize: 13),
                                 decoration: InputDecoration(
-                                  hintText: 'Search by Invoice #, Customer Name, or Phone...',
+                                  hintText: _selectedViewTab == 0
+                                      ? 'Search by Invoice #, Customer Name, or Phone...'
+                                      : 'Search by Quotation #, Customer Name, or Phone...',
                                   hintStyle: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8)),
                                   prefixIcon: const Icon(Icons.search_rounded, size: 18, color: Color(0xFF64748B)),
                                   suffixIcon: _searchController.text.isNotEmpty
@@ -206,62 +387,121 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                           ],
                         ),
                         const SizedBox(height: 12),
-                        // Filter Pills
-                        Row(
-                          children: [
-                            _buildFilterPill('ALL', 'All Invoices'),
-                            const SizedBox(width: 8),
-                            _buildFilterPill('PENDING', 'Pending Payment'),
-                            const SizedBox(width: 8),
-                            _buildFilterPill('PARTIAL', 'Partially Paid'),
-                            const SizedBox(width: 8),
-                            _buildFilterPill('PAID', 'Fully Paid'),
-                          ],
+                        // Filter Pills based on active tab
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: _selectedViewTab == 0
+                                ? [
+                                    _buildFilterPill('ALL', 'All Invoices', _selectedInvoiceStatus, (val) {
+                                      setState(() => _selectedInvoiceStatus = val);
+                                      _loadData();
+                                    }, const Color(0xFF2563EB)),
+                                    const SizedBox(width: 8),
+                                    _buildFilterPill('PENDING', 'Pending Payment', _selectedInvoiceStatus, (val) {
+                                      setState(() => _selectedInvoiceStatus = val);
+                                      _loadData();
+                                    }, const Color(0xFFDC2626)),
+                                    const SizedBox(width: 8),
+                                    _buildFilterPill('PARTIAL', 'Partially Paid', _selectedInvoiceStatus, (val) {
+                                      setState(() => _selectedInvoiceStatus = val);
+                                      _loadData();
+                                    }, const Color(0xFFD97706)),
+                                    const SizedBox(width: 8),
+                                    _buildFilterPill('PAID', 'Fully Paid', _selectedInvoiceStatus, (val) {
+                                      setState(() => _selectedInvoiceStatus = val);
+                                      _loadData();
+                                    }, const Color(0xFF059669)),
+                                  ]
+                                : [
+                                    _buildFilterPill('ALL', 'All Quotations', _selectedQuoteStatus, (val) {
+                                      setState(() => _selectedQuoteStatus = val);
+                                      _loadData();
+                                    }, const Color(0xFF059669)),
+                                    const SizedBox(width: 8),
+                                    _buildFilterPill('SENT', 'Sent to Customer', _selectedQuoteStatus, (val) {
+                                      setState(() => _selectedQuoteStatus = val);
+                                      _loadData();
+                                    }, const Color(0xFF2563EB)),
+                                    const SizedBox(width: 8),
+                                    _buildFilterPill('CONVERTED', 'Converted to Bill', _selectedQuoteStatus, (val) {
+                                      setState(() => _selectedQuoteStatus = val);
+                                      _loadData();
+                                    }, const Color(0xFF059669)),
+                                    const SizedBox(width: 8),
+                                    _buildFilterPill('ACCEPTED', 'Approved', _selectedQuoteStatus, (val) {
+                                      setState(() => _selectedQuoteStatus = val);
+                                      _loadData();
+                                    }, const Color(0xFF10B981)),
+                                    const SizedBox(width: 8),
+                                    _buildFilterPill('DRAFT', 'Drafts', _selectedQuoteStatus, (val) {
+                                      setState(() => _selectedQuoteStatus = val);
+                                      _loadData();
+                                    }, const Color(0xFF64748B)),
+                                  ],
+                          ),
                         ),
                       ],
                     ),
                   ),
                   const SizedBox(height: 20),
 
-                  // Invoices List
+                  // TAB CONTENT
                   if (provider.isLoading)
                     const Center(child: Padding(padding: EdgeInsets.all(40), child: CircularProgressIndicator()))
-                  else if (filteredInvoices.isEmpty)
-                    GlassCard(
-                      blur: 16,
-                      opacity: 0.9,
-                      borderRadius: BorderRadius.circular(16),
-                      borderColor: const Color(0xFFE2E8F0),
-                      padding: const EdgeInsets.all(40),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.receipt_outlined, size: 48, color: Color(0xFF94A3B8)),
-                          const SizedBox(height: 12),
-                          Text(
-                            'No invoices found in this view',
-                            style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w700, color: const Color(0xFF475569)),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            'Convert an interested lead quotation or create a new invoice to start billing.',
-                            style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
+                  else if (_selectedViewTab == 0) ...[
+                    // INVOICES LIST
+                    if (filteredInvoices.isEmpty)
+                      _buildEmptyState(
+                        icon: Icons.receipt_outlined,
+                        title: 'No invoices found in this view',
+                        subtitle: 'Convert an existing quotation from the Quotations tab or click "+ New Bill / Invoice" above.',
+                        actionText: '+ Create Bill / Invoice',
+                        onAction: () {
+                          showDialog(
+                            context: context,
+                            builder: (_) => const QuotationFormDialog(isBill: true),
+                          ).then((_) => _loadData());
+                        },
+                      )
+                    else
+                      ListView.separated(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: filteredInvoices.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 14),
+                        itemBuilder: (context, idx) {
+                          final invoice = filteredInvoices[idx];
+                          return _buildInvoiceCard(invoice, isMobile);
+                        },
                       ),
-                    )
-                  else
-                    ListView.separated(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: filteredInvoices.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 14),
-                      itemBuilder: (context, idx) {
-                        final invoice = filteredInvoices[idx];
-                        return _buildInvoiceCard(invoice, isMobile);
-                      },
-                    ),
+                  ] else ...[
+                    // QUOTATIONS LIST
+                    if (filteredQuotations.isEmpty)
+                      _buildEmptyState(
+                        icon: Icons.request_quote_outlined,
+                        title: 'No quotations found in this view',
+                        subtitle: 'Generate sales estimates with product catalog auto-saving to send to leads.',
+                        actionText: '+ Create Quotation',
+                        onAction: () {
+                          showDialog(
+                            context: context,
+                            builder: (_) => const QuotationFormDialog(isBill: false),
+                          ).then((_) => _loadData());
+                        },
+                      )
+                    else
+                      ListView.separated(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: filteredQuotations.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 14),
+                        itemBuilder: (context, idx) {
+                          final quote = filteredQuotations[idx];
+                          return _buildQuotationCard(quote, isMobile);
+                        },
+                      ),
+                  ],
                 ],
               ),
             ),
@@ -271,20 +511,68 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
     );
   }
 
-  Widget _buildFilterPill(String status, String label) {
-    final isSelected = _selectedStatus == status;
+  Widget _buildEmptyState({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required String actionText,
+    required VoidCallback onAction,
+  }) {
+    return GlassCard(
+      blur: 16,
+      opacity: 0.9,
+      borderRadius: BorderRadius.circular(16),
+      borderColor: const Color(0xFFE2E8F0),
+      padding: const EdgeInsets.all(40),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 48, color: const Color(0xFF94A3B8)),
+          const SizedBox(height: 12),
+          Text(
+            title,
+            style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w700, color: const Color(0xFF475569)),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            subtitle,
+            style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF2563EB),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            icon: const Icon(Icons.add_rounded, size: 16),
+            label: Text(actionText, style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 12)),
+            onPressed: onAction,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterPill(
+    String status,
+    String label,
+    String currentSelection,
+    ValueChanged<String> onSelected,
+    Color activeColor,
+  ) {
+    final isSelected = currentSelection == status;
     return InkWell(
-      onTap: () {
-        setState(() => _selectedStatus = status);
-        _loadData();
-      },
+      onTap: () => onSelected(status),
       borderRadius: BorderRadius.circular(8),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF2563EB) : Colors.white,
+          color: isSelected ? activeColor : Colors.white,
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: isSelected ? const Color(0xFF2563EB) : const Color(0xFFE2E8F0)),
+          border: Border.all(color: isSelected ? activeColor : const Color(0xFFE2E8F0)),
         ),
         child: Text(
           label,
@@ -522,5 +810,195 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
       ),
     );
   }
-}
 
+  Widget _buildQuotationCard(QuotationModel quote, bool isMobile) {
+    final isConverted = quote.status == 'CONVERTED';
+    final isAccepted = quote.status == 'ACCEPTED';
+
+    Color badgeBg = isConverted
+        ? const Color(0xFFD1FAE5)
+        : isAccepted
+            ? const Color(0xFFDCFCE7)
+            : const Color(0xFFEFF6FF);
+
+    Color badgeFg = isConverted
+        ? const Color(0xFF047857)
+        : isAccepted
+            ? const Color(0xFF15803D)
+            : const Color(0xFF1D4ED8);
+
+    String statusLabel = isConverted
+        ? 'CONVERTED TO BILL'
+        : isAccepted
+            ? 'ACCEPTED'
+            : quote.status;
+
+    return GlassCard(
+      blur: 16,
+      opacity: 0.95,
+      borderRadius: BorderRadius.circular(16),
+      borderColor: const Color(0xFFE2E8F0),
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: badgeBg,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  isConverted ? Icons.check_circle_rounded : Icons.request_quote_rounded,
+                  color: badgeFg,
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 8,
+                      runSpacing: 4,
+                      children: [
+                        Text(
+                          quote.quotationNumber,
+                          style: GoogleFonts.robotoMono(fontSize: 15, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(color: badgeBg, borderRadius: BorderRadius.circular(6)),
+                          child: Text(
+                            statusLabel,
+                            style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w800, color: badgeFg),
+                          ),
+                        ),
+                        if (quote.items.isNotEmpty)
+                          Text('${quote.items.length} items', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B))),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      quote.customerName,
+                      style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700, color: const Color(0xFF1E293B)),
+                    ),
+                    const SizedBox(height: 2),
+                    Wrap(
+                      spacing: 12,
+                      children: [
+                        if (quote.customerPhone.isNotEmpty)
+                          Text('📞 ${quote.customerPhone}', style: GoogleFonts.robotoMono(fontSize: 11, color: const Color(0xFF64748B))),
+                        Text('📅 Date: ${quote.date}', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B))),
+                        if (quote.validUntil != null)
+                          Text('⏳ Valid Until: ${quote.validUntil}', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFFD97706))),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              // Totals Block
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                    margin: const EdgeInsets.only(bottom: 2),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEF3C7),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      'APPROX ESTIMATE',
+                      style: GoogleFonts.inter(fontSize: 8, fontWeight: FontWeight.w800, color: const Color(0xFFB45309)),
+                    ),
+                  ),
+                  Text('₹${quote.grandTotal.toStringAsFixed(2)}', style: GoogleFonts.robotoMono(fontSize: 16, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A))),
+                  const SizedBox(height: 2),
+                  Text(
+                    isConverted ? 'Locked to Fixed Bill' : 'Approximate',
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: isConverted ? const Color(0xFF059669) : const Color(0xFF64748B),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          const Divider(color: Color(0xFFF1F5F9), height: 1),
+          const SizedBox(height: 12),
+
+          // Actions Row
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              // WhatsApp Share
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF25D366),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  elevation: 0,
+                ),
+                icon: const Icon(Icons.chat_rounded, size: 15),
+                label: Text('WhatsApp Quote', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700)),
+                onPressed: () => PdfInvoiceService.shareQuotationToWhatsApp(quote),
+              ),
+              Wrap(
+                spacing: 8,
+                children: [
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      side: const BorderSide(color: Color(0xFFCBD5E1)),
+                    ),
+                    icon: const Icon(Icons.print_outlined, size: 15, color: Color(0xFF475569)),
+                    label: Text('Print / PDF', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF475569))),
+                    onPressed: () => PdfInvoiceService.printQuotation(quote),
+                  ),
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      side: const BorderSide(color: Color(0xFFCBD5E1)),
+                    ),
+                    icon: const Icon(Icons.visibility_outlined, size: 15, color: Color(0xFF475569)),
+                    label: Text('View Details', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF475569))),
+                    onPressed: () {
+                      showDialog(
+                        context: context,
+                        builder: (_) => QuotationDetailDialog(quotation: quote),
+                      ).then((_) => _loadData());
+                    },
+                  ),
+                  if (!isConverted)
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF059669),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        elevation: 0,
+                      ),
+                      icon: const Icon(Icons.receipt_long_rounded, size: 15),
+                      label: Text('Convert to Fixed Bill', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700)),
+                      onPressed: () => _handleConvertQuotation(quote),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}

@@ -14,13 +14,37 @@ from apps.core.permissions import IsEmployee, IsCompanyAdmin
 
 def generate_quotation_number(company):
     year = datetime.date.today().year
-    count = Quotation.objects.filter(company=company, created_at__year=year).count() + 1
-    return f"QT-{year}-{count:04d}"
+    prefix = f"QT-{year}-"
+    latest = Quotation.objects.filter(company=company, quotation_number__startswith=prefix).order_by('-quotation_number').first()
+    if latest:
+        try:
+            num = int(latest.quotation_number.split('-')[-1]) + 1
+        except Exception:
+            num = Quotation.objects.filter(company=company).count() + 1
+    else:
+        num = 1
+    candidate = f"{prefix}{num:04d}"
+    while Quotation.objects.filter(company=company, quotation_number=candidate).exists():
+        num += 1
+        candidate = f"{prefix}{num:04d}"
+    return candidate
 
 def generate_invoice_number(company):
     year = datetime.date.today().year
-    count = Invoice.objects.filter(company=company, created_at__year=year).count() + 1
-    return f"INV-{year}-{count:04d}"
+    prefix = f"INV-{year}-"
+    latest = Invoice.objects.filter(company=company, invoice_number__startswith=prefix).order_by('-invoice_number').first()
+    if latest:
+        try:
+            num = int(latest.invoice_number.split('-')[-1]) + 1
+        except Exception:
+            num = Invoice.objects.filter(company=company).count() + 1
+    else:
+        num = 1
+    candidate = f"{prefix}{num:04d}"
+    while Invoice.objects.filter(company=company, invoice_number=candidate).exists():
+        num += 1
+        candidate = f"{prefix}{num:04d}"
+    return candidate
 
 
 class ProductListCreateView(views.APIView):
@@ -96,7 +120,7 @@ class QuotationListCreateView(views.APIView):
         else:
             qs = Quotation.objects.filter(company=company)
 
-        lead_id = request.query_params.get('lead_id')
+        lead_id = request.query_params.get('lead_id') or request.query_params.get('lead')
         if lead_id:
             qs = qs.filter(lead_id=lead_id)
         stat = request.query_params.get('status')
@@ -262,7 +286,7 @@ class InvoiceListCreateView(views.APIView):
         else:
             qs = Invoice.objects.filter(company=company)
 
-        lead_id = request.query_params.get('lead_id')
+        lead_id = request.query_params.get('lead_id') or request.query_params.get('lead')
         if lead_id:
             qs = qs.filter(lead_id=lead_id)
         stat = request.query_params.get('status')
@@ -285,6 +309,29 @@ class InvoiceListCreateView(views.APIView):
                 company=company,
                 created_by=request.user
             )
+
+            # Auto-save line items to the company's product catalog
+            items = data.get('items', [])
+            if isinstance(items, list):
+                for it in items:
+                    if isinstance(it, dict):
+                        p_name = (it.get('description') or it.get('name') or '').strip()
+                        rate = it.get('unit_price') or it.get('rate')
+                        tax = it.get('tax_percent') or 18.0
+                        if p_name and rate is not None:
+                            try:
+                                Product.objects.update_or_create(
+                                    company=company,
+                                    name=p_name,
+                                    defaults={
+                                        'unit_price': rate,
+                                        'tax_percent': tax,
+                                        'is_active': True,
+                                    }
+                                )
+                            except Exception:
+                                pass
+
             return Response(InvoiceSerializer(inv).data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
