@@ -21,6 +21,9 @@ import '../../core/services/location_service.dart';
 import 'map_picker_screen.dart';
 import '../../providers/company_provider.dart';
 import 'company_rules_tab.dart';
+import 'company_profile_tab.dart';
+import '../companies/edit_company_dialog.dart';
+import '../../models/company_model.dart';
 
 class BranchManagementScreen extends StatefulWidget {
   const BranchManagementScreen({super.key});
@@ -38,7 +41,7 @@ class _BranchManagementScreenState extends State<BranchManagementScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
+    _tabController = TabController(length: 6, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final p = context.read<LeadProvider>();
       p.fetchBranches();
@@ -56,6 +59,30 @@ class _BranchManagementScreenState extends State<BranchManagementScreen>
     _tabController.dispose();
     _searchController.dispose();
     super.dispose();
+  }
+
+  Future<void> _openCompanyProfileEditDialog() async {
+    final compProv = context.read<CompanyProvider>();
+    final authProv = context.read<AuthProvider>();
+    CompanyModel? comp = compProv.activeCompanyDetail;
+    if (comp == null || comp.name.isEmpty) {
+      comp = await compProv.fetchMyCompany();
+    }
+    if (comp == null) {
+      final u = authProv.currentUser;
+      comp = CompanyModel(
+        id: u?.companyId ?? '',
+        name: u?.companyName ?? '',
+        logo: u?.companyLogo ?? '',
+        contactPhone: u?.companyPhone ?? '',
+        contactEmail: u?.companyEmail ?? '',
+        address: u?.companyAddress ?? '',
+        gstin: u?.companyGstin ?? '',
+        website: u?.companyWebsite ?? '',
+      );
+    }
+    if (!mounted) return;
+    await EditCompanyDialog.show(context, comp);
   }
 
   Future<void> _fetchCurrentLocation(
@@ -1725,6 +1752,11 @@ class _BranchManagementScreenState extends State<BranchManagementScreen>
                         icon: Icons.add_circle_outline_rounded,
                         onPressed: _showAddCategoryDialog,
                       ),
+                      GlassSecondaryButton(
+                        text: 'Edit Profile & Logo',
+                        icon: Icons.business_rounded,
+                        onPressed: _openCompanyProfileEditDialog,
+                      ),
                     ],
                   ),
                 ],
@@ -1858,6 +1890,7 @@ class _BranchManagementScreenState extends State<BranchManagementScreen>
                     Tab(text: 'DEPARTMENTS (${deptProvider.departments.length})'),
                     Tab(text: 'ROLES & RBAC (${roleProvider.roles.length})'),
                     Tab(text: 'RULES & PAYROLL (${compProvider.companyRules.length})'),
+                    const Tab(text: 'COMPANY PROFILE & LOGO'),
                   ],
                 ),
               ),
@@ -1873,6 +1906,7 @@ class _BranchManagementScreenState extends State<BranchManagementScreen>
                     _buildDepartmentList(deptProvider.departments, deptProvider, leadProvider),
                     _buildRoleList(roleProvider.roles, roleProvider),
                     const CompanyRulesTab(),
+                    const CompanyProfileTab(),
                   ],
                 ),
               ),

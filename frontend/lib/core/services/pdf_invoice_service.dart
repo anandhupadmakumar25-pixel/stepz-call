@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -7,14 +8,33 @@ import '../../models/quotation_model.dart';
 import '../../models/invoice_model.dart';
 
 class PdfInvoiceService {
+  static pw.MemoryImage? _decodeLogo(String? logo) {
+    if (logo == null || logo.trim().isEmpty) return null;
+    try {
+      String clean = logo.trim();
+      if (clean.contains(',')) {
+        clean = clean.split(',').last.trim();
+      }
+      final bytes = base64Decode(clean);
+      if (bytes.isNotEmpty) {
+        return pw.MemoryImage(bytes);
+      }
+    } catch (_) {}
+    return null;
+  }
+
   static Future<Uint8List> generateQuotationPdf(
     QuotationModel quotation, {
     String companyName = 'Stepz Telecaller CRM',
     String? companyPhone,
     String? companyEmail,
     String? companyAddress,
+    String? companyGstin,
+    String? companyWebsite,
+    String? companyLogo,
   }) async {
     final pdf = pw.Document();
+    final logoImage = _decodeLogo(companyLogo);
 
     pdf.addPage(
       pw.Page(
@@ -29,25 +49,66 @@ class PdfInvoiceService {
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
-                  pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
-                    children: [
-                      pw.Text(
-                        companyName,
-                        style: pw.TextStyle(
-                          fontSize: 20,
-                          fontWeight: pw.FontWeight.bold,
-                          color: PdfColors.indigo900,
+                  pw.Expanded(
+                    child: pw.Row(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        if (logoImage != null) ...[
+                          pw.Container(
+                            width: 52,
+                            height: 52,
+                            margin: const pw.EdgeInsets.only(right: 12),
+                            decoration: pw.BoxDecoration(
+                              borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
+                              border: pw.Border.all(color: PdfColors.grey300, width: 0.5),
+                            ),
+                            child: pw.ClipRRect(
+                              horizontalRadius: 8,
+                              verticalRadius: 8,
+                              child: pw.Image(logoImage, fit: pw.BoxFit.contain),
+                            ),
+                          ),
+                        ],
+                        pw.Expanded(
+                          child: pw.Column(
+                            crossAxisAlignment: pw.CrossAxisAlignment.start,
+                            children: [
+                              pw.Text(
+                                companyName,
+                                style: pw.TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: pw.FontWeight.bold,
+                                  color: PdfColors.indigo900,
+                                ),
+                              ),
+                              if (companyGstin != null && companyGstin.isNotEmpty) ...[
+                                pw.SizedBox(height: 2),
+                                pw.Text('GSTIN: $companyGstin', style: pw.TextStyle(fontSize: 9.5, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo800)),
+                              ],
+                              if (companyAddress != null && companyAddress.isNotEmpty) ...[
+                                pw.SizedBox(height: 2),
+                                pw.Text(companyAddress, style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+                              ],
+                              pw.SizedBox(height: 2),
+                              pw.Row(
+                                children: [
+                                  if (companyPhone != null && companyPhone.isNotEmpty)
+                                    pw.Text('Phone: $companyPhone   ', style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.grey700)),
+                                  if (companyEmail != null && companyEmail.isNotEmpty)
+                                    pw.Text('Email: $companyEmail', style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.grey700)),
+                                ],
+                              ),
+                              if (companyWebsite != null && companyWebsite.isNotEmpty) ...[
+                                pw.SizedBox(height: 1),
+                                pw.Text(companyWebsite, style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.indigo700)),
+                              ],
+                            ],
+                          ),
                         ),
-                      ),
-                      if (companyPhone != null && companyPhone.isNotEmpty)
-                        pw.Text('Phone: $companyPhone', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
-                      if (companyEmail != null && companyEmail.isNotEmpty)
-                        pw.Text('Email: $companyEmail', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
-                      if (companyAddress != null && companyAddress.isNotEmpty)
-                        pw.Text(companyAddress, style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
-                    ],
+                      ],
+                    ),
                   ),
+                  pw.SizedBox(width: 16),
                   pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.end,
                     children: [
@@ -61,7 +122,7 @@ class PdfInvoiceService {
                         child: pw.Text(
                           'ESTIMATE / APPROXIMATE QUOTATION',
                           style: pw.TextStyle(
-                            fontSize: 13,
+                            fontSize: 12,
                             fontWeight: pw.FontWeight.bold,
                             color: PdfColors.indigo800,
                           ),
@@ -69,9 +130,9 @@ class PdfInvoiceService {
                       ),
                       pw.SizedBox(height: 6),
                       pw.Text('Quote #: ${quotation.quotationNumber}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11)),
-                      pw.Text('Date: ${quotation.date}', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
+                      pw.Text('Date: ${quotation.date}', style: const pw.TextStyle(fontSize: 9.5, color: PdfColors.grey700)),
                       if (quotation.validUntil != null && quotation.validUntil!.isNotEmpty)
-                        pw.Text('Valid Until: ${quotation.validUntil}', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
+                        pw.Text('Valid Until: ${quotation.validUntil}', style: const pw.TextStyle(fontSize: 9.5, color: PdfColors.grey700)),
                     ],
                   ),
                 ],
@@ -276,8 +337,12 @@ class PdfInvoiceService {
     String? companyPhone,
     String? companyEmail,
     String? companyAddress,
+    String? companyGstin,
+    String? companyWebsite,
+    String? companyLogo,
   }) async {
     final pdf = pw.Document();
+    final logoImage = _decodeLogo(companyLogo);
 
     pdf.addPage(
       pw.Page(
@@ -300,25 +365,66 @@ class PdfInvoiceService {
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
-                  pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
-                    children: [
-                      pw.Text(
-                        companyName,
-                        style: pw.TextStyle(
-                          fontSize: 20,
-                          fontWeight: pw.FontWeight.bold,
-                          color: PdfColors.indigo900,
+                  pw.Expanded(
+                    child: pw.Row(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        if (logoImage != null) ...[
+                          pw.Container(
+                            width: 52,
+                            height: 52,
+                            margin: const pw.EdgeInsets.only(right: 12),
+                            decoration: pw.BoxDecoration(
+                              borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
+                              border: pw.Border.all(color: PdfColors.grey300, width: 0.5),
+                            ),
+                            child: pw.ClipRRect(
+                              horizontalRadius: 8,
+                              verticalRadius: 8,
+                              child: pw.Image(logoImage, fit: pw.BoxFit.contain),
+                            ),
+                          ),
+                        ],
+                        pw.Expanded(
+                          child: pw.Column(
+                            crossAxisAlignment: pw.CrossAxisAlignment.start,
+                            children: [
+                              pw.Text(
+                                companyName,
+                                style: pw.TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: pw.FontWeight.bold,
+                                  color: PdfColors.indigo900,
+                                ),
+                              ),
+                              if (companyGstin != null && companyGstin.isNotEmpty) ...[
+                                pw.SizedBox(height: 2),
+                                pw.Text('GSTIN: $companyGstin', style: pw.TextStyle(fontSize: 9.5, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo800)),
+                              ],
+                              if (companyAddress != null && companyAddress.isNotEmpty) ...[
+                                pw.SizedBox(height: 2),
+                                pw.Text(companyAddress, style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+                              ],
+                              pw.SizedBox(height: 2),
+                              pw.Row(
+                                children: [
+                                  if (companyPhone != null && companyPhone.isNotEmpty)
+                                    pw.Text('Phone: $companyPhone   ', style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.grey700)),
+                                  if (companyEmail != null && companyEmail.isNotEmpty)
+                                    pw.Text('Email: $companyEmail', style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.grey700)),
+                                ],
+                              ),
+                              if (companyWebsite != null && companyWebsite.isNotEmpty) ...[
+                                pw.SizedBox(height: 1),
+                                pw.Text(companyWebsite, style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.indigo700)),
+                              ],
+                            ],
+                          ),
                         ),
-                      ),
-                      if (companyPhone != null && companyPhone.isNotEmpty)
-                        pw.Text('Phone: $companyPhone', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
-                      if (companyEmail != null && companyEmail.isNotEmpty)
-                        pw.Text('Email: $companyEmail', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
-                      if (companyAddress != null && companyAddress.isNotEmpty)
-                        pw.Text(companyAddress, style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
-                    ],
+                      ],
+                    ),
                   ),
+                  pw.SizedBox(width: 16),
                   pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.end,
                     children: [
@@ -332,7 +438,7 @@ class PdfInvoiceService {
                         child: pw.Text(
                           'TAX INVOICE (FIXED PRICE BILL)',
                           style: pw.TextStyle(
-                            fontSize: 13,
+                            fontSize: 12,
                             fontWeight: pw.FontWeight.bold,
                             color: statusColor,
                           ),
@@ -604,30 +710,102 @@ class PdfInvoiceService {
   }
 
   /// Print or preview quotation
-  static Future<void> printQuotation(QuotationModel quotation, {String companyName = 'Stepz Telecaller CRM'}) async {
+  static Future<void> printQuotation(
+    QuotationModel quotation, {
+    String companyName = 'Stepz Telecaller CRM',
+    String? companyPhone,
+    String? companyEmail,
+    String? companyAddress,
+    String? companyGstin,
+    String? companyWebsite,
+    String? companyLogo,
+  }) async {
     await Printing.layoutPdf(
-      onLayout: (format) async => await generateQuotationPdf(quotation, companyName: companyName),
+      onLayout: (format) async => await generateQuotationPdf(
+        quotation,
+        companyName: companyName,
+        companyPhone: companyPhone,
+        companyEmail: companyEmail,
+        companyAddress: companyAddress,
+        companyGstin: companyGstin,
+        companyWebsite: companyWebsite,
+        companyLogo: companyLogo,
+      ),
       name: '${quotation.quotationNumber}.pdf',
     );
   }
 
   /// Share quotation PDF file
-  static Future<void> shareQuotationPdf(QuotationModel quotation, {String companyName = 'Stepz Telecaller CRM'}) async {
-    final bytes = await generateQuotationPdf(quotation, companyName: companyName);
+  static Future<void> shareQuotationPdf(
+    QuotationModel quotation, {
+    String companyName = 'Stepz Telecaller CRM',
+    String? companyPhone,
+    String? companyEmail,
+    String? companyAddress,
+    String? companyGstin,
+    String? companyWebsite,
+    String? companyLogo,
+  }) async {
+    final bytes = await generateQuotationPdf(
+      quotation,
+      companyName: companyName,
+      companyPhone: companyPhone,
+      companyEmail: companyEmail,
+      companyAddress: companyAddress,
+      companyGstin: companyGstin,
+      companyWebsite: companyWebsite,
+      companyLogo: companyLogo,
+    );
     await Printing.sharePdf(bytes: bytes, filename: '${quotation.quotationNumber}.pdf');
   }
 
   /// Print or preview invoice
-  static Future<void> printInvoice(InvoiceModel invoice, {String companyName = 'Stepz Telecaller CRM'}) async {
+  static Future<void> printInvoice(
+    InvoiceModel invoice, {
+    String companyName = 'Stepz Telecaller CRM',
+    String? companyPhone,
+    String? companyEmail,
+    String? companyAddress,
+    String? companyGstin,
+    String? companyWebsite,
+    String? companyLogo,
+  }) async {
     await Printing.layoutPdf(
-      onLayout: (format) async => await generateInvoicePdf(invoice, companyName: companyName),
+      onLayout: (format) async => await generateInvoicePdf(
+        invoice,
+        companyName: companyName,
+        companyPhone: companyPhone,
+        companyEmail: companyEmail,
+        companyAddress: companyAddress,
+        companyGstin: companyGstin,
+        companyWebsite: companyWebsite,
+        companyLogo: companyLogo,
+      ),
       name: '${invoice.invoiceNumber}.pdf',
     );
   }
 
   /// Share invoice PDF file
-  static Future<void> shareInvoicePdf(InvoiceModel invoice, {String companyName = 'Stepz Telecaller CRM'}) async {
-    final bytes = await generateInvoicePdf(invoice, companyName: companyName);
+  static Future<void> shareInvoicePdf(
+    InvoiceModel invoice, {
+    String companyName = 'Stepz Telecaller CRM',
+    String? companyPhone,
+    String? companyEmail,
+    String? companyAddress,
+    String? companyGstin,
+    String? companyWebsite,
+    String? companyLogo,
+  }) async {
+    final bytes = await generateInvoicePdf(
+      invoice,
+      companyName: companyName,
+      companyPhone: companyPhone,
+      companyEmail: companyEmail,
+      companyAddress: companyAddress,
+      companyGstin: companyGstin,
+      companyWebsite: companyWebsite,
+      companyLogo: companyLogo,
+    );
     await Printing.sharePdf(bytes: bytes, filename: '${invoice.invoiceNumber}.pdf');
   }
 

@@ -64,6 +64,10 @@ class Company(TimeStampedModel):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='ACTIVE', db_index=True)
     default_country_code = models.CharField(max_length=4, default='+91')
     default_country_iso = models.CharField(max_length=2, default='IN')
+    logo = models.TextField(blank=True, default='')
+    address = models.TextField(blank=True, default='')
+    gstin = models.CharField(max_length=50, blank=True, default='')
+    website = models.CharField(max_length=255, blank=True, default='')
     plan = models.ForeignKey(Plan, on_delete=models.SET_NULL, null=True, blank=True, related_name='companies')
     allowed_menus = models.JSONField(default=list, blank=True)
     settings = models.JSONField(default=dict, blank=True)
@@ -74,6 +78,10 @@ class Company(TimeStampedModel):
 
     def __str__(self):
         return f"{self.name} ({self.status})"
+
+    @property
+    def logo_url(self):
+        return self.logo
 
     def get_allowed_menus(self):
         if self.allowed_menus and len(self.allowed_menus) > 0:

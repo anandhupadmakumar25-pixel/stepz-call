@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 import '../../core/widgets/glass/glass_card.dart';
 import '../../core/widgets/glass/gradient_button.dart';
+import '../../core/widgets/company_logo_view.dart';
 import '../../core/services/pdf_invoice_service.dart';
 import '../../models/quotation_model.dart';
 import '../../models/invoice_model.dart';
+import '../../providers/auth_provider.dart';
+import '../../providers/company_provider.dart';
 import '../billing/record_payment_dialog.dart';
 import 'convert_quotation_dialog.dart';
 import 'quotation_form_dialog.dart';
@@ -57,6 +61,31 @@ class _QuotationDetailDialogState extends State<QuotationDetailDialog> {
   @override
   Widget build(BuildContext context) {
     final q = _quotation;
+
+    final authUser = context.watch<AuthProvider>().currentUser;
+    final comp = context.watch<CompanyProvider>().activeCompanyDetail;
+
+    final String compName = (comp?.name.isNotEmpty == true)
+        ? comp!.name
+        : ((authUser?.companyName?.isNotEmpty == true) ? authUser!.companyName! : 'Stepz Telecaller CRM');
+    final compLogo = (comp?.logo.isNotEmpty == true)
+        ? comp!.logo
+        : (authUser?.companyLogo ?? '');
+    final compPhone = (comp?.contactPhone.isNotEmpty == true)
+        ? comp!.contactPhone
+        : (authUser?.companyPhone ?? '');
+    final compEmail = (comp?.contactEmail.isNotEmpty == true)
+        ? comp!.contactEmail
+        : (authUser?.companyEmail ?? '');
+    final compAddress = (comp?.address.isNotEmpty == true)
+        ? comp!.address
+        : (authUser?.companyAddress ?? '');
+    final compGstin = (comp?.gstin.isNotEmpty == true)
+        ? comp!.gstin
+        : (authUser?.companyGstin ?? '');
+    final compWebsite = (comp?.website.isNotEmpty == true)
+        ? comp!.website
+        : (authUser?.companyWebsite ?? '');
 
     return Dialog(
       backgroundColor: Colors.transparent,
@@ -134,6 +163,61 @@ class _QuotationDetailDialogState extends State<QuotationDetailDialog> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      // Standard Corporate Brand Header
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        margin: const EdgeInsets.only(bottom: 12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            CompanyLogoView(
+                              logo: compLogo,
+                              companyName: compName,
+                              size: 48,
+                              borderRadius: BorderRadius.circular(10),
+                              borderColor: const Color(0xFFCBD5E1),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    compName,
+                                    style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+                                  ),
+                                  if (compGstin.isNotEmpty) ...[
+                                    const SizedBox(height: 2),
+                                    Text('GSTIN: $compGstin', style: GoogleFonts.robotoMono(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF0F766E))),
+                                  ],
+                                  if (compAddress.isNotEmpty) ...[
+                                    const SizedBox(height: 2),
+                                    Text(compAddress, style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF475569))),
+                                  ],
+                                  const SizedBox(height: 2),
+                                  Wrap(
+                                    spacing: 12,
+                                    children: [
+                                      if (compPhone.isNotEmpty)
+                                        Text('Tel: $compPhone', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B))),
+                                      if (compEmail.isNotEmpty)
+                                        Text('Email: $compEmail', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B))),
+                                      if (compWebsite.isNotEmpty)
+                                        Text(compWebsite, style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF2563EB), fontWeight: FontWeight.w600)),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
                       // Customer Info Card
                       Container(
                         padding: const EdgeInsets.all(14),
@@ -377,7 +461,7 @@ class _QuotationDetailDialogState extends State<QuotationDetailDialog> {
                     ),
                     icon: const Icon(Icons.chat_rounded, size: 18),
                     label: Text('Share to WhatsApp', style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 12)),
-                    onPressed: () => PdfInvoiceService.shareQuotationToWhatsApp(q),
+                    onPressed: () => PdfInvoiceService.shareQuotationToWhatsApp(q, companyName: compName),
                   ),
                   Wrap(
                     spacing: 10,
@@ -385,7 +469,16 @@ class _QuotationDetailDialogState extends State<QuotationDetailDialog> {
                       GlassSecondaryButton(
                         text: 'Print / PDF',
                         icon: Icons.print_outlined,
-                        onPressed: () => PdfInvoiceService.printQuotation(q),
+                        onPressed: () => PdfInvoiceService.printQuotation(
+                          q,
+                          companyName: compName,
+                          companyPhone: compPhone,
+                          companyEmail: compEmail,
+                          companyAddress: compAddress,
+                          companyGstin: compGstin,
+                          companyWebsite: compWebsite,
+                          companyLogo: compLogo,
+                        ),
                       ),
                       if (q.status != 'CONVERTED') ...[
                         GlassSecondaryButton(

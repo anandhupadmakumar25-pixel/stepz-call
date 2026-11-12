@@ -11,6 +11,8 @@ import '../../models/invoice_model.dart';
 import '../../models/product_model.dart';
 import '../../providers/billing_provider.dart';
 import '../../providers/lead_provider.dart';
+import '../../providers/auth_provider.dart';
+import '../../providers/company_provider.dart';
 
 class QuotationFormDialog extends StatefulWidget {
   final LeadModel? lead;
@@ -1703,17 +1705,20 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                           ? null
                           : () async {
                               final nav = Navigator.of(context);
+                              final authUser = context.read<AuthProvider>().currentUser;
+                              final comp = context.read<CompanyProvider>().activeCompanyDetail;
+                              final String compName = comp?.name.isNotEmpty == true ? comp!.name : ((authUser?.companyName?.isNotEmpty == true) ? authUser!.companyName! : 'Stepz Telecaller CRM');
                               if (_createAsInvoice) {
                                 final inv = await _saveInvoice();
                                 if (inv != null) {
                                   nav.pop(inv);
-                                  await PdfInvoiceService.shareInvoiceToWhatsApp(inv);
+                                  await PdfInvoiceService.shareInvoiceToWhatsApp(inv, companyName: compName);
                                 }
                               } else {
                                 final quote = await _saveQuotation();
                                 if (quote != null) {
                                   nav.pop(quote);
-                                  await PdfInvoiceService.shareQuotationToWhatsApp(quote);
+                                  await PdfInvoiceService.shareQuotationToWhatsApp(quote, companyName: compName);
                                 }
                               }
                             },
@@ -1725,17 +1730,44 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                           ? null
                           : () async {
                               final nav = Navigator.of(context);
+                              final authUser = context.read<AuthProvider>().currentUser;
+                              final comp = context.read<CompanyProvider>().activeCompanyDetail;
+                              final String compName = comp?.name.isNotEmpty == true ? comp!.name : ((authUser?.companyName?.isNotEmpty == true) ? authUser!.companyName! : 'Stepz Telecaller CRM');
+                              final compPhone = comp?.contactPhone.isNotEmpty == true ? comp!.contactPhone : authUser?.companyPhone;
+                              final compEmail = comp?.contactEmail.isNotEmpty == true ? comp!.contactEmail : authUser?.companyEmail;
+                              final compAddress = comp?.address.isNotEmpty == true ? comp!.address : authUser?.companyAddress;
+                              final compGstin = comp?.gstin.isNotEmpty == true ? comp!.gstin : authUser?.companyGstin;
+                              final compWebsite = comp?.website.isNotEmpty == true ? comp!.website : authUser?.companyWebsite;
+                              final compLogo = comp?.logo.isNotEmpty == true ? comp!.logo : authUser?.companyLogo;
                               if (_createAsInvoice) {
                                 final inv = await _saveInvoice();
                                 if (inv != null) {
                                   nav.pop(inv);
-                                  await PdfInvoiceService.printInvoice(inv);
+                                  await PdfInvoiceService.printInvoice(
+                                    inv,
+                                    companyName: compName,
+                                    companyPhone: compPhone,
+                                    companyEmail: compEmail,
+                                    companyAddress: compAddress,
+                                    companyGstin: compGstin,
+                                    companyWebsite: compWebsite,
+                                    companyLogo: compLogo,
+                                  );
                                 }
                               } else {
                                 final quote = await _saveQuotation();
                                 if (quote != null) {
                                   nav.pop(quote);
-                                  await PdfInvoiceService.printQuotation(quote);
+                                  await PdfInvoiceService.printQuotation(
+                                    quote,
+                                    companyName: compName,
+                                    companyPhone: compPhone,
+                                    companyEmail: compEmail,
+                                    companyAddress: compAddress,
+                                    companyGstin: compGstin,
+                                    companyWebsite: compWebsite,
+                                    companyLogo: compLogo,
+                                  );
                                 }
                               }
                             },

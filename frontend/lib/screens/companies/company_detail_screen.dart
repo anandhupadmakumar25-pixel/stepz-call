@@ -11,6 +11,7 @@ import '../../core/widgets/app_back_button.dart';
 import '../../routes/app_routes.dart';
 import '../../models/company_model.dart';
 import '../../providers/company_provider.dart';
+import 'edit_company_dialog.dart';
 
 class CompanyDetailScreen extends StatefulWidget {
   final String companyId;
@@ -827,6 +828,27 @@ Login URL: https://app.stepzcrm.com
             spacing: 8,
             runSpacing: 8,
             children: [
+              // Edit Profile & Logo
+              OutlinedButton.icon(
+                onPressed: () async {
+                  final updated = await EditCompanyDialog.show(context, company);
+                  if (updated == true && mounted) {
+                    context.read<CompanyProvider>().fetchCompanyDetail(widget.companyId);
+                  }
+                },
+                icon: const Icon(Icons.edit_rounded, size: 14, color: Color(0xFF4F46E5)),
+                label: Text(
+                  'Edit Profile & Logo',
+                  style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF4F46E5)),
+                ),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Color(0xFFC7D2FE)),
+                  backgroundColor: const Color(0xFFEEF2FF),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
+
               // Suspend / Activate Button
               OutlinedButton.icon(
                 onPressed: () => _confirmToggleStatus(company),
@@ -964,6 +986,25 @@ Login URL: https://app.stepzcrm.com
           spacing: 8,
           runSpacing: 8,
           children: [
+            OutlinedButton.icon(
+              onPressed: () async {
+                final updated = await EditCompanyDialog.show(context, company);
+                if (updated == true && mounted) {
+                  context.read<CompanyProvider>().fetchCompanyDetail(widget.companyId);
+                }
+              },
+              icon: const Icon(Icons.edit_rounded, size: 16, color: Color(0xFF4F46E5)),
+              label: Text(
+                'Edit Profile & Logo',
+                style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFF4F46E5)),
+              ),
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: Color(0xFFC7D2FE)),
+                backgroundColor: const Color(0xFFEEF2FF),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
             OutlinedButton.icon(
               onPressed: () => _confirmToggleStatus(company),
               icon: Icon(

@@ -8,6 +8,12 @@ class UserModel {
   final String? phone;
   final String? companyId;
   final String? companyName;
+  final String? companyLogo;
+  final String? companyPhone;
+  final String? companyEmail;
+  final String? companyAddress;
+  final String? companyGstin;
+  final String? companyWebsite;
   final String? branchId;
   final String? branchName;
   final bool isStaff;
@@ -28,6 +34,12 @@ class UserModel {
     this.phone,
     this.companyId,
     this.companyName,
+    this.companyLogo,
+    this.companyPhone,
+    this.companyEmail,
+    this.companyAddress,
+    this.companyGstin,
+    this.companyWebsite,
     this.branchId,
     this.branchName,
     this.isStaff = false,
@@ -102,6 +114,12 @@ class UserModel {
       phone: json['phone'],
       companyId: json['company_id']?.toString() ?? json['company']?.toString(),
       companyName: json['company_name'],
+      companyLogo: json['company_logo'],
+      companyPhone: json['company_phone'],
+      companyEmail: json['company_email'],
+      companyAddress: json['company_address'],
+      companyGstin: json['company_gstin'],
+      companyWebsite: json['company_website'],
       branchId: json['branch_id']?.toString() ?? json['branch']?.toString(),
       branchName: json['branch_name'],
       isStaff: json['is_staff'] ?? false,
@@ -124,6 +142,12 @@ class UserModel {
     'phone': phone,
     'company_id': companyId,
     'company_name': companyName,
+    'company_logo': companyLogo,
+    'company_phone': companyPhone,
+    'company_email': companyEmail,
+    'company_address': companyAddress,
+    'company_gstin': companyGstin,
+    'company_website': companyWebsite,
     'branch_id': branchId,
     'branch_name': branchName,
     'is_staff': isStaff,

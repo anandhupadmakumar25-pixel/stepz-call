@@ -63,6 +63,38 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  void updateCurrentUserCompanyInfo({
+    String? name,
+    String? logo,
+    String? phone,
+    String? email,
+    String? address,
+    String? gstin,
+    String? website,
+  }) {
+    if (_currentUser == null) return;
+    final json = _currentUser!.toJson();
+    if (name != null) json['company_name'] = name;
+    if (logo != null) json['company_logo'] = logo;
+    if (phone != null) json['company_phone'] = phone;
+    if (email != null) json['company_email'] = email;
+    if (address != null) json['company_address'] = address;
+    if (gstin != null) json['company_gstin'] = gstin;
+    if (website != null) json['company_website'] = website;
+    _currentUser = UserModel.fromJson(json);
+    notifyListeners();
+  }
+
+  Future<void> refreshUserProfile() async {
+    try {
+      final res = await ApiClient.get('/accounts/me/');
+      if (res is Map<String, dynamic>) {
+        _currentUser = UserModel.fromJson(res);
+        notifyListeners();
+      }
+    } catch (_) {}
+  }
+
   Future<void> logout() async {
     try {
       await ApiClient.post('/accounts/logout/', {});

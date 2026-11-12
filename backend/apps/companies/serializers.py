@@ -40,6 +40,7 @@ class CompanySerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'subdomain', 'contact_email', 'contact_phone',
             'status', 'default_country_code', 'default_country_iso',
+            'logo', 'address', 'gstin', 'website',
             'plan', 'plan_name', 'plan_code', 'plan_currency', 'plan_currency_symbol',
             'plan_price_monthly', 'plan_price_yearly',
             'plan_max_users', 'plan_max_leads', 'allowed_menus',
@@ -88,6 +89,10 @@ class CompanyCreateSerializer(serializers.Serializer):
     contact_email = serializers.EmailField(required=False, allow_blank=True, default='')
     contact_phone = serializers.CharField(max_length=32, required=False, allow_blank=True, default='')
     default_country_code = serializers.CharField(max_length=4, required=False, default='+91')
+    logo = serializers.CharField(required=False, allow_blank=True, default='')
+    address = serializers.CharField(required=False, allow_blank=True, default='')
+    gstin = serializers.CharField(required=False, allow_blank=True, default='')
+    website = serializers.CharField(required=False, allow_blank=True, default='')
     plan_id = serializers.CharField(required=False, allow_blank=True, default='')
     allowed_menus = serializers.ListField(child=serializers.CharField(), required=False, default=list)
 

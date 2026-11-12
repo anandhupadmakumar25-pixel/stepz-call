@@ -1,4 +1,6 @@
 import 'dart:math';
+import 'dart:convert';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -325,7 +327,11 @@ Login URL: https://app.stepzcrm.com
     final phoneController = TextEditingController();
     final subdomainController = TextEditingController();
     final adminNameController = TextEditingController();
+    final addressController = TextEditingController();
+    final gstinController = TextEditingController();
+    final websiteController = TextEditingController();
     final tempPasswordController = TextEditingController(text: _generateTempPassword());
+    String logoData = '';
 
     String selectedPlanId = compProv.plans.isNotEmpty ? compProv.plans.first.code : 'starter';
     final Set<String> selectedMenus = {'branches', 'employees', 'leads', 'tasks', 'recordings', 'callbacks', 'call_history', 'analytics'};
@@ -410,6 +416,101 @@ Login URL: https://app.stepzcrm.com
                         ),
                       const SizedBox(height: 12),
                       GlassTextField(label: 'Contact Phone', hintText: '+91 9876543210', controller: phoneController),
+                      const SizedBox(height: 14),
+
+                      // Company Logo Image Picker
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(Icons.image_outlined, size: 16, color: Color(0xFF2563EB)),
+                                const SizedBox(width: 6),
+                                Text('Company Brand Logo (Appears on Bills)', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A))),
+                                const Spacer(),
+                                if (logoData.isNotEmpty)
+                                  InkWell(
+                                    onTap: () => setDlgState(() => logoData = ''),
+                                    child: Text('Clear', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFFEF4444), fontWeight: FontWeight.w600)),
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                Container(
+                                  width: 80,
+                                  height: 52,
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: const Color(0xFFCBD5E1)),
+                                  ),
+                                  child: Center(
+                                    child: logoData.isEmpty
+                                        ? const Icon(Icons.add_photo_alternate_outlined, size: 24, color: Color(0xFF94A3B8))
+                                        : (logoData.startsWith('data:image')
+                                            ? ClipRRect(
+                                                borderRadius: BorderRadius.circular(7),
+                                                child: Image.memory(base64Decode(logoData.split(',').last), fit: BoxFit.contain),
+                                              )
+                                            : ClipRRect(
+                                                borderRadius: BorderRadius.circular(7),
+                                                child: Image.network(logoData, fit: BoxFit.contain, errorBuilder: (_, __, ___) => const Icon(Icons.business_rounded)),
+                                              )),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: OutlinedButton.icon(
+                                    style: OutlinedButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    ),
+                                    onPressed: () async {
+                                      try {
+                                        final res = await FilePicker.platform.pickFiles(type: FileType.image, withData: true);
+                                        if (res != null && res.files.isNotEmpty && res.files.first.bytes != null) {
+                                          final f = res.files.first;
+                                          final ext = (f.extension ?? 'png').toLowerCase();
+                                          final mime = (ext == 'jpg' || ext == 'jpeg') ? 'image/jpeg' : 'image/png';
+                                          final b64 = base64Encode(f.bytes!);
+                                          setDlgState(() => logoData = 'data:$mime;base64,$b64');
+                                        }
+                                      } catch (_) {}
+                                    },
+                                    icon: const Icon(Icons.upload_file_rounded, size: 15),
+                                    label: Text(logoData.isEmpty ? 'Upload Logo' : 'Change Logo', style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w600)),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
+                      if (isMobile) ...[
+                        GlassTextField(label: 'GSTIN / Tax ID', hintText: '32AAAAA0000A1Z5', controller: gstinController),
+                        const SizedBox(height: 12),
+                        GlassTextField(label: 'Website', hintText: 'https://company.com', controller: websiteController),
+                      ] else
+                        Row(
+                          children: [
+                            Expanded(child: GlassTextField(label: 'GSTIN / Tax ID', hintText: '32AAAAA0000A1Z5', controller: gstinController)),
+                            const SizedBox(width: 12),
+                            Expanded(child: GlassTextField(label: 'Website', hintText: 'https://company.com', controller: websiteController)),
+                          ],
+                        ),
+                      const SizedBox(height: 12),
+                      GlassTextField(label: 'Registered Office Address', hintText: 'Full business address for invoice header...', controller: addressController, maxLines: 2),
                       const SizedBox(height: 14),
 
                       // Temporary Password Field with Regenerate Button
@@ -599,6 +700,10 @@ Login URL: https://app.stepzcrm.com
                                         'admin_first_name': adminNameController.text.trim().isNotEmpty ? adminNameController.text.trim() : 'Admin',
                                         if (phoneController.text.trim().isNotEmpty) 'contact_phone': phoneController.text.trim(),
                                         if (subdomainController.text.trim().isNotEmpty) 'subdomain': subdomainController.text.trim(),
+                                        if (logoData.trim().isNotEmpty) 'logo': logoData.trim(),
+                                        if (addressController.text.trim().isNotEmpty) 'address': addressController.text.trim(),
+                                        if (gstinController.text.trim().isNotEmpty) 'gstin': gstinController.text.trim(),
+                                        if (websiteController.text.trim().isNotEmpty) 'website': websiteController.text.trim(),
                                         'plan_id': selectedPlanId,
                                         'allowed_menus': selectedMenus.toList(),
                                       });

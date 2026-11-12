@@ -172,6 +172,71 @@ class CompanyProvider extends ChangeNotifier {
     return result != null;
   }
 
+  Future<CompanyModel?> fetchMyCompany() async {
+    try {
+      final res = await ApiClient.get('/companies/my-company/');
+      if (res is Map<String, dynamic>) {
+        final comp = CompanyModel.fromJson(res);
+        _activeCompanyDetail = comp;
+        notifyListeners();
+        return comp;
+      }
+    } catch (e) {
+      _errorMessage = e.toString();
+    }
+    return _activeCompanyDetail;
+  }
+
+  Future<bool> updateCompany(String companyId, Map<String, dynamic> data) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final res = await ApiClient.patch('/companies/$companyId/', data);
+      final updated = CompanyModel.fromJson(res);
+      final idx = _companies.indexWhere((c) => c.id == companyId);
+      if (idx != -1) {
+        _companies[idx] = updated;
+      }
+      if (_activeCompanyDetail?.id == companyId) {
+        _activeCompanyDetail = updated;
+      }
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _errorMessage = e.toString();
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> updateMyCompany(Map<String, dynamic> data) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final res = await ApiClient.patch('/companies/my-company/', data);
+      final updated = CompanyModel.fromJson(res);
+      _activeCompanyDetail = updated;
+      final idx = _companies.indexWhere((c) => c.id == updated.id);
+      if (idx != -1) {
+        _companies[idx] = updated;
+      }
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _errorMessage = e.toString();
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
   Future<bool> updateCompanyStatus(String companyId, String newStatus) async {
     try {
       final res = await ApiClient.patch('/companies/$companyId/', {

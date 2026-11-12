@@ -94,6 +94,10 @@ class CompanyListCreateView(views.APIView):
                 contact_email=contact_email,
                 contact_phone=contact_phone,
                 default_country_code=data.get('default_country_code', '+91'),
+                logo=data.get('logo', '').strip(),
+                address=data.get('address', '').strip(),
+                gstin=data.get('gstin', '').strip(),
+                website=data.get('website', '').strip(),
                 plan=plan,
                 allowed_menus=allowed_menus,
                 status='ACTIVE'
@@ -155,6 +159,30 @@ class CompanyDetailView(views.APIView):
             return Response({"error": "Company not found"}, status=status.HTTP_404_NOT_FOUND)
 
         # Non-super admin cannot change company status or plan or permissions
+        if not request.user.is_super_admin:
+            for restricted in ['status', 'plan', 'allowed_menus']:
+                if restricted in request.data:
+                    return Response({"error": f"Only super admin can change company {restricted}."}, status=status.HTTP_403_FORBIDDEN)
+
+        serializer = CompanySerializer(company, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+
+class MyCompanyView(views.APIView):
+    permission_classes = [IsCompanyAdmin]
+
+    def get(self, request):
+        company = request.user.company
+        if not company:
+            return Response({"error": "No company assigned"}, status=status.HTTP_404_NOT_FOUND)
+        return Response(CompanySerializer(company).data)
+
+    def patch(self, request):
+        company = request.user.company
+        if not company:
+            return Response({"error": "No company assigned"}, status=status.HTTP_404_NOT_FOUND)
+
         if not request.user.is_super_admin:
             for restricted in ['status', 'plan', 'allowed_menus']:
                 if restricted in request.data:

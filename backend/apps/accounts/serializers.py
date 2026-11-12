@@ -38,6 +38,12 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             'phone': user.phone,
             'company_id': str(company.id) if company else None,
             'company_name': company.name if company else None,
+            'company_logo': company.logo if company else None,
+            'company_phone': company.contact_phone if company else None,
+            'company_email': company.contact_email if company else None,
+            'company_address': company.address if company else None,
+            'company_gstin': company.gstin if company else None,
+            'company_website': company.website if company else None,
             'branch_id': str(user.branch.id) if user.branch else None,
             'branch_name': user.branch.name if user.branch else None,
             'is_staff': user.is_staff,
@@ -52,6 +58,12 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
 
 class UserProfileSerializer(serializers.ModelSerializer):
     company_name = serializers.CharField(source='company.name', read_only=True)
+    company_logo = serializers.CharField(source='company.logo', read_only=True)
+    company_phone = serializers.CharField(source='company.contact_phone', read_only=True)
+    company_email = serializers.CharField(source='company.contact_email', read_only=True)
+    company_address = serializers.CharField(source='company.address', read_only=True)
+    company_gstin = serializers.CharField(source='company.gstin', read_only=True)
+    company_website = serializers.CharField(source='company.website', read_only=True)
     branch_name = serializers.CharField(source='branch.name', read_only=True)
     full_name = serializers.CharField(read_only=True)
     company_allowed_menus = serializers.SerializerMethodField()
@@ -62,7 +74,9 @@ class UserProfileSerializer(serializers.ModelSerializer):
         model = User
         fields = [
             'id', 'email', 'first_name', 'last_name', 'full_name',
-            'phone', 'role', 'company', 'company_name', 'branch', 'branch_name',
+            'phone', 'role', 'company', 'company_name',
+            'company_logo', 'company_phone', 'company_email', 'company_address', 'company_gstin', 'company_website',
+            'branch', 'branch_name',
             'company_allowed_menus', 'can_manage_branches', 'company_plan_name',
             'is_active', 'created_at'
         ]

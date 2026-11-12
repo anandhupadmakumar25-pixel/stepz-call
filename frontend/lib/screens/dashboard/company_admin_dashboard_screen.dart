@@ -17,6 +17,10 @@ import '../branches/branch_management_screen.dart';
 import '../employees/employee_management_screen.dart';
 import '../employees/employee_activity_detail_dialog.dart';
 import '../../providers/billing_provider.dart';
+import '../../providers/company_provider.dart';
+import '../../models/company_model.dart';
+import '../../core/widgets/company_logo_view.dart';
+import '../companies/edit_company_dialog.dart';
 import '../../routes/app_routes.dart';
 import '../quotations/quotation_form_dialog.dart';
 import '../leads/bulk_assign_dialog.dart';
@@ -40,6 +44,7 @@ class _CompanyAdminDashboardScreenState extends State<CompanyAdminDashboardScree
       context.read<LeadProvider>().fetchCategories();
       context.read<EmployeeProvider>().fetchEmployees();
       context.read<BillingProvider>().fetchBillingOverview();
+      context.read<CompanyProvider>().fetchMyCompany();
     });
   }
 
@@ -240,6 +245,7 @@ class _CompanyAdminDashboardScreenState extends State<CompanyAdminDashboardScree
             // 1. EXECUTIVE COMMAND HEADER
             _buildCompanyWorkspaceHeader(
               companyName: companyName,
+              companyLogo: user?.companyLogo,
               userFullName: user?.fullName ?? 'Company Admin',
               branchCount: branchCount,
               agentCount: activeAgents,
@@ -294,6 +300,7 @@ class _CompanyAdminDashboardScreenState extends State<CompanyAdminDashboardScree
   // ==========================================
   Widget _buildCompanyWorkspaceHeader({
     required String companyName,
+    String? companyLogo,
     required String userFullName,
     required int branchCount,
     required int agentCount,
@@ -311,27 +318,18 @@ class _CompanyAdminDashboardScreenState extends State<CompanyAdminDashboardScree
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: isMobile ? 48 : 56,
-                height: isMobile ? 48 : 56,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF0F766E), Color(0xFF0D9488), Color(0xFF14B8A6)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF0D9488).withValues(alpha: 0.3),
-                      blurRadius: 16,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: const Center(
-                  child: Icon(Icons.corporate_fare_rounded, color: Colors.white, size: 28),
-                ),
+              Builder(
+                builder: (context) {
+                  final liveLogo = context.watch<CompanyProvider>().activeCompanyDetail?.logo;
+                  final effectiveLogo = (liveLogo != null && liveLogo.isNotEmpty) ? liveLogo : (companyLogo ?? '');
+                  return CompanyLogoView(
+                    logo: effectiveLogo,
+                    companyName: companyName,
+                    size: isMobile ? 48 : 56,
+                    borderRadius: BorderRadius.circular(16),
+                    borderColor: const Color(0xFFCBD5E1),
+                  );
+                },
               ),
               const SizedBox(width: 16),
               Expanded(
@@ -519,6 +517,41 @@ class _CompanyAdminDashboardScreenState extends State<CompanyAdminDashboardScree
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   backgroundColor: const Color(0xFFF0F9FF),
+                ),
+              ),
+
+              // Button: Edit Profile & Logo
+              OutlinedButton.icon(
+                onPressed: () async {
+                  final compProv = context.read<CompanyProvider>();
+                  final authProv = context.read<AuthProvider>();
+                  CompanyModel? comp = compProv.activeCompanyDetail;
+                  if (comp == null || comp.name.isEmpty) {
+                    comp = await compProv.fetchMyCompany();
+                  }
+                  if (comp == null) {
+                    final u = authProv.currentUser;
+                    comp = CompanyModel(
+                      id: u?.companyId ?? '',
+                      name: u?.companyName ?? '',
+                      logo: u?.companyLogo ?? '',
+                      contactPhone: u?.companyPhone ?? '',
+                      contactEmail: u?.companyEmail ?? '',
+                      address: u?.companyAddress ?? '',
+                      gstin: u?.companyGstin ?? '',
+                      website: u?.companyWebsite ?? '',
+                    );
+                  }
+                  if (!mounted) return;
+                  await EditCompanyDialog.show(context, comp);
+                },
+                icon: const Icon(Icons.edit_rounded, size: 16, color: Color(0xFF4F46E5)),
+                label: Text('Edit Profile & Logo', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF4338CA))),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Color(0xFFC7D2FE), width: 1.0),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  backgroundColor: const Color(0xFFEEF2FF),
                 ),
               ),
 

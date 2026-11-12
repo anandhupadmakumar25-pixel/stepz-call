@@ -10,6 +10,7 @@ import '../../models/invoice_model.dart';
 import '../../models/quotation_model.dart';
 import '../../providers/billing_provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/company_provider.dart';
 import '../quotations/quotation_form_dialog.dart';
 import '../quotations/quotation_detail_dialog.dart';
 import '../quotations/convert_quotation_dialog.dart';
@@ -30,6 +31,38 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
   String _selectedInvoiceStatus = 'ALL';
   String _selectedQuoteStatus = 'ALL';
   final TextEditingController _searchController = TextEditingController();
+
+  void _printInvoiceWithBranding(InvoiceModel invoice) {
+    final authUser = context.read<AuthProvider>().currentUser;
+    final comp = context.read<CompanyProvider>().activeCompanyDetail;
+    final String name = comp?.name.isNotEmpty == true ? comp!.name : ((authUser?.companyName?.isNotEmpty == true) ? authUser!.companyName! : 'Stepz Telecaller CRM');
+    PdfInvoiceService.printInvoice(
+      invoice,
+      companyName: name,
+      companyPhone: comp?.contactPhone.isNotEmpty == true ? comp!.contactPhone : authUser?.companyPhone,
+      companyEmail: comp?.contactEmail.isNotEmpty == true ? comp!.contactEmail : authUser?.companyEmail,
+      companyAddress: comp?.address.isNotEmpty == true ? comp!.address : authUser?.companyAddress,
+      companyGstin: comp?.gstin.isNotEmpty == true ? comp!.gstin : authUser?.companyGstin,
+      companyWebsite: comp?.website.isNotEmpty == true ? comp!.website : authUser?.companyWebsite,
+      companyLogo: comp?.logo.isNotEmpty == true ? comp!.logo : authUser?.companyLogo,
+    );
+  }
+
+  void _printQuotationWithBranding(QuotationModel quotation) {
+    final authUser = context.read<AuthProvider>().currentUser;
+    final comp = context.read<CompanyProvider>().activeCompanyDetail;
+    final String name = comp?.name.isNotEmpty == true ? comp!.name : ((authUser?.companyName?.isNotEmpty == true) ? authUser!.companyName! : 'Stepz Telecaller CRM');
+    PdfInvoiceService.printQuotation(
+      quotation,
+      companyName: name,
+      companyPhone: comp?.contactPhone.isNotEmpty == true ? comp!.contactPhone : authUser?.companyPhone,
+      companyEmail: comp?.contactEmail.isNotEmpty == true ? comp!.contactEmail : authUser?.companyEmail,
+      companyAddress: comp?.address.isNotEmpty == true ? comp!.address : authUser?.companyAddress,
+      companyGstin: comp?.gstin.isNotEmpty == true ? comp!.gstin : authUser?.companyGstin,
+      companyWebsite: comp?.website.isNotEmpty == true ? comp!.website : authUser?.companyWebsite,
+      companyLogo: comp?.logo.isNotEmpty == true ? comp!.logo : authUser?.companyLogo,
+    );
+  }
 
   @override
   void initState() {
@@ -763,7 +796,7 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                     ),
                     icon: const Icon(Icons.print_outlined, size: 15, color: Color(0xFF475569)),
                     label: Text('Print / PDF', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF475569))),
-                    onPressed: () => PdfInvoiceService.printInvoice(invoice),
+                    onPressed: () => _printInvoiceWithBranding(invoice),
                   ),
                   OutlinedButton.icon(
                     style: OutlinedButton.styleFrom(
@@ -959,7 +992,7 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                     ),
                     icon: const Icon(Icons.print_outlined, size: 15, color: Color(0xFF475569)),
                     label: Text('Print / PDF', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF475569))),
-                    onPressed: () => PdfInvoiceService.printQuotation(quote),
+                    onPressed: () => _printQuotationWithBranding(quote),
                   ),
                   OutlinedButton.icon(
                     style: OutlinedButton.styleFrom(

@@ -8,6 +8,10 @@ class CompanyModel {
   final String contactPhone;
   final String status;
   final String defaultCountryCode;
+  final String logo;
+  final String address;
+  final String gstin;
+  final String website;
   final String? planId;
   final String planName;
   final String planCode;
@@ -33,8 +37,12 @@ class CompanyModel {
     this.subdomain,
     required this.contactEmail,
     required this.contactPhone,
-    required this.status,
-    required this.defaultCountryCode,
+    this.status = 'ACTIVE',
+    this.defaultCountryCode = '+91',
+    this.logo = '',
+    this.address = '',
+    this.gstin = '',
+    this.website = '',
     this.planId,
     this.planName = 'Starter Lite',
     this.planCode = 'starter',
@@ -52,7 +60,7 @@ class CompanyModel {
     this.taskCount = 0,
     this.adminName = '',
     this.explicitAdminEmail,
-    required this.createdAt,
+    this.createdAt = '',
   });
 
   bool get isActive => status.toUpperCase() == 'ACTIVE';
@@ -92,6 +100,10 @@ class CompanyModel {
       contactPhone: json['contact_phone'] ?? '',
       status: json['status'] ?? 'ACTIVE',
       defaultCountryCode: json['default_country_code'] ?? '+91',
+      logo: json['logo'] ?? '',
+      address: json['address'] ?? '',
+      gstin: json['gstin'] ?? '',
+      website: json['website'] ?? '',
       planId: json['plan']?.toString(),
       planName: json['plan_name'] ?? 'Starter Lite',
       planCode: json['plan_code'] ?? 'starter',
