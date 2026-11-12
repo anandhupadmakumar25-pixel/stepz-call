@@ -225,7 +225,16 @@ class PdfInvoiceService {
                         return pw.TableRow(
                           decoration: const pw.BoxDecoration(color: PdfColors.amber50),
                           children: [
-                            pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('•', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9, color: PdfColors.amber900))),
+                            pw.Padding(
+                              padding: const pw.EdgeInsets.all(5),
+                              child: pw.Center(
+                                child: pw.Container(
+                                  width: 4,
+                                  height: 4,
+                                  decoration: const pw.BoxDecoration(color: PdfColors.amber900, shape: pw.BoxShape.circle),
+                                ),
+                              ),
+                            ),
                             pw.Padding(
                               padding: const pw.EdgeInsets.all(5),
                               child: pw.Text(
@@ -248,10 +257,10 @@ class PdfInvoiceService {
                           if (showQty)
                             pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(item.quantity.toStringAsFixed(item.quantity.truncateToDouble() == item.quantity ? 0 : 2), textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 8.5))),
                           if (showPrice)
-                            pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('₹${item.unitPrice.toStringAsFixed(2)}', textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 8.5))),
+                            pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Rs. ${item.unitPrice.toStringAsFixed(2)}', textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 8.5))),
                           if (showTax)
                             pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('${item.taxPercent}%', textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 8.5))),
-                          pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('₹${item.total.toStringAsFixed(2)}', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold))),
+                          pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Rs. ${item.total.toStringAsFixed(2)}', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold))),
                         ],
                       );
                     }),
@@ -294,15 +303,15 @@ class PdfInvoiceService {
                       ),
                       child: pw.Column(
                         children: [
-                          _buildPdfAmountRow('Approximate Subtotal', '₹${quotation.subtotal.toStringAsFixed(2)}'),
+                          _buildPdfAmountRow('Approximate Subtotal', 'Rs. ${quotation.subtotal.toStringAsFixed(2)}'),
                           if (quotation.discountAmount > 0)
-                            _buildPdfAmountRow('Discount', '-₹${quotation.discountAmount.toStringAsFixed(2)}', textColor: PdfColors.red700),
+                            _buildPdfAmountRow('Discount', '-Rs. ${quotation.discountAmount.toStringAsFixed(2)}', textColor: PdfColors.red700),
                           if (quotation.taxAmount > 0)
-                            _buildPdfAmountRow('Tax / GST', '₹${quotation.taxAmount.toStringAsFixed(2)}'),
+                            _buildPdfAmountRow('Tax / GST', 'Rs. ${quotation.taxAmount.toStringAsFixed(2)}'),
                           pw.Divider(color: PdfColors.grey400, thickness: 0.5, height: 12),
                           _buildPdfAmountRow(
                             'Approximate Grand Total',
-                            '₹${quotation.grandTotal.toStringAsFixed(2)}',
+                            'Rs. ${quotation.grandTotal.toStringAsFixed(2)}',
                             isBold: true,
                             fontSize: 12,
                             textColor: PdfColors.indigo900,
@@ -558,7 +567,16 @@ class PdfInvoiceService {
                         return pw.TableRow(
                           decoration: const pw.BoxDecoration(color: PdfColors.amber50),
                           children: [
-                            pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('•', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9, color: PdfColors.amber900))),
+                            pw.Padding(
+                              padding: const pw.EdgeInsets.all(5),
+                              child: pw.Center(
+                                child: pw.Container(
+                                  width: 4,
+                                  height: 4,
+                                  decoration: const pw.BoxDecoration(color: PdfColors.amber900, shape: pw.BoxShape.circle),
+                                ),
+                              ),
+                            ),
                             pw.Padding(
                               padding: const pw.EdgeInsets.all(5),
                               child: pw.Text(
@@ -581,10 +599,10 @@ class PdfInvoiceService {
                           if (showQty)
                             pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(item.quantity.toStringAsFixed(item.quantity.truncateToDouble() == item.quantity ? 0 : 2), textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 8.5))),
                           if (showPrice)
-                            pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('₹${item.unitPrice.toStringAsFixed(2)}', textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 8.5))),
+                            pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Rs. ${item.unitPrice.toStringAsFixed(2)}', textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 8.5))),
                           if (showTax)
                             pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('${item.taxPercent}%', textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 8.5))),
-                          pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('₹${item.total.toStringAsFixed(2)}', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold))),
+                          pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Rs. ${item.total.toStringAsFixed(2)}', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold))),
                         ],
                       );
                     }),
@@ -625,29 +643,29 @@ class PdfInvoiceService {
                       ),
                       child: pw.Column(
                         children: [
-                          _buildPdfAmountRow('Fixed Subtotal', '₹${invoice.subtotal.toStringAsFixed(2)}'),
+                          _buildPdfAmountRow('Fixed Subtotal', 'Rs. ${invoice.subtotal.toStringAsFixed(2)}'),
                           if (invoice.discountAmount > 0)
-                            _buildPdfAmountRow('Discount', '-₹${invoice.discountAmount.toStringAsFixed(2)}', textColor: PdfColors.red700),
+                            _buildPdfAmountRow('Discount', '-Rs. ${invoice.discountAmount.toStringAsFixed(2)}', textColor: PdfColors.red700),
                           if (invoice.taxAmount > 0)
-                            _buildPdfAmountRow('Tax / GST', '₹${invoice.taxAmount.toStringAsFixed(2)}'),
+                            _buildPdfAmountRow('Tax / GST', 'Rs. ${invoice.taxAmount.toStringAsFixed(2)}'),
                           pw.Divider(color: PdfColors.grey400, thickness: 0.5, height: 10),
                           _buildPdfAmountRow(
                             'Approximate Grand Total',
-                            '₹${invoice.grandTotal.toStringAsFixed(2)}',
+                            'Rs. ${invoice.grandTotal.toStringAsFixed(2)}',
                             isBold: true,
                             fontSize: 11,
                             textColor: PdfColors.indigo900,
                           ),
                           _buildPdfAmountRow(
                             'Amount Paid',
-                            '₹${invoice.amountPaid.toStringAsFixed(2)}',
+                            'Rs. ${invoice.amountPaid.toStringAsFixed(2)}',
                             fontSize: 10,
                             textColor: PdfColors.green800,
                           ),
                           pw.Divider(color: PdfColors.grey400, thickness: 0.5, height: 10),
                           _buildPdfAmountRow(
                             'Balance Due',
-                            '₹${invoice.balanceDue.toStringAsFixed(2)}',
+                            'Rs. ${invoice.balanceDue.toStringAsFixed(2)}',
                             isBold: true,
                             fontSize: 12,
                             textColor: invoice.balanceDue > 0 ? PdfColors.red800 : PdfColors.green800,
