@@ -14,6 +14,7 @@ import '../quotations/quotation_form_dialog.dart';
 import '../quotations/quotation_detail_dialog.dart';
 import '../quotations/convert_quotation_dialog.dart';
 import 'record_payment_dialog.dart';
+import 'invoice_detail_dialog.dart';
 
 class InvoiceListScreen extends StatefulWidget {
   final int initialTab;
@@ -763,6 +764,21 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                     icon: const Icon(Icons.print_outlined, size: 15, color: Color(0xFF475569)),
                     label: Text('Print / PDF', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF475569))),
                     onPressed: () => PdfInvoiceService.printInvoice(invoice),
+                  ),
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      side: const BorderSide(color: Color(0xFFCBD5E1)),
+                    ),
+                    icon: const Icon(Icons.visibility_outlined, size: 15, color: Color(0xFF475569)),
+                    label: Text('View Details', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF475569))),
+                    onPressed: () {
+                      showDialog(
+                        context: context,
+                        builder: (_) => InvoiceDetailDialog(invoice: invoice),
+                      ).then((_) => _loadData());
+                    },
                   ),
                   if (!isPaid)
                     ElevatedButton.icon(

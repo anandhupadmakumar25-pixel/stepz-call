@@ -16,46 +16,82 @@ class ConvertQuotationDialog extends StatefulWidget {
 }
 
 class _NegotiatedItemEntry {
+  String rowType;
+  final TextEditingController titleController;
   final TextEditingController descriptionController;
   final TextEditingController qtyController;
   final TextEditingController rateController;
   final TextEditingController taxController;
   final TextEditingController discountController;
+  final Map<String, TextEditingController> customControllers = {};
 
   _NegotiatedItemEntry({
-    required String description,
-    required double qty,
-    required double rate,
-    required double tax,
-    required double discount,
-  })  : descriptionController = TextEditingController(text: description),
+    this.rowType = 'ITEM',
+    String title = '',
+    String description = '',
+    double qty = 1,
+    double rate = 0.0,
+    double tax = 18,
+    double discount = 0,
+    Map<String, String> customFields = const {},
+  })  : titleController = TextEditingController(text: title),
+        descriptionController = TextEditingController(text: description),
         qtyController = TextEditingController(text: qty == qty.roundToDouble() ? qty.toInt().toString() : qty.toString()),
         rateController = TextEditingController(text: rate.toStringAsFixed(2)),
         taxController = TextEditingController(text: tax.toStringAsFixed(0)),
-        discountController = TextEditingController(text: discount.toStringAsFixed(0));
+        discountController = TextEditingController(text: discount.toStringAsFixed(0)) {
+    customFields.forEach((k, v) {
+      customControllers[k] = TextEditingController(text: v);
+    });
+  }
+
+  bool get isSectionTitle => rowType == 'SECTION_TITLE';
 
   void dispose() {
+    titleController.dispose();
     descriptionController.dispose();
     qtyController.dispose();
     rateController.dispose();
     taxController.dispose();
     discountController.dispose();
+    for (final c in customControllers.values) {
+      c.dispose();
+    }
   }
 
-  double get quantity => double.tryParse(qtyController.text) ?? 1.0;
-  double get rate => double.tryParse(rateController.text) ?? 0.0;
-  double get taxPercent => double.tryParse(taxController.text) ?? 0.0;
-  double get discountPercent => double.tryParse(discountController.text) ?? 0.0;
+  TextEditingController getCustomController(String col, [VoidCallback? listener]) {
+    if (!customControllers.containsKey(col)) {
+      final ctrl = TextEditingController();
+      if (listener != null) ctrl.addListener(listener);
+      customControllers[col] = ctrl;
+    }
+    return customControllers[col]!;
+  }
 
-  double get baseAmount => quantity * rate;
-  double get itemDiscountAmount => baseAmount * (discountPercent / 100.0);
-  double get taxableAmount => baseAmount - itemDiscountAmount;
-  double get taxAmount => taxableAmount * (taxPercent / 100.0);
-  double get lineTotal => taxableAmount + taxAmount;
+  double get quantity => isSectionTitle ? 0.0 : (double.tryParse(qtyController.text) ?? 1.0);
+  double get rate => isSectionTitle ? 0.0 : (double.tryParse(rateController.text) ?? 0.0);
+  double get taxPercent => isSectionTitle ? 0.0 : (double.tryParse(taxController.text) ?? 0.0);
+  double get discountPercent => isSectionTitle ? 0.0 : (double.tryParse(discountController.text) ?? 0.0);
+
+  double get baseAmount => isSectionTitle ? 0.0 : (quantity * rate);
+  double get itemDiscountAmount => isSectionTitle ? 0.0 : (baseAmount * (discountPercent / 100.0));
+  double get taxableAmount => isSectionTitle ? 0.0 : (baseAmount - itemDiscountAmount);
+  double get taxAmount => isSectionTitle ? 0.0 : (taxableAmount * (taxPercent / 100.0));
+  double get lineTotal => isSectionTitle ? 0.0 : (taxableAmount + taxAmount);
+
+  bool get isValid => isSectionTitle ? titleController.text.trim().isNotEmpty : descriptionController.text.trim().isNotEmpty;
 
   QuotationItemModel toModel() {
+    final customFields = <String, String>{};
+    customControllers.forEach((key, controller) {
+      customFields[key] = controller.text.trim();
+    });
+
     return QuotationItemModel(
+      rowType: rowType,
+      title: titleController.text.trim(),
       description: descriptionController.text.trim(),
+      customFields: customFields,
       quantity: quantity,
       unitPrice: rate,
       taxPercent: taxPercent,
@@ -67,6 +103,7 @@ class _NegotiatedItemEntry {
 
 class _ConvertQuotationDialogState extends State<ConvertQuotationDialog> {
   final _formKey = GlobalKey<FormState>();
+  final List<String> _customColumns = [];
   final List<_NegotiatedItemEntry> _items = [];
   final TextEditingController _negotiationDiscountController = TextEditingController(text: '0.00');
   final TextEditingController _notesController = TextEditingController();
@@ -78,30 +115,146 @@ class _ConvertQuotationDialogState extends State<ConvertQuotationDialog> {
     super.initState();
     final q = widget.quotation;
     _notesController.text = q.notes;
+    if (q.customColumns.isNotEmpty) {
+      _customColumns.addAll(q.customColumns);
+    }
 
     if (q.items.isNotEmpty) {
       for (final it in q.items) {
-        _items.add(
-          _NegotiatedItemEntry(
-            description: it.description,
-            qty: it.quantity,
-            rate: it.unitPrice,
-            tax: it.taxPercent,
-            discount: it.discountPercent,
-          ),
+        final entry = _NegotiatedItemEntry(
+          rowType: it.rowType,
+          title: it.title,
+          description: it.description,
+          qty: it.quantity,
+          rate: it.unitPrice,
+          tax: it.taxPercent,
+          discount: it.discountPercent,
+          customFields: it.customFields,
         );
+        _bindListeners(entry);
+        _items.add(entry);
       }
     } else {
-      _items.add(
-        _NegotiatedItemEntry(
-          description: 'Sales Order Item',
-          qty: 1,
-          rate: q.subtotal > 0 ? q.subtotal : q.grandTotal,
-          tax: 18,
-          discount: 0,
-        ),
+      final entry = _NegotiatedItemEntry(
+        description: 'Sales Order Item',
+        qty: 1,
+        rate: q.subtotal > 0 ? q.subtotal : q.grandTotal,
+        tax: 18,
+        discount: 0,
       );
+      _bindListeners(entry);
+      _items.add(entry);
     }
+  }
+
+  void _bindListeners(_NegotiatedItemEntry it) {
+    it.titleController.addListener(() => setState(() {}));
+    it.descriptionController.addListener(() => setState(() {}));
+    it.qtyController.addListener(() => setState(() {}));
+    it.rateController.addListener(() => setState(() {}));
+    it.taxController.addListener(() => setState(() {}));
+    it.discountController.addListener(() => setState(() {}));
+  }
+
+  void _addSectionTitleRow() {
+    final entry = _NegotiatedItemEntry(rowType: 'SECTION_TITLE');
+    _bindListeners(entry);
+    setState(() => _items.add(entry));
+  }
+
+  void _moveRowUp(int index) {
+    if (index > 0) {
+      setState(() {
+        final item = _items.removeAt(index);
+        _items.insert(index - 1, item);
+      });
+    }
+  }
+
+  void _moveRowDown(int index) {
+    if (index < _items.length - 1) {
+      setState(() {
+        final item = _items.removeAt(index);
+        _items.insert(index + 1, item);
+      });
+    }
+  }
+
+  Future<void> _showAddColumnDialog() async {
+    final controller = TextEditingController();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            const Icon(Icons.view_column_rounded, color: Color(0xFF2563EB), size: 20),
+            const SizedBox(width: 8),
+            Text('Add Custom Table Column', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 16)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Enter column header title (e.g. HSN/SAC, Unit, Size, Delivery, Warranty):',
+              style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              style: GoogleFonts.inter(fontSize: 13),
+              decoration: const InputDecoration(
+                hintText: 'e.g. HSN Code / Unit / Warranty',
+                border: OutlineInputBorder(),
+                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              ),
+              onSubmitted: (val) {
+                if (val.trim().isNotEmpty) {
+                  Navigator.of(ctx).pop(val.trim());
+                }
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2563EB)),
+            onPressed: () {
+              if (controller.text.trim().isNotEmpty) {
+                Navigator.of(ctx).pop(controller.text.trim());
+              }
+            },
+            child: const Text('Add Column', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (name != null && name.isNotEmpty && !_customColumns.contains(name)) {
+      setState(() {
+        _customColumns.add(name);
+        for (var row in _items) {
+          row.getCustomController(name, () => setState(() {}));
+        }
+      });
+    }
+  }
+
+  void _removeCustomColumn(String col) {
+    setState(() {
+      _customColumns.remove(col);
+      for (var row in _items) {
+        row.customControllers[col]?.dispose();
+        row.customControllers.remove(col);
+      }
+    });
   }
 
   @override
@@ -114,13 +267,13 @@ class _ConvertQuotationDialogState extends State<ConvertQuotationDialog> {
     super.dispose();
   }
 
-  double get _itemsBaseSubtotal => _items.fold(0.0, (acc, it) => acc + it.baseAmount);
-  double get _itemsDiscountTotal => _items.fold(0.0, (acc, it) => acc + it.itemDiscountAmount);
+  double get _itemsBaseSubtotal => _items.where((it) => !it.isSectionTitle).fold(0.0, (acc, it) => acc + it.baseAmount);
+  double get _itemsDiscountTotal => _items.where((it) => !it.isSectionTitle).fold(0.0, (acc, it) => acc + it.itemDiscountAmount);
   double get _specialNegotiationDiscount => double.tryParse(_negotiationDiscountController.text) ?? 0.0;
   double get _totalDiscount => _itemsDiscountTotal + _specialNegotiationDiscount;
 
   double get _taxableSubtotal => (_itemsBaseSubtotal - _totalDiscount).clamp(0.0, double.infinity);
-  double get _calculatedTax => _items.fold(0.0, (acc, it) => acc + it.taxAmount);
+  double get _calculatedTax => _items.where((it) => !it.isSectionTitle).fold(0.0, (acc, it) => acc + it.taxAmount);
   double get _finalGrandTotal => (_taxableSubtotal + _calculatedTax).clamp(0.0, double.infinity);
 
   Future<void> _submitConversion({bool useOriginalQuote = false}) async {
@@ -132,6 +285,7 @@ class _ConvertQuotationDialogState extends State<ConvertQuotationDialog> {
     if (useOriginalQuote) {
       overrideData = {
         'items': q.items.map((it) => it.toJson()).toList(),
+        'custom_columns': q.customColumns,
         'subtotal': q.subtotal,
         'tax_amount': q.taxAmount,
         'discount_amount': q.discountAmount,
@@ -142,9 +296,10 @@ class _ConvertQuotationDialogState extends State<ConvertQuotationDialog> {
     } else {
       overrideData = {
         'items': _items
-            .where((i) => i.descriptionController.text.trim().isNotEmpty)
+            .where((i) => i.isValid)
             .map((i) => i.toModel().toJson())
             .toList(),
+        'custom_columns': _customColumns,
         'subtotal': _itemsBaseSubtotal,
         'tax_amount': _calculatedTax,
         'discount_amount': _totalDiscount,
@@ -169,6 +324,41 @@ class _ConvertQuotationDialogState extends State<ConvertQuotationDialog> {
         );
       }
     }
+  }
+
+  Widget _buildRowControls(int idx) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IconButton(
+          icon: const Icon(Icons.arrow_upward_rounded, size: 14, color: Color(0xFF64748B)),
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
+          tooltip: 'Move Up',
+          onPressed: idx > 0 ? () => _moveRowUp(idx) : null,
+        ),
+        IconButton(
+          icon: const Icon(Icons.arrow_downward_rounded, size: 14, color: Color(0xFF64748B)),
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
+          tooltip: 'Move Down',
+          onPressed: idx < _items.length - 1 ? () => _moveRowDown(idx) : null,
+        ),
+        IconButton(
+          icon: const Icon(Icons.remove_circle_outline_rounded, size: 16, color: Color(0xFFEF4444)),
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 22, minHeight: 22),
+          tooltip: 'Delete Row',
+          onPressed: _items.length > 1
+              ? () {
+                  setState(() {
+                    _items.removeAt(idx).dispose();
+                  });
+                }
+              : null,
+        ),
+      ],
+    );
   }
 
   @override
@@ -270,6 +460,65 @@ class _ConvertQuotationDialogState extends State<ConvertQuotationDialog> {
                 ),
                 const SizedBox(height: 14),
 
+                // Editable Items Table Header Toolbar
+                Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 10,
+                  runSpacing: 6,
+                  children: [
+                    Text(
+                      'Bill Items & Custom Specifications',
+                      style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFF1E293B)),
+                    ),
+                    Wrap(
+                      spacing: 8,
+                      children: [
+                        OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            side: const BorderSide(color: Color(0xFF6366F1)),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          onPressed: _showAddColumnDialog,
+                          icon: const Icon(Icons.view_column_rounded, size: 14, color: Color(0xFF4F46E5)),
+                          label: Text('+ Add Column', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF4F46E5))),
+                        ),
+                        OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            side: const BorderSide(color: Color(0xFFD97706)),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          onPressed: _addSectionTitleRow,
+                          icon: const Icon(Icons.title_rounded, size: 14, color: Color(0xFFB45309)),
+                          label: Text('+ Add Title Row', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFFB45309))),
+                        ),
+                        ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF2563EB),
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          onPressed: () {
+                            final entry = _NegotiatedItemEntry(description: '', qty: 1, rate: 0.0, tax: 18, discount: 0);
+                            for (final col in _customColumns) {
+                              entry.getCustomController(col, () => setState(() {}));
+                            }
+                            _bindListeners(entry);
+                            setState(() => _items.add(entry));
+                          },
+                          icon: const Icon(Icons.add_rounded, size: 14),
+                          label: Text('+ Add Line Item', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700)),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+
                 // Editable Items Table Header
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -279,7 +528,36 @@ class _ConvertQuotationDialogState extends State<ConvertQuotationDialog> {
                   ),
                   child: Row(
                     children: [
+                      SizedBox(
+                        width: 28,
+                        child: Text('#', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF475569))),
+                      ),
                       Expanded(flex: 5, child: Text('ITEM / SERVICE DESCRIPTION', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF475569)))),
+                      for (final col in _customColumns) ...[
+                        const SizedBox(width: 8),
+                        Expanded(
+                          flex: 2,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  col,
+                                  style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF4338CA)),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              InkWell(
+                                onTap: () => _removeCustomColumn(col),
+                                child: const Padding(
+                                  padding: EdgeInsets.only(left: 4),
+                                  child: Icon(Icons.close_rounded, size: 12, color: Color(0xFFEF4444)),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                       const SizedBox(width: 8),
                       Expanded(flex: 2, child: Text('QTY', textAlign: TextAlign.center, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF475569)))),
                       const SizedBox(width: 8),
@@ -288,7 +566,7 @@ class _ConvertQuotationDialogState extends State<ConvertQuotationDialog> {
                       Expanded(flex: 2, child: Text('GST %', textAlign: TextAlign.center, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF475569)))),
                       const SizedBox(width: 8),
                       Expanded(flex: 3, child: Text('TOTAL (₹)', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF475569)))),
-                      const SizedBox(width: 32),
+                      const SizedBox(width: 68),
                     ],
                   ),
                 ),
@@ -301,6 +579,55 @@ class _ConvertQuotationDialogState extends State<ConvertQuotationDialog> {
                     separatorBuilder: (_, __) => const SizedBox(height: 8),
                     itemBuilder: (context, idx) {
                       final item = _items[idx];
+
+                      if (item.isSectionTitle) {
+                        return Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFFBEB),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border(
+                              left: const BorderSide(color: Color(0xFFF59E0B), width: 4),
+                              top: BorderSide(color: Colors.amber.shade200, width: 0.5),
+                              right: BorderSide(color: Colors.amber.shade200, width: 0.5),
+                              bottom: BorderSide(color: Colors.amber.shade200, width: 0.5),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              SizedBox(
+                                width: 28,
+                                child: Text('${idx + 1}', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFFB45309))),
+                              ),
+                              const Icon(Icons.title_rounded, size: 16, color: Color(0xFFD97706)),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: TextField(
+                                  controller: item.titleController,
+                                  style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.bold, color: const Color(0xFF0F172A)),
+                                  decoration: const InputDecoration(
+                                    isDense: true,
+                                    border: InputBorder.none,
+                                    hintText: 'Enter Section / Title Header...',
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFEF3C7),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text('TITLE ROW', style: GoogleFonts.inter(fontSize: 8, fontWeight: FontWeight.w800, color: const Color(0xFF92400E))),
+                              ),
+                              const SizedBox(width: 8),
+                              _buildRowControls(idx),
+                            ],
+                          ),
+                        );
+                      }
+
                       return Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                         decoration: BoxDecoration(
@@ -310,6 +637,10 @@ class _ConvertQuotationDialogState extends State<ConvertQuotationDialog> {
                         ),
                         child: Row(
                           children: [
+                            SizedBox(
+                              width: 28,
+                              child: Text('${idx + 1}', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B))),
+                            ),
                             // Description
                             Expanded(
                               flex: 5,
@@ -323,6 +654,23 @@ class _ConvertQuotationDialogState extends State<ConvertQuotationDialog> {
                                 ),
                               ),
                             ),
+                            // Custom Columns inputs
+                            for (final col in _customColumns) ...[
+                              const SizedBox(width: 8),
+                              Expanded(
+                                flex: 2,
+                                child: TextField(
+                                  controller: item.getCustomController(col, () => setState(() {})),
+                                  style: GoogleFonts.inter(fontSize: 12),
+                                  decoration: InputDecoration(
+                                    isDense: true,
+                                    border: const OutlineInputBorder(),
+                                    hintText: col,
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                                  ),
+                                ),
+                              ),
+                            ],
                             const SizedBox(width: 8),
                             // Qty
                             Expanded(
@@ -331,7 +679,6 @@ class _ConvertQuotationDialogState extends State<ConvertQuotationDialog> {
                                 controller: item.qtyController,
                                 textAlign: TextAlign.center,
                                 keyboardType: TextInputType.number,
-                                onChanged: (_) => setState(() {}),
                                 style: GoogleFonts.robotoMono(fontSize: 12.5, fontWeight: FontWeight.bold),
                                 decoration: const InputDecoration(
                                   isDense: true,
@@ -348,7 +695,6 @@ class _ConvertQuotationDialogState extends State<ConvertQuotationDialog> {
                                 controller: item.rateController,
                                 textAlign: TextAlign.right,
                                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                onChanged: (_) => setState(() {}),
                                 style: GoogleFonts.robotoMono(fontSize: 12.5, fontWeight: FontWeight.bold),
                                 decoration: const InputDecoration(
                                   isDense: true,
@@ -365,7 +711,6 @@ class _ConvertQuotationDialogState extends State<ConvertQuotationDialog> {
                                 controller: item.taxController,
                                 textAlign: TextAlign.center,
                                 keyboardType: TextInputType.number,
-                                onChanged: (_) => setState(() {}),
                                 style: GoogleFonts.robotoMono(fontSize: 12),
                                 decoration: const InputDecoration(
                                   isDense: true,
@@ -384,35 +729,12 @@ class _ConvertQuotationDialogState extends State<ConvertQuotationDialog> {
                                 style: GoogleFonts.robotoMono(fontSize: 13, fontWeight: FontWeight.bold, color: const Color(0xFF0F172A)),
                               ),
                             ),
-                            IconButton(
-                              icon: const Icon(Icons.remove_circle_outline_rounded, size: 18, color: Color(0xFFEF4444)),
-                              onPressed: _items.length > 1
-                                  ? () {
-                                      setState(() {
-                                        _items.removeAt(idx).dispose();
-                                      });
-                                    }
-                                  : null,
-                            ),
+                            const SizedBox(width: 8),
+                            _buildRowControls(idx),
                           ],
                         ),
                       );
                     },
-                  ),
-                ),
-                const SizedBox(height: 10),
-
-                // Add item button
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton.icon(
-                    onPressed: () {
-                      setState(() {
-                        _items.add(_NegotiatedItemEntry(description: '', qty: 1, rate: 0.0, tax: 18, discount: 0));
-                      });
-                    },
-                    icon: const Icon(Icons.add_rounded, size: 16, color: Color(0xFF2563EB)),
-                    label: Text('+ Add Line Item', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF2563EB))),
                   ),
                 ),
                 const SizedBox(height: 10),

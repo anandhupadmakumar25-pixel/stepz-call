@@ -36,6 +36,7 @@ class Quotation(TenantModel):
     valid_until = models.DateField(null=True, blank=True)
 
     items = models.JSONField(default=list, blank=True)
+    custom_columns = models.JSONField(default=list, blank=True)
     subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
     tax_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
     discount_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
@@ -90,6 +91,7 @@ class Invoice(TenantModel):
     due_date = models.DateField(null=True, blank=True)
 
     items = models.JSONField(default=list, blank=True)
+    custom_columns = models.JSONField(default=list, blank=True)
     subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
     tax_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
     discount_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)

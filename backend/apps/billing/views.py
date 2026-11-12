@@ -149,6 +149,8 @@ class QuotationListCreateView(views.APIView):
             if isinstance(items, list):
                 for it in items:
                     if isinstance(it, dict):
+                        if it.get('row_type') == 'SECTION_TITLE':
+                            continue
                         p_name = (it.get('description') or it.get('name') or '').strip()
                         rate = it.get('unit_price') or it.get('rate')
                         tax = it.get('tax_percent') or 18.0
@@ -241,6 +243,7 @@ class QuotationConvertToInvoiceView(views.APIView):
             return Response({"error": "Unauthorized. You can only convert your own quotations."}, status=status.HTTP_403_FORBIDDEN)
 
         items = request.data.get('items', quote.items)
+        custom_columns = request.data.get('custom_columns', quote.custom_columns or [])
         subtotal = request.data.get('subtotal', quote.subtotal)
         tax_amount = request.data.get('tax_amount', quote.tax_amount)
         discount_amount = request.data.get('discount_amount', quote.discount_amount)
@@ -261,6 +264,7 @@ class QuotationConvertToInvoiceView(views.APIView):
             created_by=request.user,
             due_date=due_date,
             items=items,
+            custom_columns=custom_columns,
             subtotal=subtotal,
             tax_amount=tax_amount,
             discount_amount=discount_amount,
@@ -323,6 +327,8 @@ class InvoiceListCreateView(views.APIView):
             if isinstance(items, list):
                 for it in items:
                     if isinstance(it, dict):
+                        if it.get('row_type') == 'SECTION_TITLE':
+                            continue
                         p_name = (it.get('description') or it.get('name') or '').strip()
                         rate = it.get('unit_price') or it.get('rate')
                         tax = it.get('tax_percent') or 18.0

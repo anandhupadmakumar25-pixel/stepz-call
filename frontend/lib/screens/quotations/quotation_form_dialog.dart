@@ -29,34 +29,64 @@ class QuotationFormDialog extends StatefulWidget {
 }
 
 class _LineItemEntry {
+  String rowType; // 'ITEM' or 'SECTION_TITLE'
+  final TextEditingController titleController = TextEditingController();
   final TextEditingController descriptionController = TextEditingController();
   final TextEditingController qtyController = TextEditingController(text: '1');
   final TextEditingController rateController = TextEditingController(text: '0.00');
   final TextEditingController taxController = TextEditingController(text: '18');
   final TextEditingController discountController = TextEditingController(text: '0');
+  final Map<String, TextEditingController> customControllers = {};
+
+  _LineItemEntry({this.rowType = 'ITEM'});
+
+  bool get isSectionTitle => rowType == 'SECTION_TITLE';
 
   void dispose() {
+    titleController.dispose();
     descriptionController.dispose();
     qtyController.dispose();
     rateController.dispose();
     taxController.dispose();
     discountController.dispose();
+    for (final c in customControllers.values) {
+      c.dispose();
+    }
   }
 
-  double get quantity => double.tryParse(qtyController.text) ?? 1.0;
-  double get rate => double.tryParse(rateController.text) ?? 0.0;
-  double get taxPercent => double.tryParse(taxController.text) ?? 0.0;
-  double get discountPercent => double.tryParse(discountController.text) ?? 0.0;
+  TextEditingController getCustomController(String col, [VoidCallback? listener]) {
+    if (!customControllers.containsKey(col)) {
+      final ctrl = TextEditingController();
+      if (listener != null) ctrl.addListener(listener);
+      customControllers[col] = ctrl;
+    }
+    return customControllers[col]!;
+  }
 
-  double get baseAmount => quantity * rate;
-  double get discountAmount => baseAmount * (discountPercent / 100.0);
-  double get taxableAmount => baseAmount - discountAmount;
-  double get taxAmount => taxableAmount * (taxPercent / 100.0);
-  double get lineTotal => taxableAmount + taxAmount;
+  double get quantity => isSectionTitle ? 0.0 : (double.tryParse(qtyController.text) ?? 1.0);
+  double get rate => isSectionTitle ? 0.0 : (double.tryParse(rateController.text) ?? 0.0);
+  double get taxPercent => isSectionTitle ? 0.0 : (double.tryParse(taxController.text) ?? 0.0);
+  double get discountPercent => isSectionTitle ? 0.0 : (double.tryParse(discountController.text) ?? 0.0);
+
+  double get baseAmount => isSectionTitle ? 0.0 : (quantity * rate);
+  double get discountAmount => isSectionTitle ? 0.0 : (baseAmount * (discountPercent / 100.0));
+  double get taxableAmount => isSectionTitle ? 0.0 : (baseAmount - discountAmount);
+  double get taxAmount => isSectionTitle ? 0.0 : (taxableAmount * (taxPercent / 100.0));
+  double get lineTotal => isSectionTitle ? 0.0 : (taxableAmount + taxAmount);
+
+  bool get isValid => isSectionTitle ? titleController.text.trim().isNotEmpty : descriptionController.text.trim().isNotEmpty;
 
   QuotationItemModel toModel() {
+    final customFields = <String, String>{};
+    customControllers.forEach((key, controller) {
+      customFields[key] = controller.text.trim();
+    });
+
     return QuotationItemModel(
+      rowType: rowType,
+      title: titleController.text.trim(),
       description: descriptionController.text.trim(),
+      customFields: customFields,
       quantity: quantity,
       unitPrice: rate,
       taxPercent: taxPercent,
@@ -79,6 +109,7 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
   late TextEditingController _termsController;
   DateTime? _validUntil;
 
+  final List<String> _customColumns = [];
   final List<_LineItemEntry> _items = [];
   bool _isSaving = false;
 
@@ -111,14 +142,31 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
     );
     _validUntil = DateTime.now().add(const Duration(days: 15));
 
+    if (editQ != null && editQ.customColumns.isNotEmpty) {
+      _customColumns.addAll(editQ.customColumns);
+    }
+
     if (editQ != null && editQ.items.isNotEmpty) {
       for (final it in editQ.items) {
-        final row = _LineItemEntry();
-        row.descriptionController.text = it.description;
-        row.qtyController.text = it.quantity == it.quantity.roundToDouble() ? it.quantity.toInt().toString() : it.quantity.toString();
-        row.rateController.text = it.unitPrice.toStringAsFixed(2);
-        row.taxController.text = it.taxPercent.toStringAsFixed(0);
-        row.discountController.text = it.discountPercent.toStringAsFixed(0);
+        final row = _LineItemEntry(rowType: it.rowType);
+        if (it.isSectionTitle) {
+          row.titleController.text = it.title.isNotEmpty ? it.title : it.description;
+          row.titleController.addListener(() => setState(() {}));
+        } else {
+          row.descriptionController.text = it.description;
+          row.qtyController.text = it.quantity == it.quantity.roundToDouble() ? it.quantity.toInt().toString() : it.quantity.toString();
+          row.rateController.text = it.unitPrice.toStringAsFixed(2);
+          row.taxController.text = it.taxPercent.toStringAsFixed(0);
+          row.discountController.text = it.discountPercent.toStringAsFixed(0);
+          it.customFields.forEach((col, val) {
+            row.getCustomController(col, () => setState(() {})).text = val;
+          });
+          row.descriptionController.addListener(() => setState(() {}));
+          row.qtyController.addListener(() => setState(() {}));
+          row.rateController.addListener(() => setState(() {}));
+          row.taxController.addListener(() => setState(() {}));
+          row.discountController.addListener(() => setState(() {}));
+        }
         _items.add(row);
       }
     } else {
@@ -161,12 +209,117 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
     if (price != null) item.rateController.text = price.toStringAsFixed(2);
     if (tax != null) item.taxController.text = tax.toStringAsFixed(0);
 
+    for (final col in _customColumns) {
+      item.getCustomController(col, () => setState(() {}));
+    }
+
     item.descriptionController.addListener(() => setState(() {}));
     item.qtyController.addListener(() => setState(() {}));
     item.rateController.addListener(() => setState(() {}));
     item.taxController.addListener(() => setState(() {}));
     item.discountController.addListener(() => setState(() {}));
     _items.add(item);
+  }
+
+  void _addSectionTitleRow() {
+    final item = _LineItemEntry(rowType: 'SECTION_TITLE');
+    item.titleController.addListener(() => setState(() {}));
+    setState(() => _items.add(item));
+  }
+
+  void _moveRowUp(int index) {
+    if (index > 0) {
+      setState(() {
+        final item = _items.removeAt(index);
+        _items.insert(index - 1, item);
+      });
+    }
+  }
+
+  void _moveRowDown(int index) {
+    if (index < _items.length - 1) {
+      setState(() {
+        final item = _items.removeAt(index);
+        _items.insert(index + 1, item);
+      });
+    }
+  }
+
+  Future<void> _showAddColumnDialog() async {
+    final controller = TextEditingController();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            const Icon(Icons.view_column_rounded, color: Color(0xFF2563EB), size: 20),
+            const SizedBox(width: 8),
+            Text('Add Custom Table Column', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 16)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Enter column header title (e.g. HSN/SAC, Unit, Size, Phase, Delivery, Warranty):',
+              style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              style: GoogleFonts.inter(fontSize: 13),
+              decoration: const InputDecoration(
+                hintText: 'e.g. HSN Code / Unit / Warranty',
+                border: OutlineInputBorder(),
+                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              ),
+              onSubmitted: (val) {
+                if (val.trim().isNotEmpty) {
+                  Navigator.of(ctx).pop(val.trim());
+                }
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2563EB)),
+            onPressed: () {
+              if (controller.text.trim().isNotEmpty) {
+                Navigator.of(ctx).pop(controller.text.trim());
+              }
+            },
+            child: const Text('Add Column', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (name != null && name.isNotEmpty && !_customColumns.contains(name)) {
+      setState(() {
+        _customColumns.add(name);
+        for (var row in _items) {
+          row.getCustomController(name, () => setState(() {}));
+        }
+      });
+    }
+  }
+
+  void _removeCustomColumn(String col) {
+    setState(() {
+      _customColumns.remove(col);
+      for (var row in _items) {
+        row.customControllers[col]?.dispose();
+        row.customControllers.remove(col);
+      }
+    });
   }
 
   void _removeItemRow(int index) {
@@ -191,17 +344,18 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
     super.dispose();
   }
 
-  double get _calculatedSubtotal => _items.fold(0.0, (acc, item) => acc + item.baseAmount);
-  double get _calculatedDiscount => _items.fold(0.0, (acc, item) => acc + item.discountAmount);
-  double get _calculatedTax => _items.fold(0.0, (acc, item) => acc + item.taxAmount);
-  double get _calculatedGrandTotal => _items.fold(0.0, (acc, item) => acc + item.lineTotal);
+  double get _calculatedSubtotal => _items.where((i) => !i.isSectionTitle).fold(0.0, (acc, item) => acc + item.baseAmount);
+  double get _calculatedDiscount => _items.where((i) => !i.isSectionTitle).fold(0.0, (acc, item) => acc + item.discountAmount);
+  double get _calculatedTax => _items.where((i) => !i.isSectionTitle).fold(0.0, (acc, item) => acc + item.taxAmount);
+  double get _calculatedGrandTotal => _items.where((i) => !i.isSectionTitle).fold(0.0, (acc, item) => acc + item.lineTotal);
 
   Future<QuotationModel?> _saveQuotation() async {
     if (!_formKey.currentState!.validate()) return null;
 
-    if (_items.isEmpty || _items.every((i) => i.descriptionController.text.trim().isEmpty)) {
+    final validItems = _items.where((i) => i.isValid).toList();
+    if (validItems.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please add at least one line item with a description.')),
+        const SnackBar(content: Text('Please add at least one line item or section title.')),
       );
       return null;
     }
@@ -216,10 +370,8 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
       'customer_email': _emailController.text.trim(),
       'customer_address': _addressController.text.trim(),
       if (_validUntil != null) 'valid_until': _validUntil!.toIso8601String().split('T').first,
-      'items': _items
-          .where((i) => i.descriptionController.text.trim().isNotEmpty)
-          .map((i) => i.toModel().toJson())
-          .toList(),
+      'custom_columns': _customColumns,
+      'items': validItems.map((i) => i.toModel().toJson()).toList(),
       'subtotal': _calculatedSubtotal,
       'discount_amount': _calculatedDiscount,
       'tax_amount': _calculatedTax,
@@ -239,9 +391,10 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
   Future<InvoiceModel?> _saveInvoice() async {
     if (!_formKey.currentState!.validate()) return null;
 
-    if (_items.isEmpty || _items.every((i) => i.descriptionController.text.trim().isEmpty)) {
+    final validItems = _items.where((i) => i.isValid).toList();
+    if (validItems.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please add at least one line item with a description.')),
+        const SnackBar(content: Text('Please add at least one line item or section title.')),
       );
       return null;
     }
@@ -256,10 +409,8 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
       'customer_email': _emailController.text.trim(),
       'customer_address': _addressController.text.trim(),
       if (_validUntil != null) 'due_date': _validUntil!.toIso8601String().split('T').first,
-      'items': _items
-          .where((i) => i.descriptionController.text.trim().isNotEmpty)
-          .map((i) => i.toModel().toJson())
-          .toList(),
+      'custom_columns': _customColumns,
+      'items': validItems.map((i) => i.toModel().toJson()).toList(),
       'subtotal': _calculatedSubtotal,
       'discount_amount': _calculatedDiscount,
       'tax_amount': _calculatedTax,
@@ -725,14 +876,18 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                           const SizedBox(height: 14),
                         ],
 
-                        // Line Items Table Header
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        // Line Items Table Header Toolbar
+                        Wrap(
+                          alignment: WrapAlignment.spaceBetween,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: 10,
+                          runSpacing: 8,
                           children: [
                             Row(
+                              mainAxisSize: MainAxisSize.min,
                               children: [
                                 Text(
-                                  'Quotation Products & Approximate Pricing',
+                                  _createAsInvoice ? 'Invoice Items & Custom Columns' : 'Quotation Items & Custom Columns',
                                   style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, color: const Color(0xFF1E293B)),
                                 ),
                                 const SizedBox(width: 8),
@@ -749,17 +904,43 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                                 ),
                               ],
                             ),
-                            ElevatedButton.icon(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF2563EB),
-                                foregroundColor: Colors.white,
-                                elevation: 0,
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                              ),
-                              onPressed: () => setState(() => _addItemRow()),
-                              icon: const Icon(Icons.add_rounded, size: 16),
-                              label: Text('Add Next Product (+)', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700)),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 6,
+                              children: [
+                                OutlinedButton.icon(
+                                  style: OutlinedButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                    side: const BorderSide(color: Color(0xFF6366F1)),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                  ),
+                                  onPressed: _showAddColumnDialog,
+                                  icon: const Icon(Icons.view_column_rounded, size: 15, color: Color(0xFF4F46E5)),
+                                  label: Text('+ Add Column', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF4F46E5))),
+                                ),
+                                OutlinedButton.icon(
+                                  style: OutlinedButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                    side: const BorderSide(color: Color(0xFFD97706)),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                  ),
+                                  onPressed: _addSectionTitleRow,
+                                  icon: const Icon(Icons.title_rounded, size: 15, color: Color(0xFFB45309)),
+                                  label: Text('+ Add Title Row', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFFB45309))),
+                                ),
+                                ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF2563EB),
+                                    foregroundColor: Colors.white,
+                                    elevation: 0,
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                  ),
+                                  onPressed: () => setState(() => _addItemRow()),
+                                  icon: const Icon(Icons.add_rounded, size: 15),
+                                  label: Text('+ Add Item Row', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700)),
+                                ),
+                              ],
                             ),
                           ],
                         ),
@@ -783,16 +964,48 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                                 ),
                                 child: Row(
                                   children: [
-                                    Expanded(flex: 5, child: Text('Product / Type to Search', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF475569)))),
+                                    SizedBox(
+                                      width: 36,
+                                      child: Text('#', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF475569))),
+                                    ),
+                                    Expanded(
+                                      flex: 5,
+                                      child: Text('Product / Type to Search', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF475569))),
+                                    ),
+                                    for (final col in _customColumns) ...[
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        flex: 2,
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Flexible(
+                                              child: Text(
+                                                col,
+                                                style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF4338CA)),
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                            InkWell(
+                                              onTap: () => _removeCustomColumn(col),
+                                              child: const Padding(
+                                                padding: EdgeInsets.only(left: 4),
+                                                child: Icon(Icons.close_rounded, size: 12, color: Color(0xFFEF4444)),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
                                     const SizedBox(width: 8),
                                     Expanded(flex: 2, child: Text('Qty', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF475569)))),
                                     const SizedBox(width: 8),
-                                    Expanded(flex: 2, child: Text('Approx. Price (₹)', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF475569)))),
+                                    Expanded(flex: 2, child: Text('Price (₹)', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF475569)))),
                                     const SizedBox(width: 8),
                                     Expanded(flex: 2, child: Text('Tax %', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF475569)))),
                                     const SizedBox(width: 8),
                                     Expanded(flex: 2, child: Text('Total (₹)', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF475569)))),
-                                    const SizedBox(width: 32),
+                                    const SizedBox(width: 76),
                                   ],
                                 ),
                               ),
@@ -804,10 +1017,64 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                                 separatorBuilder: (_, __) => const Divider(color: Color(0xFFF1F5F9), height: 1),
                                 itemBuilder: (context, idx) {
                                   final item = _items[idx];
+
+                                  // SECTION TITLE ROW
+                                  if (item.isSectionTitle) {
+                                    return Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFFFFBEB),
+                                        border: Border(
+                                          left: const BorderSide(color: Color(0xFFF59E0B), width: 4),
+                                          bottom: BorderSide(color: Colors.amber.shade100, width: 0.5),
+                                        ),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          SizedBox(
+                                            width: 36,
+                                            child: Text('${idx + 1}', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFFB45309))),
+                                          ),
+                                          const Icon(Icons.title_rounded, size: 18, color: Color(0xFFD97706)),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: TextFormField(
+                                              controller: item.titleController,
+                                              style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
+                                              decoration: const InputDecoration(
+                                                hintText: 'Enter Section / Title Header (e.g. Phase 1: Planning, Hardware Components...)',
+                                                hintStyle: TextStyle(fontWeight: FontWeight.normal, fontSize: 12, color: Color(0xFF94A3B8)),
+                                                isDense: true,
+                                                border: OutlineInputBorder(),
+                                                contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFFEF3C7),
+                                              borderRadius: BorderRadius.circular(4),
+                                            ),
+                                            child: Text('TITLE ROW', style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w800, color: const Color(0xFF92400E))),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          _buildRowControls(idx),
+                                        ],
+                                      ),
+                                    );
+                                  }
+
+                                  // REGULAR ITEM ROW
                                   return Padding(
                                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                     child: Row(
                                       children: [
+                                        SizedBox(
+                                          width: 36,
+                                          child: Text('${idx + 1}', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B))),
+                                        ),
                                         // Product Search Autocomplete Field
                                         Expanded(
                                           flex: 5,
@@ -835,7 +1102,6 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                                                 style: GoogleFonts.inter(fontSize: 12),
                                                 onChanged: (val) {
                                                   item.descriptionController.text = val;
-                                                  // Auto-detect if matching exact existing product to auto-fill price
                                                   final match = products.where((p) => p.name.trim().toLowerCase() == val.trim().toLowerCase()).firstOrNull;
                                                   if (match != null) {
                                                     item.rateController.text = match.unitPrice.toStringAsFixed(2);
@@ -888,6 +1154,23 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                                             },
                                           ),
                                         ),
+                                        // Custom Columns Inputs
+                                        for (final col in _customColumns) ...[
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            flex: 2,
+                                            child: TextFormField(
+                                              controller: item.getCustomController(col, () => setState(() {})),
+                                              style: GoogleFonts.inter(fontSize: 12),
+                                              decoration: InputDecoration(
+                                                hintText: col,
+                                                isDense: true,
+                                                border: const OutlineInputBorder(),
+                                                contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
                                         const SizedBox(width: 8),
                                         // Quantity
                                         Expanded(
@@ -905,7 +1188,7 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                                           ),
                                         ),
                                         const SizedBox(width: 8),
-                                        // Unit Price (Approximate)
+                                        // Unit Price
                                         Expanded(
                                           flex: 2,
                                           child: TextFormField(
@@ -946,10 +1229,8 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                                             style: GoogleFonts.robotoMono(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
                                           ),
                                         ),
-                                        IconButton(
-                                          icon: const Icon(Icons.delete_outline_rounded, size: 18, color: Color(0xFFEF4444)),
-                                          onPressed: _items.length > 1 ? () => _removeItemRow(idx) : null,
-                                        ),
+                                        const SizedBox(width: 8),
+                                        _buildRowControls(idx),
                                       ],
                                     ),
                                   );
@@ -1288,6 +1569,35 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
               ),
             );
           },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRowControls(int idx) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IconButton(
+          icon: const Icon(Icons.arrow_upward_rounded, size: 15, color: Color(0xFF64748B)),
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 22, minHeight: 22),
+          tooltip: 'Move Up',
+          onPressed: idx > 0 ? () => _moveRowUp(idx) : null,
+        ),
+        IconButton(
+          icon: const Icon(Icons.arrow_downward_rounded, size: 15, color: Color(0xFF64748B)),
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 22, minHeight: 22),
+          tooltip: 'Move Down',
+          onPressed: idx < _items.length - 1 ? () => _moveRowDown(idx) : null,
+        ),
+        IconButton(
+          icon: const Icon(Icons.delete_outline_rounded, size: 17, color: Color(0xFFEF4444)),
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+          tooltip: 'Delete Row',
+          onPressed: _items.length > 1 ? () => _removeItemRow(idx) : null,
         ),
       ],
     );

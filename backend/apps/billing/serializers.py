@@ -23,7 +23,7 @@ class QuotationSerializer(serializers.ModelSerializer):
             'id', 'quotation_number', 'lead', 'lead_name',
             'customer_name', 'customer_phone', 'customer_email', 'customer_address',
             'created_by', 'created_by_name', 'date', 'valid_until',
-            'items', 'subtotal', 'tax_amount', 'discount_amount', 'grand_total',
+            'items', 'custom_columns', 'subtotal', 'tax_amount', 'discount_amount', 'grand_total',
             'notes', 'terms_and_conditions', 'status', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_by', 'created_by_name', 'date', 'created_at', 'updated_at']
@@ -41,7 +41,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
             'id', 'invoice_number', 'quotation', 'quotation_number', 'lead',
             'customer_name', 'customer_phone', 'customer_email', 'customer_address',
             'created_by', 'created_by_name', 'date', 'due_date',
-            'items', 'subtotal', 'tax_amount', 'discount_amount', 'grand_total',
+            'items', 'custom_columns', 'subtotal', 'tax_amount', 'discount_amount', 'grand_total',
             'amount_paid', 'balance_due', 'payment_status', 'payment_mode',
             'payment_reference', 'payment_notes', 'notes', 'terms_and_conditions',
             'created_at', 'updated_at'

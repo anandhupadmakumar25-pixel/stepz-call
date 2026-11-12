@@ -1,13 +1,21 @@
 class QuotationItemModel {
+  final String rowType; // 'ITEM' or 'SECTION_TITLE'
+  final String title; // Section Title header
   final String description;
+  final Map<String, String> customFields; // { columnTitle: value }
   final double quantity;
   final double unitPrice;
   final double taxPercent;
   final double discountPercent;
   final double total;
 
+  bool get isSectionTitle => rowType == 'SECTION_TITLE';
+
   QuotationItemModel({
+    this.rowType = 'ITEM',
+    this.title = '',
     required this.description,
+    this.customFields = const {},
     this.quantity = 1,
     this.unitPrice = 0.0,
     this.taxPercent = 0.0,
@@ -22,8 +30,20 @@ class QuotationItemModel {
       return double.tryParse(val.toString()) ?? 0.0;
     }
 
+    Map<String, String> parseCustomFields(dynamic val) {
+      if (val is Map) {
+        return val.map((k, v) => MapEntry(k.toString(), v?.toString() ?? ''));
+      }
+      return {};
+    }
+
+    final rawType = json['row_type']?.toString() ?? json['rowType']?.toString() ?? 'ITEM';
+
     return QuotationItemModel(
+      rowType: rawType,
+      title: json['title']?.toString() ?? '',
       description: json['description']?.toString() ?? '',
+      customFields: parseCustomFields(json['custom_fields'] ?? json['customFields']),
       quantity: parseNum(json['quantity']),
       unitPrice: parseNum(json['unit_price'] ?? json['unitPrice']),
       taxPercent: parseNum(json['tax_percent'] ?? json['taxPercent']),
@@ -34,7 +54,10 @@ class QuotationItemModel {
 
   Map<String, dynamic> toJson() {
     return {
+      'row_type': rowType,
+      'title': title,
       'description': description,
+      'custom_fields': customFields,
       'quantity': quantity,
       'unit_price': unitPrice,
       'tax_percent': taxPercent,
@@ -57,6 +80,7 @@ class QuotationModel {
   final String createdByName;
   final String date;
   final String? validUntil;
+  final List<String> customColumns;
   final List<QuotationItemModel> items;
   final double subtotal;
   final double taxAmount;
@@ -81,6 +105,7 @@ class QuotationModel {
     this.createdByName = '',
     required this.date,
     this.validUntil,
+    this.customColumns = const [],
     this.items = const [],
     this.subtotal = 0.0,
     this.taxAmount = 0.0,
@@ -106,6 +131,7 @@ class QuotationModel {
     String? createdByName,
     String? date,
     String? validUntil,
+    List<String>? customColumns,
     List<QuotationItemModel>? items,
     double? subtotal,
     double? taxAmount,
@@ -130,6 +156,7 @@ class QuotationModel {
       createdByName: createdByName ?? this.createdByName,
       date: date ?? this.date,
       validUntil: validUntil ?? this.validUntil,
+      customColumns: customColumns ?? this.customColumns,
       items: items ?? this.items,
       subtotal: subtotal ?? this.subtotal,
       taxAmount: taxAmount ?? this.taxAmount,
@@ -148,6 +175,13 @@ class QuotationModel {
       if (val == null) return 0.0;
       if (val is num) return val.toDouble();
       return double.tryParse(val.toString()) ?? 0.0;
+    }
+
+    List<String> parseStringList(dynamic val) {
+      if (val is List) {
+        return val.map((e) => e.toString()).toList();
+      }
+      return [];
     }
 
     var rawItems = json['items'];
@@ -177,6 +211,7 @@ class QuotationModel {
       createdByName: json['created_by_name']?.toString() ?? '',
       date: json['date']?.toString() ?? '',
       validUntil: json['valid_until']?.toString(),
+      customColumns: parseStringList(json['custom_columns'] ?? json['customColumns']),
       items: itemsList,
       subtotal: parseNum(json['subtotal']),
       taxAmount: parseNum(json['tax_amount']),
@@ -198,6 +233,7 @@ class QuotationModel {
       'customer_email': customerEmail,
       'customer_address': customerAddress,
       if (validUntil != null) 'valid_until': validUntil,
+      'custom_columns': customColumns,
       'items': items.map((i) => i.toJson()).toList(),
       'subtotal': subtotal,
       'tax_amount': taxAmount,
