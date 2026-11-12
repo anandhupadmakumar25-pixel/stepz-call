@@ -1224,6 +1224,7 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                                 child: SingleChildScrollView(
                                   controller: _horizontalScrollController,
                                   scrollDirection: Axis.horizontal,
+                                  padding: const EdgeInsets.only(bottom: 14),
                                   child: SizedBox(
                                     width: tableWidth,
                                     child: Column(
@@ -1416,7 +1417,7 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
 
                                             // REGULAR ITEM ROW
                                             return Padding(
-                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                                               child: Row(
                                                 children: [
                                                   SizedBox(
@@ -1604,6 +1605,7 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                                             );
                                           },
                                         ),
+                                        const SizedBox(height: 10),
                                       ],
                                     ),
                                   ),

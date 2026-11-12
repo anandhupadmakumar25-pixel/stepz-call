@@ -211,13 +211,15 @@ class _QuotationDetailDialogState extends State<QuotationDetailDialog> {
                                 110;
                             final double tableWidth = constraints.maxWidth > minTableWidth ? constraints.maxWidth : minTableWidth;
 
-                            return SingleChildScrollView(
-                              scrollDirection: Axis.horizontal,
-                              child: SizedBox(
-                                width: tableWidth,
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                                  children: [
+                            return Scrollbar(
+                              child: SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                padding: const EdgeInsets.only(bottom: 14),
+                                child: SizedBox(
+                                  width: tableWidth,
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                                    children: [
                                     Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                       decoration: const BoxDecoration(
@@ -275,7 +277,7 @@ class _QuotationDetailDialogState extends State<QuotationDetailDialog> {
                                       }
 
                                       return Padding(
-                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                                         child: Row(
                                           children: [
                                             Expanded(flex: 5, child: Text(item.description, style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w500))),
@@ -301,11 +303,13 @@ class _QuotationDetailDialogState extends State<QuotationDetailDialog> {
                                         ),
                                       );
                                     }),
+                                    const SizedBox(height: 10),
                                   ],
                                 ),
                               ),
-                            );
-                          },
+                            ),
+                          );
+                        },
                         ),
                       ),
                       const SizedBox(height: 16),

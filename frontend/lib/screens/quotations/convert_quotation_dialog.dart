@@ -803,6 +803,7 @@ class _ConvertQuotationDialogState extends State<ConvertQuotationDialog> {
                           child: SingleChildScrollView(
                             controller: _horizontalScrollController,
                             scrollDirection: Axis.horizontal,
+                            padding: const EdgeInsets.only(bottom: 14),
                             child: SizedBox(
                               width: tableWidth,
                               child: Column(
@@ -990,7 +991,7 @@ class _ConvertQuotationDialogState extends State<ConvertQuotationDialog> {
                                         }
 
                                         return Padding(
-                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                                           child: Row(
                                             children: [
                                               SizedBox(
@@ -1144,6 +1145,7 @@ class _ConvertQuotationDialogState extends State<ConvertQuotationDialog> {
                                       },
                                     ),
                                   ),
+                                  const SizedBox(height: 10),
                                 ],
                               ),
                             ),
