@@ -15,6 +15,9 @@ class InvoiceModel {
   final String date;
   final String? dueDate;
   final List<String> customColumns;
+  final bool showQty;
+  final bool showPrice;
+  final bool showTax;
   final List<QuotationItemModel> items;
   final double subtotal;
   final double taxAmount;
@@ -46,6 +49,9 @@ class InvoiceModel {
     required this.date,
     this.dueDate,
     this.customColumns = const [],
+    this.showQty = true,
+    this.showPrice = true,
+    this.showTax = true,
     this.items = const [],
     this.subtotal = 0.0,
     this.taxAmount = 0.0,
@@ -70,11 +76,21 @@ class InvoiceModel {
       return double.tryParse(val.toString()) ?? 0.0;
     }
 
-    List<String> parseStringList(dynamic val) {
-      if (val is List) {
-        return val.map((e) => e.toString()).toList();
+    bool showQty = true;
+    bool showPrice = true;
+    bool showTax = true;
+    List<String> customCols = [];
+
+    final rawCustom = json['custom_columns'] ?? json['customColumns'];
+    if (rawCustom is Map) {
+      if (rawCustom['columns'] is List) {
+        customCols = (rawCustom['columns'] as List).map((e) => e.toString()).toList();
       }
-      return [];
+      showQty = rawCustom['show_qty'] == null ? true : (rawCustom['show_qty'] == true);
+      showPrice = rawCustom['show_price'] == null ? true : (rawCustom['show_price'] == true);
+      showTax = rawCustom['show_tax'] == null ? true : (rawCustom['show_tax'] == true);
+    } else if (rawCustom is List) {
+      customCols = rawCustom.map((e) => e.toString()).toList();
     }
 
     var rawItems = json['items'];
@@ -105,7 +121,10 @@ class InvoiceModel {
       createdByName: json['created_by_name']?.toString() ?? '',
       date: json['date']?.toString() ?? '',
       dueDate: json['due_date']?.toString(),
-      customColumns: parseStringList(json['custom_columns'] ?? json['customColumns']),
+      customColumns: customCols,
+      showQty: showQty,
+      showPrice: showPrice,
+      showTax: showTax,
       items: itemsList,
       subtotal: parseNum(json['subtotal']),
       taxAmount: parseNum(json['tax_amount']),
@@ -133,7 +152,12 @@ class InvoiceModel {
       'customer_email': customerEmail,
       'customer_address': customerAddress,
       if (dueDate != null) 'due_date': dueDate,
-      'custom_columns': customColumns,
+      'custom_columns': {
+        'columns': customColumns,
+        'show_qty': showQty,
+        'show_price': showPrice,
+        'show_tax': showTax,
+      },
       'items': items.map((i) => i.toJson()).toList(),
       'subtotal': subtotal,
       'tax_amount': taxAmount,

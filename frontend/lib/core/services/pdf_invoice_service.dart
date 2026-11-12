@@ -112,6 +112,10 @@ class PdfInvoiceService {
               // Line Items Table with Custom Columns & Section Titles
               () {
                 final customCols = quotation.customColumns;
+                final showQty = quotation.showQty;
+                final showPrice = quotation.showPrice;
+                final showTax = quotation.showTax;
+
                 final Map<int, pw.TableColumnWidth> colWidths = {
                   0: const pw.FixedColumnWidth(24),
                   1: const pw.FlexColumnWidth(3.0),
@@ -120,9 +124,9 @@ class PdfInvoiceService {
                 for (int i = 0; i < customCols.length; i++) {
                   colWidths[cIdx++] = const pw.FlexColumnWidth(1.4);
                 }
-                colWidths[cIdx++] = const pw.FixedColumnWidth(40);
-                colWidths[cIdx++] = const pw.FixedColumnWidth(60);
-                colWidths[cIdx++] = const pw.FixedColumnWidth(44);
+                if (showQty) colWidths[cIdx++] = const pw.FixedColumnWidth(40);
+                if (showPrice) colWidths[cIdx++] = const pw.FixedColumnWidth(60);
+                if (showTax) colWidths[cIdx++] = const pw.FixedColumnWidth(44);
                 colWidths[cIdx++] = const pw.FixedColumnWidth(65);
 
                 return pw.Table(
@@ -140,9 +144,12 @@ class PdfInvoiceService {
                         pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Item Description', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9))),
                         for (final col in customCols)
                           pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(col, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9, color: PdfColors.indigo900))),
-                        pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Qty', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9))),
-                        pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Rate', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9))),
-                        pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Tax %', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9))),
+                        if (showQty)
+                          pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Qty', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9))),
+                        if (showPrice)
+                          pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Rate', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9))),
+                        if (showTax)
+                          pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Tax %', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9))),
                         pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Total', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9))),
                       ],
                     ),
@@ -153,6 +160,7 @@ class PdfInvoiceService {
 
                       if (item.isSectionTitle) {
                         final titleText = item.title.isNotEmpty ? item.title : item.description;
+                        final emptyCount = colWidths.length - 2;
                         return pw.TableRow(
                           decoration: const pw.BoxDecoration(color: PdfColors.amber50),
                           children: [
@@ -164,7 +172,7 @@ class PdfInvoiceService {
                                 style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9, color: PdfColors.amber900),
                               ),
                             ),
-                            for (int k = 0; k < customCols.length + 4; k++)
+                            for (int k = 0; k < emptyCount; k++)
                               pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('')),
                           ],
                         );
@@ -176,9 +184,12 @@ class PdfInvoiceService {
                           pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(item.description, style: const pw.TextStyle(fontSize: 9))),
                           for (final col in customCols)
                             pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(item.customFields[col] ?? '-', style: const pw.TextStyle(fontSize: 8.5))),
-                          pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(item.quantity.toStringAsFixed(item.quantity.truncateToDouble() == item.quantity ? 0 : 2), textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 8.5))),
-                          pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('₹${item.unitPrice.toStringAsFixed(2)}', textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 8.5))),
-                          pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('${item.taxPercent}%', textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 8.5))),
+                          if (showQty)
+                            pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(item.quantity.toStringAsFixed(item.quantity.truncateToDouble() == item.quantity ? 0 : 2), textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 8.5))),
+                          if (showPrice)
+                            pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('₹${item.unitPrice.toStringAsFixed(2)}', textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 8.5))),
+                          if (showTax)
+                            pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('${item.taxPercent}%', textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 8.5))),
                           pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('₹${item.total.toStringAsFixed(2)}', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold))),
                         ],
                       );
@@ -391,6 +402,10 @@ class PdfInvoiceService {
               // Line Items Table with Custom Columns & Section Titles
               () {
                 final customCols = invoice.customColumns;
+                final showQty = invoice.showQty;
+                final showPrice = invoice.showPrice;
+                final showTax = invoice.showTax;
+
                 final Map<int, pw.TableColumnWidth> colWidths = {
                   0: const pw.FixedColumnWidth(24),
                   1: const pw.FlexColumnWidth(3.0),
@@ -399,9 +414,9 @@ class PdfInvoiceService {
                 for (int i = 0; i < customCols.length; i++) {
                   colWidths[cIdx++] = const pw.FlexColumnWidth(1.4);
                 }
-                colWidths[cIdx++] = const pw.FixedColumnWidth(40);
-                colWidths[cIdx++] = const pw.FixedColumnWidth(60);
-                colWidths[cIdx++] = const pw.FixedColumnWidth(44);
+                if (showQty) colWidths[cIdx++] = const pw.FixedColumnWidth(40);
+                if (showPrice) colWidths[cIdx++] = const pw.FixedColumnWidth(60);
+                if (showTax) colWidths[cIdx++] = const pw.FixedColumnWidth(44);
                 colWidths[cIdx++] = const pw.FixedColumnWidth(65);
 
                 return pw.Table(
@@ -418,9 +433,12 @@ class PdfInvoiceService {
                         pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Item Description', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9))),
                         for (final col in customCols)
                           pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(col, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9, color: PdfColors.indigo900))),
-                        pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Qty', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9))),
-                        pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Rate', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9))),
-                        pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Tax %', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9))),
+                        if (showQty)
+                          pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Qty', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9))),
+                        if (showPrice)
+                          pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Rate', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9))),
+                        if (showTax)
+                          pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Tax %', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9))),
                         pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Total', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9))),
                       ],
                     ),
@@ -430,6 +448,7 @@ class PdfInvoiceService {
 
                       if (item.isSectionTitle) {
                         final titleText = item.title.isNotEmpty ? item.title : item.description;
+                        final emptyCount = colWidths.length - 2;
                         return pw.TableRow(
                           decoration: const pw.BoxDecoration(color: PdfColors.amber50),
                           children: [
@@ -441,7 +460,7 @@ class PdfInvoiceService {
                                 style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9, color: PdfColors.amber900),
                               ),
                             ),
-                            for (int k = 0; k < customCols.length + 4; k++)
+                            for (int k = 0; k < emptyCount; k++)
                               pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('')),
                           ],
                         );
@@ -453,9 +472,12 @@ class PdfInvoiceService {
                           pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(item.description, style: const pw.TextStyle(fontSize: 9))),
                           for (final col in customCols)
                             pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(item.customFields[col] ?? '-', style: const pw.TextStyle(fontSize: 8.5))),
-                          pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(item.quantity.toStringAsFixed(item.quantity.truncateToDouble() == item.quantity ? 0 : 2), textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 8.5))),
-                          pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('₹${item.unitPrice.toStringAsFixed(2)}', textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 8.5))),
-                          pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('${item.taxPercent}%', textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 8.5))),
+                          if (showQty)
+                            pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(item.quantity.toStringAsFixed(item.quantity.truncateToDouble() == item.quantity ? 0 : 2), textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 8.5))),
+                          if (showPrice)
+                            pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('₹${item.unitPrice.toStringAsFixed(2)}', textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 8.5))),
+                          if (showTax)
+                            pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('${item.taxPercent}%', textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 8.5))),
                           pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('₹${item.total.toStringAsFixed(2)}', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold))),
                         ],
                       );

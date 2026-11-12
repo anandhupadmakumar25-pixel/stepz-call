@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../core/widgets/glass/glass_card.dart';
 import '../../core/widgets/glass/gradient_button.dart';
+import '../../models/product_model.dart';
 import '../../models/quotation_model.dart';
 import '../../providers/billing_provider.dart';
 
@@ -23,6 +24,7 @@ class _NegotiatedItemEntry {
   final TextEditingController rateController;
   final TextEditingController taxController;
   final TextEditingController discountController;
+  final TextEditingController totalController;
   final Map<String, TextEditingController> customControllers = {};
 
   _NegotiatedItemEntry({
@@ -33,13 +35,15 @@ class _NegotiatedItemEntry {
     double rate = 0.0,
     double tax = 18,
     double discount = 0,
+    double total = 0.0,
     Map<String, String> customFields = const {},
   })  : titleController = TextEditingController(text: title),
         descriptionController = TextEditingController(text: description),
         qtyController = TextEditingController(text: qty == qty.roundToDouble() ? qty.toInt().toString() : qty.toString()),
-        rateController = TextEditingController(text: rate.toStringAsFixed(2)),
+        rateController = TextEditingController(text: rate > 0 ? rate.toStringAsFixed(2) : '0.00'),
         taxController = TextEditingController(text: tax.toStringAsFixed(0)),
-        discountController = TextEditingController(text: discount.toStringAsFixed(0)) {
+        discountController = TextEditingController(text: discount.toStringAsFixed(0)),
+        totalController = TextEditingController(text: total > 0 ? total.toStringAsFixed(2) : '0.00') {
     customFields.forEach((k, v) {
       customControllers[k] = TextEditingController(text: v);
     });
@@ -54,6 +58,7 @@ class _NegotiatedItemEntry {
     rateController.dispose();
     taxController.dispose();
     discountController.dispose();
+    totalController.dispose();
     for (final c in customControllers.values) {
       c.dispose();
     }
@@ -73,30 +78,44 @@ class _NegotiatedItemEntry {
   double get taxPercent => isSectionTitle ? 0.0 : (double.tryParse(taxController.text) ?? 0.0);
   double get discountPercent => isSectionTitle ? 0.0 : (double.tryParse(discountController.text) ?? 0.0);
 
-  double get baseAmount => isSectionTitle ? 0.0 : (quantity * rate);
-  double get itemDiscountAmount => isSectionTitle ? 0.0 : (baseAmount * (discountPercent / 100.0));
-  double get taxableAmount => isSectionTitle ? 0.0 : (baseAmount - itemDiscountAmount);
-  double get taxAmount => isSectionTitle ? 0.0 : (taxableAmount * (taxPercent / 100.0));
-  double get lineTotal => isSectionTitle ? 0.0 : (taxableAmount + taxAmount);
+  double computeLineTotal({required bool showPrice, required bool showQty, required bool showTax}) {
+    if (isSectionTitle) return 0.0;
+    if (!showPrice) {
+      final direct = double.tryParse(totalController.text);
+      if (direct != null) return direct;
+      return rate;
+    }
+    final effQty = showQty ? quantity : 1.0;
+    final effTax = showTax ? taxPercent : 0.0;
+    final base = effQty * rate;
+    final disc = base * (discountPercent / 100.0);
+    final taxable = base - disc;
+    return taxable + (taxable * (effTax / 100.0));
+  }
 
   bool get isValid => isSectionTitle ? titleController.text.trim().isNotEmpty : descriptionController.text.trim().isNotEmpty;
 
-  QuotationItemModel toModel() {
+  QuotationItemModel toModel({required bool showPrice, required bool showQty, required bool showTax}) {
     final customFields = <String, String>{};
     customControllers.forEach((key, controller) {
       customFields[key] = controller.text.trim();
     });
+
+    final effQty = showQty ? quantity : 1.0;
+    final effTax = showTax ? taxPercent : 0.0;
+    final effTotal = computeLineTotal(showPrice: showPrice, showQty: showQty, showTax: showTax);
+    final effRate = showPrice ? rate : (effQty > 0 ? (effTotal / effQty) : effTotal);
 
     return QuotationItemModel(
       rowType: rowType,
       title: titleController.text.trim(),
       description: descriptionController.text.trim(),
       customFields: customFields,
-      quantity: quantity,
-      unitPrice: rate,
-      taxPercent: taxPercent,
+      quantity: effQty,
+      unitPrice: effRate,
+      taxPercent: effTax,
       discountPercent: discountPercent,
-      total: lineTotal,
+      total: effTotal,
     );
   }
 }
@@ -104,6 +123,10 @@ class _NegotiatedItemEntry {
 class _ConvertQuotationDialogState extends State<ConvertQuotationDialog> {
   final _formKey = GlobalKey<FormState>();
   final List<String> _customColumns = [];
+  bool _showQty = true;
+  bool _showPrice = true;
+  bool _showTax = true;
+  final ScrollController _horizontalScrollController = ScrollController();
   final List<_NegotiatedItemEntry> _items = [];
   final TextEditingController _negotiationDiscountController = TextEditingController(text: '0.00');
   final TextEditingController _notesController = TextEditingController();
@@ -115,6 +138,9 @@ class _ConvertQuotationDialogState extends State<ConvertQuotationDialog> {
     super.initState();
     final q = widget.quotation;
     _notesController.text = q.notes;
+    _showQty = q.showQty;
+    _showPrice = q.showPrice;
+    _showTax = q.showTax;
     if (q.customColumns.isNotEmpty) {
       _customColumns.addAll(q.customColumns);
     }
@@ -129,6 +155,7 @@ class _ConvertQuotationDialogState extends State<ConvertQuotationDialog> {
           rate: it.unitPrice,
           tax: it.taxPercent,
           discount: it.discountPercent,
+          total: it.total,
           customFields: it.customFields,
         );
         _bindListeners(entry);
@@ -141,19 +168,32 @@ class _ConvertQuotationDialogState extends State<ConvertQuotationDialog> {
         rate: q.subtotal > 0 ? q.subtotal : q.grandTotal,
         tax: 18,
         discount: 0,
+        total: q.grandTotal,
       );
       _bindListeners(entry);
       _items.add(entry);
     }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<BillingProvider>().fetchProducts();
+    });
+  }
+
+  void _onItemValuesChanged(_NegotiatedItemEntry it) {
+    if (_showPrice) {
+      it.totalController.text = it.computeLineTotal(showPrice: _showPrice, showQty: _showQty, showTax: _showTax).toStringAsFixed(2);
+    }
+    setState(() {});
   }
 
   void _bindListeners(_NegotiatedItemEntry it) {
     it.titleController.addListener(() => setState(() {}));
     it.descriptionController.addListener(() => setState(() {}));
-    it.qtyController.addListener(() => setState(() {}));
-    it.rateController.addListener(() => setState(() {}));
-    it.taxController.addListener(() => setState(() {}));
-    it.discountController.addListener(() => setState(() {}));
+    it.qtyController.addListener(() => _onItemValuesChanged(it));
+    it.rateController.addListener(() => _onItemValuesChanged(it));
+    it.taxController.addListener(() => _onItemValuesChanged(it));
+    it.discountController.addListener(() => _onItemValuesChanged(it));
+    it.totalController.addListener(() => setState(() {}));
   }
 
   void _addSectionTitleRow() {
@@ -182,69 +222,215 @@ class _ConvertQuotationDialogState extends State<ConvertQuotationDialog> {
 
   Future<void> _showAddColumnDialog() async {
     final controller = TextEditingController();
-    final name = await showDialog<String>(
+    await showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(
-          children: [
-            const Icon(Icons.view_column_rounded, color: Color(0xFF2563EB), size: 20),
-            const SizedBox(width: 8),
-            Text('Add Custom Table Column', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 16)),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Enter column header title (e.g. HSN/SAC, Unit, Size, Delivery, Warranty):',
-              style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: controller,
-              autofocus: true,
-              style: GoogleFonts.inter(fontSize: 13),
-              decoration: const InputDecoration(
-                hintText: 'e.g. HSN Code / Unit / Warranty',
-                border: OutlineInputBorder(),
-                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              const Icon(Icons.view_column_rounded, color: Color(0xFF2563EB), size: 22),
+              const SizedBox(width: 8),
+              Text('Customize Bill Columns', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 16)),
+            ],
+          ),
+          content: SizedBox(
+            width: 440,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'DEFAULT COLUMNS (ADD OR REMOVE)',
+                    style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w800, color: const Color(0xFF64748B), letterSpacing: 0.5),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                    ),
+                    child: Column(
+                      children: [
+                        CheckboxListTile(
+                          dense: true,
+                          title: Text('Quantity (Qty)', style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w600)),
+                          subtitle: Text('If removed, quantity defaults to 1 per item', style: GoogleFonts.inter(fontSize: 10, color: const Color(0xFF64748B))),
+                          value: _showQty,
+                          activeColor: const Color(0xFF2563EB),
+                          onChanged: (val) {
+                            setState(() => _showQty = val ?? true);
+                            setDialogState(() {});
+                          },
+                        ),
+                        const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                        CheckboxListTile(
+                          dense: true,
+                          title: Text('Unit Rate (Price)', style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w600)),
+                          subtitle: Text('If removed, enter item total directly', style: GoogleFonts.inter(fontSize: 10, color: const Color(0xFF64748B))),
+                          value: _showPrice,
+                          activeColor: const Color(0xFF2563EB),
+                          onChanged: (val) {
+                            setState(() => _showPrice = val ?? true);
+                            setDialogState(() {});
+                          },
+                        ),
+                        const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                        CheckboxListTile(
+                          dense: true,
+                          title: Text('GST / Tax (%)', style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w600)),
+                          subtitle: Text('If removed, zero tax is applied', style: GoogleFonts.inter(fontSize: 10, color: const Color(0xFF64748B))),
+                          value: _showTax,
+                          activeColor: const Color(0xFF2563EB),
+                          onChanged: (val) {
+                            setState(() => _showTax = val ?? true);
+                            setDialogState(() {});
+                          },
+                        ),
+                        const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                        CheckboxListTile(
+                          dense: true,
+                          title: Row(
+                            children: [
+                              Text('Total (₹)', style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w700)),
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFDCFCE7),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text('REQUIRED / LOCKED', style: GoogleFonts.inter(fontSize: 8, fontWeight: FontWeight.w800, color: const Color(0xFF15803D))),
+                              ),
+                            ],
+                          ),
+                          subtitle: Text('Total cannot be removed', style: GoogleFonts.inter(fontSize: 10, color: const Color(0xFF64748B))),
+                          value: true,
+                          onChanged: null,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'ADD CUSTOM SPECIFICATION COLUMN',
+                    style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w800, color: const Color(0xFF64748B), letterSpacing: 0.5),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: controller,
+                          style: GoogleFonts.inter(fontSize: 13),
+                          decoration: const InputDecoration(
+                            hintText: 'e.g. HSN/SAC, Unit, Delivery Time...',
+                            border: OutlineInputBorder(),
+                            contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          ),
+                          onSubmitted: (val) {
+                            if (val.trim().isNotEmpty && !_customColumns.contains(val.trim())) {
+                              setState(() {
+                                _customColumns.add(val.trim());
+                                for (var row in _items) {
+                                  row.getCustomController(val.trim(), () => setState(() {}));
+                                }
+                              });
+                              controller.clear();
+                              setDialogState(() {});
+                            }
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF2563EB),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                        onPressed: () {
+                          final text = controller.text.trim();
+                          if (text.isNotEmpty && !_customColumns.contains(text)) {
+                            setState(() {
+                              _customColumns.add(text);
+                              for (var row in _items) {
+                                row.getCustomController(text, () => setState(() {}));
+                              }
+                            });
+                            controller.clear();
+                            setDialogState(() {});
+                          }
+                        },
+                        child: const Text('Add', style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: [
+                      'HSN/SAC', 'Unit', 'Delivery Time', 'Brand', 'Size', 'Warranty', 'Serial No.'
+                    ].map((sug) => ActionChip(
+                          label: Text('+ $sug', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF2563EB), fontWeight: FontWeight.w600)),
+                          backgroundColor: const Color(0xFFEFF6FF),
+                          side: const BorderSide(color: Color(0xFFBFDBFE)),
+                          padding: EdgeInsets.zero,
+                          visualDensity: VisualDensity.compact,
+                          onPressed: () {
+                            if (!_customColumns.contains(sug)) {
+                              setState(() {
+                                _customColumns.add(sug);
+                                for (var row in _items) {
+                                  row.getCustomController(sug, () => setState(() {}));
+                                }
+                              });
+                              setDialogState(() {});
+                            }
+                          },
+                        )).toList(),
+                  ),
+                  if (_customColumns.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Text('Active Custom Columns:', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF475569))),
+                    const SizedBox(height: 4),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: _customColumns.map((col) => Chip(
+                        label: Text(col, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF4338CA))),
+                        backgroundColor: const Color(0xFFEEF2FF),
+                        side: const BorderSide(color: Color(0xFFC7D2FE)),
+                        deleteIcon: const Icon(Icons.close_rounded, size: 14, color: Color(0xFFEF4444)),
+                        onDeleted: () {
+                          _removeCustomColumn(col);
+                          setDialogState(() {});
+                        },
+                      )).toList(),
+                    ),
+                  ],
+                ],
               ),
-              onSubmitted: (val) {
-                if (val.trim().isNotEmpty) {
-                  Navigator.of(ctx).pop(val.trim());
-                }
-              },
+            ),
+          ),
+          actions: [
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0F172A),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Done', style: TextStyle(fontWeight: FontWeight.bold)),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2563EB)),
-            onPressed: () {
-              if (controller.text.trim().isNotEmpty) {
-                Navigator.of(ctx).pop(controller.text.trim());
-              }
-            },
-            child: const Text('Add Column', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-          ),
-        ],
       ),
     );
-
-    if (name != null && name.isNotEmpty && !_customColumns.contains(name)) {
-      setState(() {
-        _customColumns.add(name);
-        for (var row in _items) {
-          row.getCustomController(name, () => setState(() {}));
-        }
-      });
-    }
   }
 
   void _removeCustomColumn(String col) {
@@ -259,6 +445,7 @@ class _ConvertQuotationDialogState extends State<ConvertQuotationDialog> {
 
   @override
   void dispose() {
+    _horizontalScrollController.dispose();
     for (final it in _items) {
       it.dispose();
     }
@@ -267,14 +454,45 @@ class _ConvertQuotationDialogState extends State<ConvertQuotationDialog> {
     super.dispose();
   }
 
-  double get _itemsBaseSubtotal => _items.where((it) => !it.isSectionTitle).fold(0.0, (acc, it) => acc + it.baseAmount);
-  double get _itemsDiscountTotal => _items.where((it) => !it.isSectionTitle).fold(0.0, (acc, it) => acc + it.itemDiscountAmount);
+  double get _itemsBaseSubtotal {
+    return _items.where((it) => !it.isSectionTitle).fold(0.0, (acc, it) {
+      if (!_showPrice) {
+        return acc + it.computeLineTotal(showPrice: _showPrice, showQty: _showQty, showTax: _showTax);
+      }
+      final effQty = _showQty ? it.quantity : 1.0;
+      return acc + (effQty * it.rate);
+    });
+  }
+
+  double get _itemsDiscountTotal {
+    if (!_showPrice) return 0.0;
+    return _items.where((it) => !it.isSectionTitle).fold(0.0, (acc, it) {
+      final effQty = _showQty ? it.quantity : 1.0;
+      final base = effQty * it.rate;
+      return acc + (base * (it.discountPercent / 100.0));
+    });
+  }
+
   double get _specialNegotiationDiscount => double.tryParse(_negotiationDiscountController.text) ?? 0.0;
   double get _totalDiscount => _itemsDiscountTotal + _specialNegotiationDiscount;
 
-  double get _taxableSubtotal => (_itemsBaseSubtotal - _totalDiscount).clamp(0.0, double.infinity);
-  double get _calculatedTax => _items.where((it) => !it.isSectionTitle).fold(0.0, (acc, it) => acc + it.taxAmount);
-  double get _finalGrandTotal => (_taxableSubtotal + _calculatedTax).clamp(0.0, double.infinity);
+  // _taxableSubtotal handled in grand total
+
+  double get _calculatedTax {
+    if (!_showTax || !_showPrice) return 0.0;
+    return _items.where((it) => !it.isSectionTitle).fold(0.0, (acc, it) {
+      final effQty = _showQty ? it.quantity : 1.0;
+      final base = effQty * it.rate;
+      final taxable = base - (base * (it.discountPercent / 100.0));
+      return acc + (taxable * (it.taxPercent / 100.0));
+    });
+  }
+
+  double get _finalGrandTotal {
+    return _items.where((it) => !it.isSectionTitle).fold(0.0, (acc, it) {
+      return acc + it.computeLineTotal(showPrice: _showPrice, showQty: _showQty, showTax: _showTax);
+    }) - _specialNegotiationDiscount;
+  }
 
   Future<void> _submitConversion({bool useOriginalQuote = false}) async {
     final q = widget.quotation;
@@ -285,7 +503,12 @@ class _ConvertQuotationDialogState extends State<ConvertQuotationDialog> {
     if (useOriginalQuote) {
       overrideData = {
         'items': q.items.map((it) => it.toJson()).toList(),
-        'custom_columns': q.customColumns,
+        'custom_columns': {
+          'columns': q.customColumns,
+          'show_qty': q.showQty,
+          'show_price': q.showPrice,
+          'show_tax': q.showTax,
+        },
         'subtotal': q.subtotal,
         'tax_amount': q.taxAmount,
         'discount_amount': q.discountAmount,
@@ -297,9 +520,14 @@ class _ConvertQuotationDialogState extends State<ConvertQuotationDialog> {
       overrideData = {
         'items': _items
             .where((i) => i.isValid)
-            .map((i) => i.toModel().toJson())
+            .map((i) => i.toModel(showPrice: _showPrice, showQty: _showQty, showTax: _showTax).toJson())
             .toList(),
-        'custom_columns': _customColumns,
+        'custom_columns': {
+          'columns': _customColumns,
+          'show_qty': _showQty,
+          'show_price': _showPrice,
+          'show_tax': _showTax,
+        },
         'subtotal': _itemsBaseSubtotal,
         'tax_amount': _calculatedTax,
         'discount_amount': _totalDiscount,
@@ -364,6 +592,7 @@ class _ConvertQuotationDialogState extends State<ConvertQuotationDialog> {
   @override
   Widget build(BuildContext context) {
     final q = widget.quotation;
+    final products = context.watch<BillingProvider>().products;
     final isPriceLower = _finalGrandTotal < q.grandTotal;
     final priceDiff = (q.grandTotal - _finalGrandTotal).abs();
 
@@ -473,7 +702,38 @@ class _ConvertQuotationDialogState extends State<ConvertQuotationDialog> {
                     ),
                     Wrap(
                       spacing: 8,
+                      runSpacing: 4,
                       children: [
+                        if (!_showQty)
+                          ActionChip(
+                            avatar: const Icon(Icons.add_rounded, size: 14, color: Color(0xFF2563EB)),
+                            label: Text('Qty', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF2563EB))),
+                            backgroundColor: const Color(0xFFEFF6FF),
+                            side: const BorderSide(color: Color(0xFFBFDBFE)),
+                            padding: EdgeInsets.zero,
+                            visualDensity: VisualDensity.compact,
+                            onPressed: () => setState(() => _showQty = true),
+                          ),
+                        if (!_showPrice)
+                          ActionChip(
+                            avatar: const Icon(Icons.add_rounded, size: 14, color: Color(0xFF2563EB)),
+                            label: Text('Rate', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF2563EB))),
+                            backgroundColor: const Color(0xFFEFF6FF),
+                            side: const BorderSide(color: Color(0xFFBFDBFE)),
+                            padding: EdgeInsets.zero,
+                            visualDensity: VisualDensity.compact,
+                            onPressed: () => setState(() => _showPrice = true),
+                          ),
+                        if (!_showTax)
+                          ActionChip(
+                            avatar: const Icon(Icons.add_rounded, size: 14, color: Color(0xFF2563EB)),
+                            label: Text('GST', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF2563EB))),
+                            backgroundColor: const Color(0xFFEFF6FF),
+                            side: const BorderSide(color: Color(0xFFBFDBFE)),
+                            padding: EdgeInsets.zero,
+                            visualDensity: VisualDensity.compact,
+                            onPressed: () => setState(() => _showTax = true),
+                          ),
                         OutlinedButton.icon(
                           style: OutlinedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -482,7 +742,7 @@ class _ConvertQuotationDialogState extends State<ConvertQuotationDialog> {
                           ),
                           onPressed: _showAddColumnDialog,
                           icon: const Icon(Icons.view_column_rounded, size: 14, color: Color(0xFF4F46E5)),
-                          label: Text('+ Add Column', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF4F46E5))),
+                          label: Text('Columns / Add Spec', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF4F46E5))),
                         ),
                         OutlinedButton.icon(
                           style: OutlinedButton.styleFrom(
@@ -519,219 +779,375 @@ class _ConvertQuotationDialogState extends State<ConvertQuotationDialog> {
                 ),
                 const SizedBox(height: 8),
 
-                // Editable Items Table Header
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF1F5F9),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    children: [
-                      SizedBox(
-                        width: 28,
-                        child: Text('#', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF475569))),
-                      ),
-                      Expanded(flex: 5, child: Text('ITEM / SERVICE DESCRIPTION', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF475569)))),
-                      for (final col in _customColumns) ...[
-                        const SizedBox(width: 8),
-                        Expanded(
-                          flex: 2,
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Flexible(
-                                child: Text(
-                                  col,
-                                  style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF4338CA)),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              InkWell(
-                                onTap: () => _removeCustomColumn(col),
-                                child: const Padding(
-                                  padding: EdgeInsets.only(left: 4),
-                                  child: Icon(Icons.close_rounded, size: 12, color: Color(0xFFEF4444)),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                      const SizedBox(width: 8),
-                      Expanded(flex: 2, child: Text('QTY', textAlign: TextAlign.center, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF475569)))),
-                      const SizedBox(width: 8),
-                      Expanded(flex: 3, child: Text('RATE (₹)', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF475569)))),
-                      const SizedBox(width: 8),
-                      Expanded(flex: 2, child: Text('GST %', textAlign: TextAlign.center, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF475569)))),
-                      const SizedBox(width: 8),
-                      Expanded(flex: 3, child: Text('TOTAL (₹)', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF475569)))),
-                      const SizedBox(width: 68),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 6),
-
-                // Editable Items List
+                // Editable Scrollable Items Table
                 Expanded(
-                  child: ListView.separated(
-                    itemCount: _items.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 8),
-                    itemBuilder: (context, idx) {
-                      final item = _items[idx];
-
-                      if (item.isSectionTitle) {
-                        return Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFFFFBEB),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border(
-                              left: const BorderSide(color: Color(0xFFF59E0B), width: 4),
-                              top: BorderSide(color: Colors.amber.shade200, width: 0.5),
-                              right: BorderSide(color: Colors.amber.shade200, width: 0.5),
-                              bottom: BorderSide(color: Colors.amber.shade200, width: 0.5),
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              SizedBox(
-                                width: 28,
-                                child: Text('${idx + 1}', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFFB45309))),
-                              ),
-                              const Icon(Icons.title_rounded, size: 16, color: Color(0xFFD97706)),
-                              const SizedBox(width: 6),
-                              Expanded(
-                                child: TextField(
-                                  controller: item.titleController,
-                                  style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.bold, color: const Color(0xFF0F172A)),
-                                  decoration: const InputDecoration(
-                                    isDense: true,
-                                    border: InputBorder.none,
-                                    hintText: 'Enter Section / Title Header...',
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFFEF3C7),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text('TITLE ROW', style: GoogleFonts.inter(fontSize: 8, fontWeight: FontWeight.w800, color: const Color(0xFF92400E))),
-                              ),
-                              const SizedBox(width: 8),
-                              _buildRowControls(idx),
-                            ],
-                          ),
-                        );
-                      }
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final double minTableWidth = 28 + 240 +
+                          (_customColumns.length * 128) +
+                          (_showQty ? 85 : 0) +
+                          (_showPrice ? 115 : 0) +
+                          (_showTax ? 80 : 0) +
+                          115 + 76 + 20;
+                      final double tableWidth = constraints.maxWidth > minTableWidth ? constraints.maxWidth : minTableWidth;
 
                       return Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                         decoration: BoxDecoration(
                           color: Colors.white,
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(10),
                           border: Border.all(color: const Color(0xFFE2E8F0)),
                         ),
-                        child: Row(
-                          children: [
-                            SizedBox(
-                              width: 28,
-                              child: Text('${idx + 1}', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B))),
-                            ),
-                            // Description
-                            Expanded(
-                              flex: 5,
-                              child: TextField(
-                                controller: item.descriptionController,
-                                style: GoogleFonts.inter(fontSize: 12.5),
-                                decoration: const InputDecoration(
-                                  isDense: true,
-                                  border: InputBorder.none,
-                                  hintText: 'Item description',
-                                ),
-                              ),
-                            ),
-                            // Custom Columns inputs
-                            for (final col in _customColumns) ...[
-                              const SizedBox(width: 8),
-                              Expanded(
-                                flex: 2,
-                                child: TextField(
-                                  controller: item.getCustomController(col, () => setState(() {})),
-                                  style: GoogleFonts.inter(fontSize: 12),
-                                  decoration: InputDecoration(
-                                    isDense: true,
-                                    border: const OutlineInputBorder(),
-                                    hintText: col,
-                                    contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                        child: Scrollbar(
+                          controller: _horizontalScrollController,
+                          thumbVisibility: true,
+                          child: SingleChildScrollView(
+                            controller: _horizontalScrollController,
+                            scrollDirection: Axis.horizontal,
+                            child: SizedBox(
+                              width: tableWidth,
+                              child: Column(
+                                children: [
+                                  // Table Header
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                    decoration: const BoxDecoration(
+                                      color: Color(0xFFF1F5F9),
+                                      borderRadius: BorderRadius.only(topLeft: Radius.circular(10), topRight: Radius.circular(10)),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        SizedBox(
+                                          width: 28,
+                                          child: Text('#', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF475569))),
+                                        ),
+                                        Expanded(child: Text('Product / Type to Search', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF475569)))),
+                                        for (final col in _customColumns) ...[
+                                          const SizedBox(width: 8),
+                                          SizedBox(
+                                            width: 120,
+                                            child: Row(
+                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                              children: [
+                                                Flexible(
+                                                  child: Text(
+                                                    col,
+                                                    style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF4338CA)),
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                                Tooltip(
+                                                  message: 'Remove $col column',
+                                                  child: InkWell(
+                                                    onTap: () => _removeCustomColumn(col),
+                                                    child: const Padding(
+                                                      padding: EdgeInsets.only(left: 4),
+                                                      child: Icon(Icons.close_rounded, size: 12, color: Color(0xFFEF4444)),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                        if (_showQty) ...[
+                                          const SizedBox(width: 8),
+                                          SizedBox(
+                                            width: 80,
+                                            child: Row(
+                                              mainAxisAlignment: MainAxisAlignment.center,
+                                              children: [
+                                                Text('QTY', textAlign: TextAlign.center, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF475569))),
+                                                Tooltip(
+                                                  message: 'Remove Quantity column',
+                                                  child: InkWell(
+                                                    onTap: () => setState(() => _showQty = false),
+                                                    child: const Padding(
+                                                      padding: EdgeInsets.only(left: 4),
+                                                      child: Icon(Icons.close_rounded, size: 12, color: Color(0xFFEF4444)),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                        if (_showPrice) ...[
+                                          const SizedBox(width: 8),
+                                          SizedBox(
+                                            width: 110,
+                                            child: Row(
+                                              mainAxisAlignment: MainAxisAlignment.end,
+                                              children: [
+                                                Text('RATE (₹)', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF475569))),
+                                                Tooltip(
+                                                  message: 'Remove Rate column',
+                                                  child: InkWell(
+                                                    onTap: () => setState(() => _showPrice = false),
+                                                    child: const Padding(
+                                                      padding: EdgeInsets.only(left: 4),
+                                                      child: Icon(Icons.close_rounded, size: 12, color: Color(0xFFEF4444)),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                        if (_showTax) ...[
+                                          const SizedBox(width: 8),
+                                          SizedBox(
+                                            width: 75,
+                                            child: Row(
+                                              mainAxisAlignment: MainAxisAlignment.center,
+                                              children: [
+                                                Text('GST %', textAlign: TextAlign.center, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF475569))),
+                                                Tooltip(
+                                                  message: 'Remove GST column',
+                                                  child: InkWell(
+                                                    onTap: () => setState(() => _showTax = false),
+                                                    child: const Padding(
+                                                      padding: EdgeInsets.only(left: 4),
+                                                      child: Icon(Icons.close_rounded, size: 12, color: Color(0xFFEF4444)),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                        const SizedBox(width: 8),
+                                        SizedBox(
+                                          width: 110,
+                                          child: Row(
+                                            mainAxisAlignment: MainAxisAlignment.end,
+                                            children: [
+                                              Text('TOTAL (₹)', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF475569))),
+                                              const Padding(
+                                                padding: EdgeInsets.only(left: 4),
+                                                child: Icon(Icons.lock_outline_rounded, size: 11, color: Color(0xFF94A3B8)),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        const SizedBox(width: 68),
+                                      ],
+                                    ),
                                   ),
-                                ),
-                              ),
-                            ],
-                            const SizedBox(width: 8),
-                            // Qty
-                            Expanded(
-                              flex: 2,
-                              child: TextField(
-                                controller: item.qtyController,
-                                textAlign: TextAlign.center,
-                                keyboardType: TextInputType.number,
-                                style: GoogleFonts.robotoMono(fontSize: 12.5, fontWeight: FontWeight.bold),
-                                decoration: const InputDecoration(
-                                  isDense: true,
-                                  border: OutlineInputBorder(),
-                                  contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-                                ),
+                                  // Rows
+                                  Expanded(
+                                    child: ListView.separated(
+                                      padding: const EdgeInsets.symmetric(vertical: 4),
+                                      itemCount: _items.length,
+                                      separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFFF1F5F9)),
+                                      itemBuilder: (context, idx) {
+                                        final item = _items[idx];
+
+                                        if (item.isSectionTitle) {
+                                          return Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFFFFBEB),
+                                              border: Border(
+                                                left: const BorderSide(color: Color(0xFFF59E0B), width: 4),
+                                                top: BorderSide(color: Colors.amber.shade200, width: 0.5),
+                                                bottom: BorderSide(color: Colors.amber.shade200, width: 0.5),
+                                              ),
+                                            ),
+                                            child: Row(
+                                              children: [
+                                                SizedBox(
+                                                  width: 28,
+                                                  child: Text('${idx + 1}', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFFB45309))),
+                                                ),
+                                                const Icon(Icons.title_rounded, size: 16, color: Color(0xFFD97706)),
+                                                const SizedBox(width: 6),
+                                                Expanded(
+                                                  child: TextField(
+                                                    controller: item.titleController,
+                                                    style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.bold, color: const Color(0xFF0F172A)),
+                                                    decoration: const InputDecoration(
+                                                      isDense: true,
+                                                      border: InputBorder.none,
+                                                      hintText: 'Enter Section / Title Header...',
+                                                    ),
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                  decoration: BoxDecoration(
+                                                    color: const Color(0xFFFEF3C7),
+                                                    borderRadius: BorderRadius.circular(4),
+                                                  ),
+                                                  child: Text('TITLE ROW', style: GoogleFonts.inter(fontSize: 8, fontWeight: FontWeight.w800, color: const Color(0xFF92400E))),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                _buildRowControls(idx),
+                                              ],
+                                            ),
+                                          );
+                                        }
+
+                                        return Padding(
+                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                          child: Row(
+                                            children: [
+                                              SizedBox(
+                                                width: 28,
+                                                child: Text('${idx + 1}', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B))),
+                                              ),
+                                              // Product Search Autocomplete Field
+                                              Expanded(
+                                                child: Autocomplete<ProductModel>(
+                                                  optionsBuilder: (TextEditingValue textVal) {
+                                                    if (textVal.text.trim().isEmpty) {
+                                                      return products.take(6);
+                                                    }
+                                                    return products.where((p) => p.name.toLowerCase().contains(textVal.text.toLowerCase()));
+                                                  },
+                                                  displayStringForOption: (ProductModel p) => p.name,
+                                                  onSelected: (ProductModel selection) {
+                                                    item.descriptionController.text = selection.name;
+                                                    item.rateController.text = selection.unitPrice.toStringAsFixed(2);
+                                                    item.taxController.text = selection.taxPercent.toStringAsFixed(0);
+                                                    _onItemValuesChanged(item);
+                                                  },
+                                                  fieldViewBuilder: (context, textEditingController, focusNode, onFieldSubmitted) {
+                                                    if (textEditingController.text != item.descriptionController.text && item.descriptionController.text.isNotEmpty) {
+                                                      textEditingController.text = item.descriptionController.text;
+                                                    }
+                                                    return TextFormField(
+                                                      controller: textEditingController,
+                                                      focusNode: focusNode,
+                                                      style: GoogleFonts.inter(fontSize: 12),
+                                                      onChanged: (val) {
+                                                        item.descriptionController.text = val;
+                                                        final match = products.where((p) => p.name.trim().toLowerCase() == val.trim().toLowerCase()).firstOrNull;
+                                                        if (match != null) {
+                                                          item.rateController.text = match.unitPrice.toStringAsFixed(2);
+                                                          item.taxController.text = match.taxPercent.toStringAsFixed(0);
+                                                          _onItemValuesChanged(item);
+                                                        } else {
+                                                          setState(() {});
+                                                        }
+                                                      },
+                                                      decoration: const InputDecoration(
+                                                        hintText: 'Search or enter item...',
+                                                        isDense: true,
+                                                        border: OutlineInputBorder(),
+                                                        contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                                      ),
+                                                    );
+                                                  },
+                                                ),
+                                              ),
+                                              // Custom Columns inputs
+                                              for (final col in _customColumns) ...[
+                                                const SizedBox(width: 8),
+                                                SizedBox(
+                                                  width: 120,
+                                                  child: TextField(
+                                                    controller: item.getCustomController(col, () => setState(() {})),
+                                                    style: GoogleFonts.inter(fontSize: 12),
+                                                    decoration: InputDecoration(
+                                                      isDense: true,
+                                                      border: const OutlineInputBorder(),
+                                                      hintText: col,
+                                                      contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                              // Qty
+                                              if (_showQty) ...[
+                                                const SizedBox(width: 8),
+                                                SizedBox(
+                                                  width: 80,
+                                                  child: TextField(
+                                                    controller: item.qtyController,
+                                                    textAlign: TextAlign.center,
+                                                    keyboardType: TextInputType.number,
+                                                    style: GoogleFonts.robotoMono(fontSize: 12.5, fontWeight: FontWeight.bold),
+                                                    decoration: const InputDecoration(
+                                                      isDense: true,
+                                                      border: OutlineInputBorder(),
+                                                      contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                              // Rate
+                                              if (_showPrice) ...[
+                                                const SizedBox(width: 8),
+                                                SizedBox(
+                                                  width: 110,
+                                                  child: TextField(
+                                                    controller: item.rateController,
+                                                    textAlign: TextAlign.right,
+                                                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                                    style: GoogleFonts.robotoMono(fontSize: 12.5, fontWeight: FontWeight.bold),
+                                                    decoration: const InputDecoration(
+                                                      isDense: true,
+                                                      border: OutlineInputBorder(),
+                                                      contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                              // GST
+                                              if (_showTax) ...[
+                                                const SizedBox(width: 8),
+                                                SizedBox(
+                                                  width: 75,
+                                                  child: TextField(
+                                                    controller: item.taxController,
+                                                    textAlign: TextAlign.center,
+                                                    keyboardType: TextInputType.number,
+                                                    style: GoogleFonts.robotoMono(fontSize: 12),
+                                                    decoration: const InputDecoration(
+                                                      isDense: true,
+                                                      border: OutlineInputBorder(),
+                                                      contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                              // Line Total (Editable if price is hidden, computed if price is visible)
+                                              const SizedBox(width: 8),
+                                              SizedBox(
+                                                width: 110,
+                                                child: _showPrice
+                                                    ? Text(
+                                                        '₹${item.computeLineTotal(showPrice: _showPrice, showQty: _showQty, showTax: _showTax).toStringAsFixed(2)}',
+                                                        textAlign: TextAlign.right,
+                                                        style: GoogleFonts.robotoMono(fontSize: 12.5, fontWeight: FontWeight.bold, color: const Color(0xFF0F172A)),
+                                                      )
+                                                    : TextFormField(
+                                                        controller: item.totalController,
+                                                        textAlign: TextAlign.right,
+                                                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                                        style: GoogleFonts.robotoMono(fontSize: 12.5, fontWeight: FontWeight.bold, color: const Color(0xFF0F172A)),
+                                                        decoration: const InputDecoration(
+                                                          hintText: '0.00',
+                                                          isDense: true,
+                                                          border: OutlineInputBorder(),
+                                                          contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                                                        ),
+                                                      ),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              _buildRowControls(idx),
+                                            ],
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                            const SizedBox(width: 8),
-                            // Rate
-                            Expanded(
-                              flex: 3,
-                              child: TextField(
-                                controller: item.rateController,
-                                textAlign: TextAlign.right,
-                                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                style: GoogleFonts.robotoMono(fontSize: 12.5, fontWeight: FontWeight.bold),
-                                decoration: const InputDecoration(
-                                  isDense: true,
-                                  border: OutlineInputBorder(),
-                                  contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            // GST
-                            Expanded(
-                              flex: 2,
-                              child: TextField(
-                                controller: item.taxController,
-                                textAlign: TextAlign.center,
-                                keyboardType: TextInputType.number,
-                                style: GoogleFonts.robotoMono(fontSize: 12),
-                                decoration: const InputDecoration(
-                                  isDense: true,
-                                  border: OutlineInputBorder(),
-                                  contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            // Line Total
-                            Expanded(
-                              flex: 3,
-                              child: Text(
-                                '₹${item.lineTotal.toStringAsFixed(2)}',
-                                textAlign: TextAlign.right,
-                                style: GoogleFonts.robotoMono(fontSize: 13, fontWeight: FontWeight.bold, color: const Color(0xFF0F172A)),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            _buildRowControls(idx),
-                          ],
+                          ),
                         ),
                       );
                     },

@@ -201,80 +201,111 @@ class _QuotationDetailDialogState extends State<QuotationDetailDialog> {
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(color: const Color(0xFFE2E8F0)),
                         ),
-                        child: Column(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                              decoration: const BoxDecoration(
-                                color: Color(0xFFF1F5F9),
-                                borderRadius: BorderRadius.only(topLeft: Radius.circular(12), topRight: Radius.circular(12)),
-                              ),
-                              child: Row(
-                                children: [
-                                  Expanded(flex: 5, child: Text('Product / Item', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF475569)))),
-                                  for (final col in q.customColumns) ...[
-                                    const SizedBox(width: 8),
-                                    Expanded(flex: 2, child: Text(col, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF4338CA)))),
-                                  ],
-                                  const SizedBox(width: 8),
-                                  Expanded(flex: 2, child: Text('Qty', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF475569)))),
-                                  const SizedBox(width: 8),
-                                  Expanded(flex: 2, child: Text('Approx Rate', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF475569)))),
-                                  const SizedBox(width: 8),
-                                  Expanded(flex: 2, child: Text('Tax %', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF475569)))),
-                                  const SizedBox(width: 8),
-                                  Expanded(flex: 2, child: Text('Total', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF475569)))),
-                                ],
-                              ),
-                            ),
-                            ...q.items.map((item) {
-                              if (item.isSectionTitle) {
-                                return Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFFFFBEB),
-                                    border: Border(
-                                      left: const BorderSide(color: Color(0xFFF59E0B), width: 4),
-                                      bottom: BorderSide(color: Colors.amber.shade100, width: 0.5),
-                                    ),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      const Icon(Icons.title_rounded, size: 16, color: Color(0xFFD97706)),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: Text(
-                                          (item.title.isNotEmpty ? item.title : item.description).toUpperCase(),
-                                          style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w800, color: const Color(0xFF92400E)),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              }
+                        child: LayoutBuilder(
+                          builder: (context, constraints) {
+                            final double minTableWidth = 240 +
+                                (q.customColumns.length * 120) +
+                                (q.showQty ? 80 : 0) +
+                                (q.showPrice ? 110 : 0) +
+                                (q.showTax ? 80 : 0) +
+                                110;
+                            final double tableWidth = constraints.maxWidth > minTableWidth ? constraints.maxWidth : minTableWidth;
 
-                              return Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                child: Row(
+                            return SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: SizedBox(
+                                width: tableWidth,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.stretch,
                                   children: [
-                                    Expanded(flex: 5, child: Text(item.description, style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w500))),
-                                    for (final col in q.customColumns) ...[
-                                      const SizedBox(width: 8),
-                                      Expanded(flex: 2, child: Text(item.customFields[col] ?? '-', style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF334155)))),
-                                    ],
-                                    const SizedBox(width: 8),
-                                    Expanded(flex: 2, child: Text(item.quantity.toStringAsFixed(item.quantity.truncateToDouble() == item.quantity ? 0 : 2), textAlign: TextAlign.right, style: GoogleFonts.robotoMono(fontSize: 12))),
-                                    const SizedBox(width: 8),
-                                    Expanded(flex: 2, child: Text('₹${item.unitPrice.toStringAsFixed(2)}', textAlign: TextAlign.right, style: GoogleFonts.robotoMono(fontSize: 12))),
-                                    const SizedBox(width: 8),
-                                    Expanded(flex: 2, child: Text('${item.taxPercent.toStringAsFixed(0)}%', textAlign: TextAlign.right, style: GoogleFonts.robotoMono(fontSize: 12))),
-                                    const SizedBox(width: 8),
-                                    Expanded(flex: 2, child: Text('₹${item.total.toStringAsFixed(2)}', textAlign: TextAlign.right, style: GoogleFonts.robotoMono(fontSize: 12, fontWeight: FontWeight.w700))),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                      decoration: const BoxDecoration(
+                                        color: Color(0xFFF1F5F9),
+                                        borderRadius: BorderRadius.only(topLeft: Radius.circular(12), topRight: Radius.circular(12)),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Expanded(flex: 5, child: Text('Product / Item', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF475569)))),
+                                          for (final col in q.customColumns) ...[
+                                            const SizedBox(width: 8),
+                                            SizedBox(width: 110, child: Text(col, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF4338CA)))),
+                                          ],
+                                          if (q.showQty) ...[
+                                            const SizedBox(width: 8),
+                                            SizedBox(width: 75, child: Text('Qty', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF475569)))),
+                                          ],
+                                          if (q.showPrice) ...[
+                                            const SizedBox(width: 8),
+                                            SizedBox(width: 100, child: Text('Approx Rate', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF475569)))),
+                                          ],
+                                          if (q.showTax) ...[
+                                            const SizedBox(width: 8),
+                                            SizedBox(width: 75, child: Text('Tax %', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF475569)))),
+                                          ],
+                                          const SizedBox(width: 8),
+                                          SizedBox(width: 100, child: Text('Total', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF475569)))),
+                                        ],
+                                      ),
+                                    ),
+                                    ...q.items.map((item) {
+                                      if (item.isSectionTitle) {
+                                        return Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFFFFBEB),
+                                            border: Border(
+                                              left: const BorderSide(color: Color(0xFFF59E0B), width: 4),
+                                              bottom: BorderSide(color: Colors.amber.shade100, width: 0.5),
+                                            ),
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              const Icon(Icons.title_rounded, size: 16, color: Color(0xFFD97706)),
+                                              const SizedBox(width: 8),
+                                              Expanded(
+                                                child: Text(
+                                                  (item.title.isNotEmpty ? item.title : item.description).toUpperCase(),
+                                                  style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w800, color: const Color(0xFF92400E)),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                      }
+
+                                      return Padding(
+                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                        child: Row(
+                                          children: [
+                                            Expanded(flex: 5, child: Text(item.description, style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w500))),
+                                            for (final col in q.customColumns) ...[
+                                              const SizedBox(width: 8),
+                                              SizedBox(width: 110, child: Text(item.customFields[col] ?? '-', style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF334155)))),
+                                            ],
+                                            if (q.showQty) ...[
+                                              const SizedBox(width: 8),
+                                              SizedBox(width: 75, child: Text(item.quantity.toStringAsFixed(item.quantity.truncateToDouble() == item.quantity ? 0 : 2), textAlign: TextAlign.right, style: GoogleFonts.robotoMono(fontSize: 12))),
+                                            ],
+                                            if (q.showPrice) ...[
+                                              const SizedBox(width: 8),
+                                              SizedBox(width: 100, child: Text('₹${item.unitPrice.toStringAsFixed(2)}', textAlign: TextAlign.right, style: GoogleFonts.robotoMono(fontSize: 12))),
+                                            ],
+                                            if (q.showTax) ...[
+                                              const SizedBox(width: 8),
+                                              SizedBox(width: 75, child: Text('${item.taxPercent.toStringAsFixed(0)}%', textAlign: TextAlign.right, style: GoogleFonts.robotoMono(fontSize: 12))),
+                                            ],
+                                            const SizedBox(width: 8),
+                                            SizedBox(width: 100, child: Text('₹${item.total.toStringAsFixed(2)}', textAlign: TextAlign.right, style: GoogleFonts.robotoMono(fontSize: 12, fontWeight: FontWeight.w700))),
+                                          ],
+                                        ),
+                                      );
+                                    }),
                                   ],
                                 ),
-                              );
-                            }),
-                          ],
+                              ),
+                            );
+                          },
                         ),
                       ),
                       const SizedBox(height: 16),
