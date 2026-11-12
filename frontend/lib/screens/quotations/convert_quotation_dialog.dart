@@ -376,9 +376,9 @@ class _ConvertQuotationDialogState extends State<ConvertQuotationDialog> {
                     children: [
                       'HSN/SAC', 'Unit', 'Delivery Time', 'Brand', 'Size', 'Warranty', 'Serial No.'
                     ].map((sug) => ActionChip(
-                          label: Text('+ $sug', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF2563EB), fontWeight: FontWeight.w600)),
-                          backgroundColor: const Color(0xFFEFF6FF),
-                          side: const BorderSide(color: Color(0xFFBFDBFE)),
+                          label: Text('+ $sug', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF334155), fontWeight: FontWeight.w600)),
+                          backgroundColor: const Color(0xFFF8FAFC),
+                          side: const BorderSide(color: Color(0xFFE2E8F0)),
                           padding: EdgeInsets.zero,
                           visualDensity: VisualDensity.compact,
                           onPressed: () {
@@ -402,9 +402,9 @@ class _ConvertQuotationDialogState extends State<ConvertQuotationDialog> {
                       spacing: 6,
                       runSpacing: 4,
                       children: _customColumns.map((col) => Chip(
-                        label: Text(col, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF4338CA))),
-                        backgroundColor: const Color(0xFFEEF2FF),
-                        side: const BorderSide(color: Color(0xFFC7D2FE)),
+                        label: Text(col, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF334155))),
+                        backgroundColor: const Color(0xFFF1F5F9),
+                        side: const BorderSide(color: Color(0xFFCBD5E1)),
                         deleteIcon: const Icon(Icons.close_rounded, size: 14, color: Color(0xFFEF4444)),
                         onDeleted: () {
                           _removeCustomColumn(col);
@@ -832,7 +832,7 @@ class _ConvertQuotationDialogState extends State<ConvertQuotationDialog> {
                                                 Flexible(
                                                   child: Text(
                                                     col,
-                                                    style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF4338CA)),
+                                                    style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF475569)),
                                                     overflow: TextOverflow.ellipsis,
                                                   ),
                                                 ),

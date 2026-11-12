@@ -187,7 +187,7 @@ class _InvoiceDetailDialogState extends State<InvoiceDetailDialog> {
                                           Expanded(flex: 5, child: Text('Product / Item Description', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF475569)))),
                                           for (final col in inv.customColumns) ...[
                                             const SizedBox(width: 8),
-                                            SizedBox(width: 110, child: Text(col, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF4338CA)))),
+                                            SizedBox(width: 110, child: Text(col, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF475569)))),
                                           ],
                                           if (inv.showQty) ...[
                                             const SizedBox(width: 8),
