@@ -57,13 +57,13 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         return data
 
 class UserProfileSerializer(serializers.ModelSerializer):
-    company_name = serializers.CharField(source='company.name', read_only=True)
-    company_logo = serializers.CharField(source='company.logo', read_only=True)
-    company_phone = serializers.CharField(source='company.contact_phone', read_only=True)
-    company_email = serializers.CharField(source='company.contact_email', read_only=True)
-    company_address = serializers.CharField(source='company.address', read_only=True)
-    company_gstin = serializers.CharField(source='company.gstin', read_only=True)
-    company_website = serializers.CharField(source='company.website', read_only=True)
+    company_name = serializers.CharField(source='company.name', read_only=True, default='', allow_null=True)
+    company_logo = serializers.CharField(source='company.logo', read_only=True, default='', allow_null=True)
+    company_phone = serializers.CharField(source='company.contact_phone', read_only=True, default='', allow_null=True)
+    company_email = serializers.CharField(source='company.contact_email', read_only=True, default='', allow_null=True)
+    company_address = serializers.CharField(source='company.address', read_only=True, default='', allow_null=True)
+    company_gstin = serializers.CharField(source='company.gstin', read_only=True, default='', allow_null=True)
+    company_website = serializers.CharField(source='company.website', read_only=True, default='', allow_null=True)
     branch_name = serializers.CharField(source='branch.name', read_only=True)
     full_name = serializers.CharField(read_only=True)
     company_allowed_menus = serializers.SerializerMethodField()

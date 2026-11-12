@@ -11,6 +11,7 @@ import '../../core/widgets/app_back_button.dart';
 import '../../routes/app_routes.dart';
 import '../../models/company_model.dart';
 import '../../providers/company_provider.dart';
+import '../../core/widgets/company_logo_view.dart';
 import 'edit_company_dialog.dart';
 
 class CompanyDetailScreen extends StatefulWidget {
@@ -759,16 +760,12 @@ Login URL: https://app.stepzcrm.com
             children: [
               const AppBackButton(fallbackRoute: AppRoutes.companies),
               const SizedBox(width: 10),
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  gradient: AppColors.primaryGradient,
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(color: const Color(0xFF2563EB).withValues(alpha: 0.25), blurRadius: 10),
-                  ],
-                ),
-                child: const Icon(Icons.apartment_rounded, color: Colors.white, size: 20),
+              CompanyLogoView(
+                logo: company.logo,
+                companyName: company.name,
+                size: 38,
+                borderRadius: BorderRadius.circular(10),
+                borderColor: const Color(0xFFCBD5E1),
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -917,16 +914,12 @@ Login URL: https://app.stepzcrm.com
       children: [
         const AppBackButton(fallbackRoute: AppRoutes.companies),
         const SizedBox(width: 12),
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            gradient: AppColors.primaryGradient,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(color: const Color(0xFF2563EB).withValues(alpha: 0.25), blurRadius: 12),
-            ],
-          ),
-          child: const Icon(Icons.apartment_rounded, color: Colors.white, size: 24),
+        CompanyLogoView(
+          logo: company.logo,
+          companyName: company.name,
+          size: 48,
+          borderRadius: BorderRadius.circular(14),
+          borderColor: const Color(0xFFCBD5E1),
         ),
         const SizedBox(width: 14),
         Expanded(

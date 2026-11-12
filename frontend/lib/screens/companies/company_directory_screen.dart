@@ -14,6 +14,7 @@ import '../../core/widgets/app_back_button.dart';
 import '../../routes/app_routes.dart';
 import '../../models/company_model.dart';
 import '../../providers/company_provider.dart';
+import '../../core/widgets/company_logo_view.dart';
 
 class CompanyDirectoryScreen extends StatefulWidget {
   const CompanyDirectoryScreen({super.key});
@@ -445,27 +446,12 @@ Login URL: https://app.stepzcrm.com
                             const SizedBox(height: 8),
                             Row(
                               children: [
-                                Container(
-                                  width: 80,
-                                  height: 52,
-                                  decoration: BoxDecoration(
-                                    color: Colors.white,
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(color: const Color(0xFFCBD5E1)),
-                                  ),
-                                  child: Center(
-                                    child: logoData.isEmpty
-                                        ? const Icon(Icons.add_photo_alternate_outlined, size: 24, color: Color(0xFF94A3B8))
-                                        : (logoData.startsWith('data:image')
-                                            ? ClipRRect(
-                                                borderRadius: BorderRadius.circular(7),
-                                                child: Image.memory(base64Decode(logoData.split(',').last), fit: BoxFit.contain),
-                                              )
-                                            : ClipRRect(
-                                                borderRadius: BorderRadius.circular(7),
-                                                child: Image.network(logoData, fit: BoxFit.contain, errorBuilder: (_, __, ___) => const Icon(Icons.business_rounded)),
-                                              )),
-                                  ),
+                                CompanyLogoView(
+                                  logo: logoData,
+                                  companyName: compNameController.text,
+                                  size: 52,
+                                  borderRadius: BorderRadius.circular(10),
+                                  borderColor: const Color(0xFFCBD5E1),
                                 ),
                                 const SizedBox(width: 12),
                                 Expanded(
@@ -1263,14 +1249,12 @@ Login URL: https://app.stepzcrm.com
                                       Row(
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
-                                          Container(
-                                            padding: const EdgeInsets.all(12),
-                                            decoration: BoxDecoration(
-                                              color: const Color(0xFFECFDF5),
-                                              borderRadius: BorderRadius.circular(12),
-                                              border: Border.all(color: const Color(0xFF10B981)),
-                                            ),
-                                            child: const Icon(Icons.apartment_rounded, color: Color(0xFF047857), size: 22),
+                                          CompanyLogoView(
+                                            logo: comp.logo,
+                                            companyName: comp.name,
+                                            size: 46,
+                                            borderRadius: BorderRadius.circular(12),
+                                            borderColor: const Color(0xFFCBD5E1),
                                           ),
                                           const SizedBox(width: 14),
                                           Expanded(

@@ -7,6 +7,8 @@ import 'package:intl/intl.dart';
 import '../../core/responsive/responsive_layout.dart';
 import '../../providers/dashboard_provider.dart';
 import '../../models/dashboard_model.dart';
+import '../../providers/company_provider.dart';
+import '../../core/widgets/company_logo_view.dart';
 import '../../routes/app_routes.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
@@ -25,6 +27,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<DashboardProvider>().fetchAdminDashboard();
+      context.read<CompanyProvider>().fetchCompanies();
     });
   }
 
@@ -823,61 +826,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   // 4. RECENT COMPANIES CARD
   // ==========================================
   Widget _buildRecentCompaniesCard() {
-    final recentCompanies = [
-      RecentCompanyItem(
-        id: '1',
-        name: 'Horizon Tech',
-        status: 'ACTIVE',
-        email: 'contact@horizontech.io',
-        userCount: 42,
-        leadCount: 1250,
-        createdAt: DateTime(2025, 4, 12),
-      ),
-      RecentCompanyItem(
-        id: '2',
-        name: 'Skyline Academy',
-        status: 'ACTIVE',
-        email: 'info@skyline.edu',
-        userCount: 18,
-        leadCount: 840,
-        createdAt: DateTime(2025, 4, 10),
-      ),
-      RecentCompanyItem(
-        id: '3',
-        name: 'Apex Global Solutions',
-        status: 'ACTIVE',
-        email: 'contact@apex.com',
-        userCount: 65,
-        leadCount: 3400,
-        createdAt: DateTime(2025, 4, 8),
-      ),
-      RecentCompanyItem(
-        id: '4',
-        name: 'Zenith Technologies',
-        status: 'ACTIVE',
-        email: 'hello@zenith.ai',
-        userCount: 24,
-        leadCount: 920,
-        createdAt: DateTime(2025, 4, 5),
-      ),
-      RecentCompanyItem(
-        id: '5',
-        name: 'NextGen Logistics',
-        status: 'SUSPENDED',
-        email: 'ops@nextgenlogistics.com',
-        userCount: 9,
-        leadCount: 310,
-        createdAt: DateTime(2025, 4, 3),
-      ),
-    ];
-
-    final colors = [
-      const Color(0xFF3B82F6),
-      const Color(0xFF8B5CF6),
-      const Color(0xFF1E293B),
-      const Color(0xFF6366F1),
-      const Color(0xFFF97316),
-    ];
+    final compProv = context.watch<CompanyProvider>();
+    final realCompanies = compProv.companies;
 
     final isMobile = ResponsiveLayout.isMobile(context);
 
@@ -945,123 +895,102 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           ),
           const SizedBox(height: 14),
 
-          ListView.separated(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: recentCompanies.length,
-            separatorBuilder: (_, __) => const Divider(color: Color(0xFFE2E8F0), height: 14),
-            itemBuilder: (context, index) {
-              final comp = recentCompanies[index];
-              final avatarColor = colors[index % colors.length];
-              final isActive = comp.status == 'ACTIVE';
-
-              return InkWell(
-                onTap: () => Navigator.pushNamed(context, AppRoutes.companyDetail, arguments: comp.id),
-                borderRadius: BorderRadius.circular(8),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 32,
-                        height: 32,
-                        decoration: BoxDecoration(
-                          color: avatarColor,
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: avatarColor.withValues(alpha: 0.25),
-                              blurRadius: 6,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
-                        ),
-                        child: Center(
-                          child: Text(
-                            comp.name.substring(0, 1),
-                            style: GoogleFonts.inter(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w800,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              comp.name,
-                              style: GoogleFonts.inter(
-                                fontSize: 12.5,
-                                fontWeight: FontWeight.w700,
-                                color: const Color(0xFF0F172A),
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            Text(
-                              comp.email,
-                              style: GoogleFonts.inter(
-                                fontSize: 10.5,
-                                color: const Color(0xFF64748B),
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-
-                      // Active / Suspended Status Pill
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
-                        decoration: BoxDecoration(
-                          color: isActive
-                              ? const Color(0xFF10B981).withValues(alpha: 0.16)
-                              : const Color(0xFFEF4444).withValues(alpha: 0.16),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: isActive
-                                ? const Color(0xFF10B981).withValues(alpha: 0.35)
-                                : const Color(0xFFEF4444).withValues(alpha: 0.35),
-                            width: 0.8,
-                          ),
-                        ),
-                        child: Text(
-                          isActive ? 'Active' : 'Suspended',
-                          style: GoogleFonts.inter(
-                            fontSize: 9.5,
-                            fontWeight: FontWeight.w700,
-                            color: isActive ? const Color(0xFF047857) : const Color(0xFFDC2626),
-                          ),
-                        ),
-                      ),
-                      if (!isMobile) ...[
-                        const SizedBox(width: 10),
-                        // Date
-                        Text(
-                          comp.createdAt != null
-                              ? DateFormat('MMM dd, yyyy').format(comp.createdAt!)
-                              : 'Apr 2025',
-                          style: GoogleFonts.inter(
-                            fontSize: 10,
-                            color: const Color(0xFF64748B),
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                      const SizedBox(width: 4),
-                      const Icon(Icons.chevron_right_rounded, size: 14, color: Color(0xFF94A3B8)),
-                    ],
-                  ),
+          if (realCompanies.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 20),
+              child: Center(
+                child: Text(
+                  'No companies registered yet.',
+                  style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
                 ),
-              );
-            },
-          ),
+              ),
+            )
+          else
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: realCompanies.length > 5 ? 5 : realCompanies.length,
+              separatorBuilder: (_, __) => const Divider(color: Color(0xFFE2E8F0), height: 14),
+              itemBuilder: (context, index) {
+                final comp = realCompanies[index];
+                final isActive = comp.status == 'ACTIVE';
+
+                return InkWell(
+                  onTap: () => Navigator.pushNamed(context, AppRoutes.companyDetail, arguments: comp),
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      children: [
+                        CompanyLogoView(
+                          logo: comp.logo,
+                          companyName: comp.name,
+                          size: 32,
+                          borderRadius: BorderRadius.circular(8),
+                          borderColor: const Color(0xFFCBD5E1),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                comp.name,
+                                style: GoogleFonts.inter(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: const Color(0xFF0F172A),
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              Text(
+                                comp.adminEmail,
+                                style: GoogleFonts.inter(
+                                  fontSize: 10.5,
+                                  color: const Color(0xFF64748B),
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+
+                        // Active / Suspended Status Pill
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                          decoration: BoxDecoration(
+                            color: isActive
+                                ? const Color(0xFF10B981).withValues(alpha: 0.16)
+                                : const Color(0xFFEF4444).withValues(alpha: 0.16),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: isActive
+                                  ? const Color(0xFF10B981).withValues(alpha: 0.35)
+                                  : const Color(0xFFEF4444).withValues(alpha: 0.35),
+                              width: 0.8,
+                            ),
+                          ),
+                          child: Text(
+                            comp.status.toUpperCase(),
+                            style: GoogleFonts.inter(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w800,
+                              color: isActive ? const Color(0xFF047857) : const Color(0xFFDC2626),
+                              letterSpacing: 0.3,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        const Icon(Icons.chevron_right_rounded, size: 14, color: Color(0xFF94A3B8)),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
         ],
       ),
     );

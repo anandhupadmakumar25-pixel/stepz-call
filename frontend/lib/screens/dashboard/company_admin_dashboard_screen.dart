@@ -39,12 +39,13 @@ class _CompanyAdminDashboardScreenState extends State<CompanyAdminDashboardScree
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<AuthProvider>().refreshUserProfile();
+      context.read<CompanyProvider>().fetchMyCompany();
       context.read<DashboardProvider>().fetchAdminDashboard();
       context.read<LeadProvider>().fetchBranches();
       context.read<LeadProvider>().fetchCategories();
       context.read<EmployeeProvider>().fetchEmployees();
       context.read<BillingProvider>().fetchBillingOverview();
-      context.read<CompanyProvider>().fetchMyCompany();
     });
   }
 
@@ -216,7 +217,15 @@ class _CompanyAdminDashboardScreenState extends State<CompanyAdminDashboardScree
     final isDesktop = ResponsiveLayout.isDesktop(context);
     final isMobile = ResponsiveLayout.isMobile(context);
 
-    final companyName = user?.companyName ?? 'Acme Telecallers Corp';
+    final compProv = context.watch<CompanyProvider>();
+    final activeComp = compProv.activeCompanyDetail;
+    final companyName = (activeComp != null && activeComp.name.isNotEmpty)
+        ? activeComp.name
+        : (user?.companyName ?? 'Acme Telecallers Corp');
+    final companyLogo = (activeComp != null && activeComp.logo.isNotEmpty)
+        ? activeComp.logo
+        : (user?.companyLogo ?? '');
+
     final branchCount = branches.length;
     final activeAgents = kpis.totalEmployees > 0 ? kpis.totalEmployees : dash.employeePerformance.length;
     final canManageBranches = user?.canManageBranches ?? (user?.hasMenuPermission('branches') ?? false);
@@ -225,6 +234,8 @@ class _CompanyAdminDashboardScreenState extends State<CompanyAdminDashboardScree
       color: const Color(0xFF06B6D4),
       onRefresh: () async {
         await Future.wait([
+          context.read<AuthProvider>().refreshUserProfile(),
+          context.read<CompanyProvider>().fetchMyCompany(),
           context.read<DashboardProvider>().fetchAdminDashboard(),
           context.read<LeadProvider>().fetchBranches(),
           context.read<EmployeeProvider>().fetchEmployees(),
@@ -245,7 +256,7 @@ class _CompanyAdminDashboardScreenState extends State<CompanyAdminDashboardScree
             // 1. EXECUTIVE COMMAND HEADER
             _buildCompanyWorkspaceHeader(
               companyName: companyName,
-              companyLogo: user?.companyLogo,
+              companyLogo: companyLogo,
               userFullName: user?.fullName ?? 'Company Admin',
               branchCount: branchCount,
               agentCount: activeAgents,

@@ -29,11 +29,17 @@ class CompanyLogoView extends StatelessWidget {
     this.fit = BoxFit.contain,
   });
 
-  Uint8List? _tryDecodeBase64(String raw) {
+  static Uint8List? decodeBase64Safe(String raw) {
     try {
-      String clean = raw.trim();
+      String clean = raw.trim().replaceAll('"', '').replaceAll("'", "");
       if (clean.contains(',')) {
         clean = clean.split(',').last.trim();
+      }
+      clean = clean.replaceAll(RegExp(r'\s+'), '');
+      if (clean.isEmpty) return null;
+      final remainder = clean.length % 4;
+      if (remainder != 0) {
+        clean = clean.padRight(clean.length + (4 - remainder), '=');
       }
       return base64Decode(clean);
     } catch (_) {
@@ -49,28 +55,31 @@ class CompanyLogoView extends StatelessWidget {
     final border = borderColor ?? const Color(0xFFE2E8F0);
     final bg = backgroundColor ?? Colors.white;
 
-    final trimmedLogo = logo?.trim() ?? '';
+    String cleanLogo = (logo ?? '').trim().replaceAll('"', '').replaceAll("'", "");
 
-    Widget? imageContent;
+    Widget? imageWidget;
 
-    if (trimmedLogo.isNotEmpty) {
-      if (trimmedLogo.startsWith('http://') || trimmedLogo.startsWith('https://')) {
-        imageContent = Image.network(
-          trimmedLogo,
-          width: w,
-          height: h,
+    if (cleanLogo.isNotEmpty) {
+      if (cleanLogo.startsWith('http://') || cleanLogo.startsWith('https://')) {
+        imageWidget = Image.network(
+          cleanLogo,
           fit: fit,
-          errorBuilder: (_, __, ___) => _buildFallback(w, h),
+          errorBuilder: (_, __, ___) => _buildFallback(),
+        );
+      } else if (cleanLogo.startsWith('/media/') || cleanLogo.startsWith('media/')) {
+        final fullUrl = 'https://web-production-4e39b.up.railway.app${cleanLogo.startsWith('/') ? cleanLogo : '/$cleanLogo'}';
+        imageWidget = Image.network(
+          fullUrl,
+          fit: fit,
+          errorBuilder: (_, __, ___) => _buildFallback(),
         );
       } else {
-        final bytes = _tryDecodeBase64(trimmedLogo);
+        final bytes = decodeBase64Safe(cleanLogo);
         if (bytes != null && bytes.isNotEmpty) {
-          imageContent = Image.memory(
+          imageWidget = Image.memory(
             bytes,
-            width: w,
-            height: h,
             fit: fit,
-            errorBuilder: (_, __, ___) => _buildFallback(w, h),
+            errorBuilder: (_, __, ___) => _buildFallback(),
           );
         }
       }
@@ -85,8 +94,8 @@ class CompanyLogoView extends StatelessWidget {
         border: Border.all(color: border, width: 1.0),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 8,
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 6,
             offset: const Offset(0, 2),
           ),
         ],
@@ -94,24 +103,24 @@ class CompanyLogoView extends StatelessWidget {
       child: ClipRRect(
         borderRadius: radius,
         child: Padding(
-          padding: const EdgeInsets.all(4),
-          child: imageContent ?? _buildFallback(w, h),
+          padding: const EdgeInsets.all(3),
+          child: SizedBox.expand(
+            child: imageWidget ?? _buildFallback(),
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildFallback(double w, double h) {
+  Widget _buildFallback() {
     final initial = (companyName != null && companyName!.trim().isNotEmpty)
         ? companyName!.trim().substring(0, 1).toUpperCase()
         : '';
 
     return Container(
-      width: w,
-      height: h,
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xFF1E293B), Color(0xFF0F172A)],
+          colors: [Color(0xFF0F766E), Color(0xFF047857), Color(0xFF065F46)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -122,18 +131,17 @@ class CompanyLogoView extends StatelessWidget {
             ? Text(
                 initial,
                 style: GoogleFonts.inter(
-                  fontSize: w * 0.42,
+                  fontSize: 16,
                   fontWeight: FontWeight.w800,
                   color: Colors.white,
                 ),
               )
-            : Icon(
-                Icons.corporate_fare_rounded,
-                size: w * 0.45,
-                color: const Color(0xFF94A3B8),
+            : const Icon(
+                Icons.apartment_rounded,
+                size: 20,
+                color: Colors.white,
               ),
       ),
     );
   }
 }
-
