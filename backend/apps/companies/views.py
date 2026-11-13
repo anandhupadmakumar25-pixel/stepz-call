@@ -30,6 +30,7 @@ from apps.companies.serializers import (
     CompanySubscriptionHistorySerializer,
 )
 from apps.core.permissions import IsSuperAdmin, IsCompanyAdmin, IsEmployee, IsMasterAdmin
+from rest_framework.permissions import AllowAny
 
 User = get_user_model()
 
@@ -862,6 +863,89 @@ class CompanySuperAdminRequestView(views.APIView):
 
 
 # ── Tenant Renewal Requests & Subscription History Views ──────────────────────
+
+class CompanyPublicRenewalRequestView(views.APIView):
+    """
+    Public lockout-friendly endpoint: allows expired/suspended tenants who CANNOT log in
+    to submit a plan renewal request directly to their assigned Super Admin.
+    """
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        email = request.data.get('email', '').strip().lower()
+        company_id = request.data.get('company_id')
+        billing_cycle = request.data.get('billing_cycle', 'MONTHLY')
+        requested_days = int(request.data.get('requested_days', 30))
+        requested_date = request.data.get('requested_date')
+        payment_reference = request.data.get('payment_reference', '').strip()
+        notes = request.data.get('notes', '').strip()
+
+        if not email and not company_id:
+            return Response({"error": "Administrator email or company_id is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        user = None
+        company = None
+
+        if email:
+            user = User.objects.filter(email=email).first()
+            if user and user.company:
+                company = user.company
+
+        if not company and company_id:
+            company = Company.objects.filter(id=company_id).first()
+            if company and not user:
+                user = User.objects.filter(company=company, role='COMPANY_ADMIN').first()
+
+        if not company:
+            return Response({"error": "No registered tenant organization was found for the provided details."}, status=status.HTTP_404_NOT_FOUND)
+
+        assigned_sa = company.assigned_super_admin or company.created_by
+
+        renewal_request = CompanyRenewalRequest.objects.create(
+            company=company,
+            requested_by=user,
+            assigned_super_admin=assigned_sa,
+            plan=company.plan,
+            billing_cycle=billing_cycle,
+            requested_days=requested_days,
+            requested_date=requested_date,
+            payment_reference=payment_reference,
+            notes=notes,
+            status='PENDING'
+        )
+
+        from apps.notifications.models import Notification
+        cycle_label = dict(CompanyRenewalRequest.CYCLE_CHOICES).get(billing_cycle, billing_cycle)
+        requester_name = user.full_name if user else company.name
+
+        if assigned_sa:
+            Notification.objects.create(
+                user=assigned_sa,
+                company=company,
+                title=f"Plan Renewal Request: {company.name} ⏳",
+                message=f"{requester_name} from {company.name} requested a plan renewal ({cycle_label}). Please review and approve.",
+                notification_type='SYSTEM',
+                entity_type='renewal_request',
+                entity_id=str(renewal_request.id)
+            )
+        else:
+            for ma in User.objects.filter(role='MASTER_ADMIN'):
+                Notification.objects.create(
+                    user=ma,
+                    company=company,
+                    title=f"Plan Renewal Request: {company.name} ⏳",
+                    message=f"{requester_name} from {company.name} requested a plan renewal ({cycle_label}).",
+                    notification_type='SYSTEM',
+                    entity_type='renewal_request',
+                    entity_id=str(renewal_request.id)
+                )
+
+        sa_name = assigned_sa.full_name if assigned_sa else "Platform Administrator"
+        return Response({
+            "message": f"Renewal request for '{company.name}' submitted successfully. Your Super Admin ({sa_name}) has been notified to review and reactivate your workspace.",
+            "renewal_request": CompanyRenewalRequestSerializer(renewal_request).data
+        }, status=status.HTTP_201_CREATED)
+
 
 class CompanyRenewalRequestListCreateView(views.APIView):
     def get_permissions(self):

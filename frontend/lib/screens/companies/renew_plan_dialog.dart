@@ -66,16 +66,27 @@ class _RenewPlanDialogState extends State<RenewPlanDialog> {
   void initState() {
     super.initState();
     _selectedPlanId = widget.company.planId;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final prov = context.read<CompanyProvider>();
+      if (prov.plans.isEmpty) {
+        prov.fetchPlans();
+      }
+    });
   }
 
   Future<void> _pickCustomDate() async {
     final now = DateTime.now();
-    final initialDate = widget.company.planExpiresAt != null
-        ? (DateTime.tryParse(widget.company.planExpiresAt!) ?? now)
-        : now;
+    DateTime calculatedInitial = now.add(const Duration(days: 30));
+    if (widget.company.planExpiresAt != null) {
+      final parsed = DateTime.tryParse(widget.company.planExpiresAt!);
+      if (parsed != null && parsed.isAfter(now)) {
+        calculatedInitial = parsed.add(const Duration(days: 30));
+      }
+    }
+
     final picked = await showDatePicker(
       context: context,
-      initialDate: initialDate.isAfter(now) ? initialDate.add(const Duration(days: 30)) : now.add(const Duration(days: 30)),
+      initialDate: calculatedInitial,
       firstDate: now,
       lastDate: now.add(const Duration(days: 365 * 10)),
     );
@@ -438,7 +449,9 @@ class _RenewPlanDialogState extends State<RenewPlanDialog> {
                         ),
                         child: DropdownButtonHideUnderline(
                           child: DropdownButton<String>(
-                            value: _selectedPlanId ?? (plans.isNotEmpty ? plans.first.id.toString() : null),
+                            value: plans.any((p) => p.id.toString() == _selectedPlanId)
+                                ? _selectedPlanId
+                                : (plans.isNotEmpty ? plans.first.id.toString() : null),
                             isExpanded: true,
                             items: plans.map((p) {
                               return DropdownMenuItem<String>(

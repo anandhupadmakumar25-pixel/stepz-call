@@ -27,18 +27,26 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
 
             if user.company.is_plan_expired:
                 expiry_str = user.company.plan_expires_at.strftime('%d %b %Y') if user.company.plan_expires_at else 'Unknown date'
+                assigned_sa = user.company.assigned_super_admin or user.company.created_by
                 raise serializers.ValidationError({
-                    "detail": f"Your company subscription plan expired on {expiry_str}. Please contact your company administrator to renew your plan.",
+                    "detail": f"Your company subscription plan expired on {expiry_str}. Please submit a renewal request to restore access.",
                     "code": "PLAN_EXPIRED",
                     "plan_expires_at": user.company.plan_expires_at.isoformat() if user.company.plan_expires_at else None,
                     "company_name": user.company.name,
+                    "company_id": str(user.company.id),
+                    "user_email": user.email,
+                    "super_admin_name": assigned_sa.full_name if assigned_sa else "Platform Administrator",
                 })
 
             if user.company.status == 'SUSPENDED':
+                assigned_sa = user.company.assigned_super_admin or user.company.created_by
                 raise serializers.ValidationError({
                     "detail": "Company account is suspended. Please contact your company administrator or support.",
                     "code": "COMPANY_SUSPENDED",
                     "company_name": user.company.name,
+                    "company_id": str(user.company.id),
+                    "user_email": user.email,
+                    "super_admin_name": assigned_sa.full_name if assigned_sa else "Platform Administrator",
                 })
 
         company = user.company

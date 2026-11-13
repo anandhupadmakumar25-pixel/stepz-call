@@ -41,6 +41,12 @@ class _SubmitRenewalRequestDialogState extends State<SubmitRenewalRequestDialog>
   void initState() {
     super.initState();
     _selectedPlanId = widget.company?.planId;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final prov = context.read<CompanyProvider>();
+      if (prov.plans.isEmpty) {
+        prov.fetchPlans();
+      }
+    });
   }
 
   @override
@@ -312,7 +318,9 @@ class _SubmitRenewalRequestDialogState extends State<SubmitRenewalRequestDialog>
                           child: DropdownButtonHideUnderline(
                             child: DropdownButton<String>(
                               isExpanded: true,
-                              value: _selectedPlanId ?? (widget.company?.planId),
+                              value: plans.any((p) => p.id.toString() == _selectedPlanId)
+                                  ? _selectedPlanId
+                                  : null,
                               hint: Text('Select Plan (or keep current)', style: GoogleFonts.inter(fontSize: 13)),
                               items: plans.map((p) {
                                 return DropdownMenuItem<String>(
@@ -899,5 +907,500 @@ class _ApproveRenewalRequestDialogState extends State<ApproveRenewalRequestDialo
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     if (m >= 1 && m <= 12) return months[m - 1];
     return '';
+  }
+}
+
+/// Modal dialog specifically for locked-out / expired tenant companies on the login screen
+class TenantLockoutRenewalDialog extends StatefulWidget {
+  final String companyName;
+  final String? companyId;
+  final String userEmail;
+  final String superAdminName;
+  final String? expiredAt;
+
+  const TenantLockoutRenewalDialog({
+    super.key,
+    required this.companyName,
+    this.companyId,
+    required this.userEmail,
+    required this.superAdminName,
+    this.expiredAt,
+  });
+
+  static Future<bool?> show(
+    BuildContext context, {
+    required String companyName,
+    String? companyId,
+    required String userEmail,
+    required String superAdminName,
+    String? expiredAt,
+  }) {
+    return showDialog<bool>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.75),
+      builder: (_) => TenantLockoutRenewalDialog(
+        companyName: companyName,
+        companyId: companyId,
+        userEmail: userEmail,
+        superAdminName: superAdminName,
+        expiredAt: expiredAt,
+      ),
+    );
+  }
+
+  @override
+  State<TenantLockoutRenewalDialog> createState() => _TenantLockoutRenewalDialogState();
+}
+
+class _TenantLockoutRenewalDialogState extends State<TenantLockoutRenewalDialog> {
+  String _selectedCycle = 'MONTHLY';
+  int _requestedDays = 30;
+  DateTime? _requestedTargetDate;
+  final TextEditingController _daysController = TextEditingController(text: '30');
+  final TextEditingController _paymentRefController = TextEditingController();
+  final TextEditingController _notesController = TextEditingController();
+  bool _isSubmitting = false;
+  bool _isSuccess = false;
+  String? _errorMessage;
+
+  @override
+  void dispose() {
+    _daysController.dispose();
+    _paymentRefController.dispose();
+    _notesController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickTargetDate() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: now.add(const Duration(days: 30)),
+      firstDate: now,
+      lastDate: now.add(const Duration(days: 365 * 5)),
+    );
+    if (picked != null) {
+      setState(() {
+        _requestedTargetDate = picked;
+        _selectedCycle = 'CUSTOM_DATE';
+      });
+    }
+  }
+
+  Future<void> _handleSubmit() async {
+    setState(() {
+      _isSubmitting = true;
+      _errorMessage = null;
+    });
+
+    int days = _requestedDays;
+    if (_selectedCycle == 'DAYS') {
+      days = int.tryParse(_daysController.text.trim()) ?? 30;
+    } else if (_selectedCycle == 'MONTHLY') {
+      days = 30;
+    } else if (_selectedCycle == 'YEARLY') {
+      days = 365;
+    }
+
+    final compProvider = context.read<CompanyProvider>();
+    final result = await compProvider.submitPublicRenewalRequest(
+      email: widget.userEmail,
+      companyId: widget.companyId,
+      billingCycle: _selectedCycle,
+      requestedDays: days,
+      requestedDate: _selectedCycle == 'CUSTOM_DATE' && _requestedTargetDate != null
+          ? _requestedTargetDate!.toIso8601String()
+          : null,
+      paymentReference: _paymentRefController.text.trim(),
+      notes: _notesController.text.trim(),
+    );
+
+    if (!mounted) return;
+    setState(() => _isSubmitting = false);
+
+    if (result['success'] == true) {
+      setState(() => _isSuccess = true);
+    } else {
+      setState(() {
+        _errorMessage = result['message'] ?? 'Failed to submit request. Please try again.';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isSuccess) {
+      return Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 480),
+          padding: const EdgeInsets.all(28),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.16),
+                blurRadius: 28,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 60,
+                height: 60,
+                decoration: const BoxDecoration(
+                  color: Color(0xFFECFDF5),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.check_circle_rounded, color: Color(0xFF059669), size: 36),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Renewal Request Submitted!',
+                style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'Your Super Admin (${widget.superAdminName}) has been notified. Once approved, your organization subscription will be reactivated automatically starting fresh from zero.',
+                style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF475569), height: 1.45),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF0F172A),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 13),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: () => Navigator.of(context).pop(true),
+                  child: Text('Done & Return to Login', style: GoogleFonts.inter(fontWeight: FontWeight.w700)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 520),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.18),
+                blurRadius: 30,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Header
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Color(0xFF0F766E), Color(0xFF0D9488)],
+                    ),
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(20),
+                      topRight: Radius.circular(20),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(Icons.autorenew_rounded, color: Colors.white, size: 24),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Request Account Reactivation',
+                              style: GoogleFonts.inter(fontSize: 17, fontWeight: FontWeight.w800, color: Colors.white),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Submit a plan renewal request directly to your Super Admin',
+                              style: GoogleFonts.inter(fontSize: 11.5, color: Colors.white.withValues(alpha: 0.85)),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded, color: Colors.white),
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                    ],
+                  ),
+                ),
+
+                Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (_errorMessage != null) ...[
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFEF2F2),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: const Color(0xFFFCA5A5)),
+                          ),
+                          child: Text(
+                            _errorMessage!,
+                            style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFFDC2626), fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                      ],
+
+                      // Organization info box
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(Icons.domain_rounded, size: 16, color: Color(0xFF475569)),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    widget.companyName,
+                                    style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              'Admin Email: ${widget.userEmail}',
+                              style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B)),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Super Admin: ${widget.superAdminName}',
+                              style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w600, color: const Color(0xFF4338CA)),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Cycle selector
+                      Text(
+                        'Select Desired Plan Duration',
+                        style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, color: const Color(0xFF1E293B)),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          _buildCycleChip('MONTHLY', 'Monthly (30 Days)', Icons.calendar_view_month_rounded),
+                          _buildCycleChip('YEARLY', 'Yearly (365 Days)', Icons.verified_rounded),
+                          _buildCycleChip('DAYS', 'Custom Days', Icons.timeline_rounded),
+                          _buildCycleChip('CUSTOM_DATE', 'Specific Date', Icons.event_rounded),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+
+                      if (_selectedCycle == 'DAYS') ...[
+                        Text(
+                          'Number of Extension Days',
+                          style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF475569)),
+                        ),
+                        const SizedBox(height: 6),
+                        TextField(
+                          controller: _daysController,
+                          keyboardType: TextInputType.number,
+                          decoration: InputDecoration(
+                            suffixText: 'Days',
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          onChanged: (val) {
+                            final parsed = int.tryParse(val.trim());
+                            if (parsed != null && parsed > 0) {
+                              setState(() => _requestedDays = parsed);
+                            }
+                          },
+                        ),
+                        const SizedBox(height: 14),
+                      ],
+
+                      if (_selectedCycle == 'CUSTOM_DATE') ...[
+                        Text(
+                          'Target Expiry Date',
+                          style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF475569)),
+                        ),
+                        const SizedBox(height: 6),
+                        InkWell(
+                          onTap: _pickTargetDate,
+                          borderRadius: BorderRadius.circular(10),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                            decoration: BoxDecoration(
+                              border: Border.all(color: const Color(0xFFCBD5E1)),
+                              borderRadius: BorderRadius.circular(10),
+                              color: const Color(0xFFF8FAFC),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.calendar_today_rounded, size: 16, color: Color(0xFF0F766E)),
+                                const SizedBox(width: 10),
+                                Text(
+                                  _requestedTargetDate != null
+                                      ? '${_requestedTargetDate!.day.toString().padLeft(2, '0')}/${_requestedTargetDate!.month.toString().padLeft(2, '0')}/${_requestedTargetDate!.year}'
+                                      : 'Click to select date',
+                                  style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                      ],
+
+                      // Payment Reference
+                      Text(
+                        'Payment / Transfer Reference (UTR / Receipt #)',
+                        style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF475569)),
+                      ),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: _paymentRefController,
+                        decoration: InputDecoration(
+                          hintText: 'e.g. UTR / NEFT / IMPS reference or cheque number',
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Notes
+                      Text(
+                        'Message for Super Admin',
+                        style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF475569)),
+                      ),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: _notesController,
+                        maxLines: 2,
+                        decoration: InputDecoration(
+                          hintText: 'Payment completed via bank transfer. Please restore our workspace access...',
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+
+                      // Actions
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          TextButton(
+                            onPressed: _isSubmitting ? null : () => Navigator.of(context).pop(),
+                            child: Text('Cancel', style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: const Color(0xFF64748B))),
+                          ),
+                          const SizedBox(width: 12),
+                          ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF0F766E),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                            icon: _isSubmitting
+                                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                                : const Icon(Icons.send_rounded, size: 16),
+                            label: Text(_isSubmitting ? 'Submitting...' : 'Submit Request', style: GoogleFonts.inter(fontWeight: FontWeight.w700)),
+                            onPressed: _isSubmitting ? null : _handleSubmit,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCycleChip(String key, String label, IconData icon) {
+    final isSelected = _selectedCycle == key;
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _selectedCycle = key;
+          if (key == 'CUSTOM_DATE' && _requestedTargetDate == null) {
+            _pickTargetDate();
+          }
+        });
+      },
+      borderRadius: BorderRadius.circular(8),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFFCCFBF1) : const Color(0xFFF1F5F9),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isSelected ? const Color(0xFF0F766E) : const Color(0xFFE2E8F0),
+            width: isSelected ? 1.5 : 1.0,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 15, color: isSelected ? const Color(0xFF0F766E) : const Color(0xFF64748B)),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                color: isSelected ? const Color(0xFF0F766E) : const Color(0xFF334155),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

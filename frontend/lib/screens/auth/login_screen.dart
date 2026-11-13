@@ -7,6 +7,7 @@ import '../../core/widgets/brand_logo.dart';
 import '../../core/widgets/glass/app_background.dart';
 import '../../providers/auth_provider.dart';
 import '../../routes/app_routes.dart';
+import '../companies/renewal_request_dialog.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -37,6 +38,9 @@ class _LoginScreenState extends State<LoginScreen> {
   void _showSubscriptionExpiredDialog({
     required String message,
     String? companyName,
+    String? companyId,
+    String? userEmail,
+    String? superAdminName,
     String? expiredAt,
   }) {
     showDialog(
@@ -183,24 +187,58 @@ class _LoginScreenState extends State<LoginScreen> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 20),
+                // Action Buttons: Request Renewal & Back to Login
                 SizedBox(
                   width: double.infinity,
                   height: 44,
-                  child: ElevatedButton(
-                    onPressed: () => Navigator.of(ctx).pop(),
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.of(ctx).pop();
+                      TenantLockoutRenewalDialog.show(
+                        context,
+                        companyName: companyName ?? 'Your Company',
+                        companyId: companyId,
+                        userEmail: userEmail ?? _emailController.text.trim(),
+                        superAdminName: superAdminName ?? 'Platform Administrator',
+                        expiredAt: expiredAt,
+                      );
+                    },
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF0F172A),
+                      backgroundColor: const Color(0xFF0F766E),
                       foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10),
                       ),
                       elevation: 0,
                     ),
+                    icon: const Icon(Icons.autorenew_rounded, size: 18),
+                    label: Text(
+                      'Request Plan Renewal',
+                      style: GoogleFonts.inter(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  height: 40,
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF64748B),
+                      side: const BorderSide(color: Color(0xFFCBD5E1)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
                     child: Text(
                       'Back to Login',
                       style: GoogleFonts.inter(
-                        fontSize: 14,
+                        fontSize: 13.5,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -230,14 +268,18 @@ class _LoginScreenState extends State<LoginScreen> {
     }
 
     final isExpired = auth.errorCode == 'PLAN_EXPIRED' ||
+        auth.errorCode == 'COMPANY_SUSPENDED' ||
         (auth.errorMessage?.toLowerCase().contains('expired') == true) ||
         (auth.errorMessage?.toLowerCase().contains('subscription') == true);
 
     if (isExpired) {
       final errData = auth.lastErrorData;
       _showSubscriptionExpiredDialog(
-        message: auth.errorMessage ?? 'Your company plan has expired. Please contact your administrator to renew.',
+        message: auth.errorMessage ?? 'Your company plan has expired. Please submit a renewal request to reactivate your account.',
         companyName: errData?['company_name']?.toString(),
+        companyId: errData?['company_id']?.toString(),
+        userEmail: _emailController.text.trim(),
+        superAdminName: errData?['super_admin_name']?.toString(),
         expiredAt: errData?['plan_expires_at']?.toString(),
       );
       return;

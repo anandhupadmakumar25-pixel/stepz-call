@@ -774,4 +774,41 @@ class CompanyProvider extends ChangeNotifier {
       notifyListeners();
     }
   }
+
+  Future<Map<String, dynamic>> submitPublicRenewalRequest({
+    required String email,
+    String? companyId,
+    required String billingCycle,
+    int requestedDays = 30,
+    String? requestedDate,
+    String paymentReference = '',
+    String notes = '',
+  }) async {
+    try {
+      final payload = <String, dynamic>{
+        'email': email,
+        'billing_cycle': billingCycle,
+        'requested_days': requestedDays,
+        'payment_reference': paymentReference,
+        'notes': notes,
+      };
+      if (companyId != null && companyId.isNotEmpty) {
+        payload['company_id'] = companyId;
+      }
+      if (requestedDate != null && requestedDate.isNotEmpty) {
+        payload['requested_date'] = requestedDate;
+      }
+
+      final res = await ApiClient.post('/companies/public-renewal-request/', payload);
+      if (res is Map<String, dynamic>) {
+        return {
+          'success': true,
+          'message': res['message'] ?? 'Renewal request submitted successfully! Your Super Admin has been notified.',
+        };
+      }
+      return {'success': false, 'message': 'Failed to submit renewal request.'};
+    } catch (e) {
+      return {'success': false, 'message': e.toString()};
+    }
+  }
 }
