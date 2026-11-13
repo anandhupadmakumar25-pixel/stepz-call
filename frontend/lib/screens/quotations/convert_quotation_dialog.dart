@@ -595,18 +595,19 @@ class _ConvertQuotationDialogState extends State<ConvertQuotationDialog> {
     final products = context.watch<BillingProvider>().products;
     final isPriceLower = _finalGrandTotal < q.grandTotal;
     final priceDiff = (q.grandTotal - _finalGrandTotal).abs();
+    final isMobile = MediaQuery.of(context).size.width < 600;
 
     return Dialog(
       backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      insetPadding: EdgeInsets.symmetric(horizontal: isMobile ? 8 : 16, vertical: isMobile ? 12 : 24),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 860, maxHeight: 840),
+        constraints: BoxConstraints(maxWidth: 860, maxHeight: isMobile ? MediaQuery.of(context).size.height * 0.95 : 840),
         child: GlassCard(
           blur: 24,
           opacity: 0.98,
           borderRadius: BorderRadius.circular(20),
           borderColor: const Color(0xFFCBD5E1),
-          padding: const EdgeInsets.all(24),
+          padding: EdgeInsets.all(isMobile ? 14 : 24),
           child: Form(
             key: _formKey,
             child: Column(
@@ -616,50 +617,62 @@ class _ConvertQuotationDialogState extends State<ConvertQuotationDialog> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(colors: [Color(0xFF059669), Color(0xFF10B981)]),
-                            borderRadius: BorderRadius.circular(12),
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(colors: [Color(0xFF059669), Color(0xFF10B981)]),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Icon(Icons.receipt_long_rounded, color: Colors.white, size: isMobile ? 20 : 24),
                           ),
-                          child: const Icon(Icons.receipt_long_rounded, color: Colors.white, size: 24),
-                        ),
-                        const SizedBox(width: 14),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  'Convert Quote to Fixed Price Bill',
-                                  style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+                                Row(
+                                  children: [
+                                    Flexible(
+                                      child: Text(
+                                        'Convert to Fixed Bill',
+                                        style: GoogleFonts.inter(fontSize: isMobile ? 15 : 18, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFD1FAE5),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        q.quotationNumber,
+                                        style: GoogleFonts.robotoMono(fontSize: 10, fontWeight: FontWeight.w800, color: const Color(0xFF047857)),
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                                const SizedBox(width: 8),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFD1FAE5),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: Text(
-                                    q.quotationNumber,
-                                    style: GoogleFonts.robotoMono(fontSize: 11, fontWeight: FontWeight.w800, color: const Color(0xFF047857)),
-                                  ),
+                                Text(
+                                  'Customer: ${q.customerName} (${q.customerPhone}) | Original: Rs. ${q.grandTotal.toStringAsFixed(2)}',
+                                  style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ],
                             ),
-                            Text(
-                              'Customer: ${q.customerName} (${q.customerPhone}) | Original Estimate: ₹${q.grandTotal.toStringAsFixed(2)}',
-                              style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
-                            ),
-                          ],
-                        ),
-                      ],
+                          ),
+                        ],
+                      ),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.close_rounded, color: Color(0xFF64748B)),
+                      icon: const Icon(Icons.close_rounded, color: Color(0xFF64748B), size: 20),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                       onPressed: () => Navigator.of(context).pop(),
                     ),
                   ],

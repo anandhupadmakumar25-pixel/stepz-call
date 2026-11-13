@@ -655,18 +655,19 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
   Widget build(BuildContext context) {
     final products = context.watch<BillingProvider>().products;
     final leads = context.watch<LeadProvider>().leads;
+    final isMobile = ResponsiveLayout.isMobile(context);
 
     return Dialog(
       backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+      insetPadding: EdgeInsets.symmetric(horizontal: isMobile ? 8 : 16, vertical: isMobile ? 10 : 20),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 900, maxHeight: 870),
+        constraints: BoxConstraints(maxWidth: 900, maxHeight: isMobile ? MediaQuery.of(context).size.height * 0.96 : 870),
         child: GlassCard(
           blur: 24,
           opacity: 0.98,
           borderRadius: BorderRadius.circular(20),
           borderColor: const Color(0xFFCBD5E1),
-          padding: const EdgeInsets.all(24),
+          padding: EdgeInsets.all(isMobile ? 14 : 24),
           child: Form(
             key: _formKey,
             child: Column(
@@ -676,65 +677,77 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            gradient: _createAsInvoice
-                                ? const LinearGradient(colors: [Color(0xFF2563EB), Color(0xFF1D4ED8)])
-                                : AppColors.primaryGradient,
-                            borderRadius: BorderRadius.circular(10),
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              gradient: _createAsInvoice
+                                  ? const LinearGradient(colors: [Color(0xFF2563EB), Color(0xFF1D4ED8)])
+                                  : AppColors.primaryGradient,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Icon(
+                              _createAsInvoice ? Icons.receipt_long_rounded : Icons.request_quote_rounded,
+                              color: Colors.white,
+                              size: isMobile ? 20 : 24,
+                            ),
                           ),
-                          child: Icon(
-                            _createAsInvoice ? Icons.receipt_long_rounded : Icons.request_quote_rounded,
-                            color: Colors.white,
-                            size: 24,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  widget.quotationToEdit != null
-                                      ? 'Edit Quotation ${widget.quotationToEdit!.quotationNumber}'
-                                      : (_createAsInvoice ? 'New Fixed Price Bill' : 'Generate Quotation'),
-                                  style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
-                                ),
-                                const SizedBox(width: 8),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: (_createAsInvoice ? const Color(0xFF059669) : const Color(0xFFF59E0B)).withValues(alpha: 0.15),
-                                    borderRadius: BorderRadius.circular(6),
-                                    border: Border.all(color: (_createAsInvoice ? const Color(0xFF059669) : const Color(0xFFF59E0B)).withValues(alpha: 0.4)),
-                                  ),
-                                  child: Text(
-                                    _createAsInvoice ? 'FIXED PRICE BILL' : 'APPROXIMATE PRICE',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w800,
-                                      color: _createAsInvoice ? const Color(0xFF047857) : const Color(0xFFB45309),
+                                Row(
+                                  children: [
+                                    Flexible(
+                                      child: Text(
+                                        widget.quotationToEdit != null
+                                            ? 'Edit Quotation ${widget.quotationToEdit!.quotationNumber}'
+                                            : (_createAsInvoice ? 'New Fixed Price Bill' : 'Generate Quotation'),
+                                        style: GoogleFonts.inter(fontSize: isMobile ? 15 : 18, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
                                     ),
-                                  ),
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                      decoration: BoxDecoration(
+                                        color: (_createAsInvoice ? const Color(0xFF059669) : const Color(0xFFF59E0B)).withValues(alpha: 0.15),
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(color: (_createAsInvoice ? const Color(0xFF059669) : const Color(0xFFF59E0B)).withValues(alpha: 0.4)),
+                                      ),
+                                      child: Text(
+                                        _createAsInvoice ? 'FIXED' : 'ESTIMATE',
+                                        style: GoogleFonts.inter(
+                                          fontSize: 9.5,
+                                          fontWeight: FontWeight.w800,
+                                          color: _createAsInvoice ? const Color(0xFF047857) : const Color(0xFFB45309),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                Text(
+                                  _selectedLead != null
+                                      ? 'For Lead: ${_selectedLead!.fullName} (${_selectedLead!.phoneNumber})'
+                                      : (_createAsInvoice ? 'Create official tax invoice with fixed pricing' : 'Create sales estimate with auto-saving catalog'),
+                                  style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ],
                             ),
-                            Text(
-                              _selectedLead != null
-                                  ? 'For Lead: ${_selectedLead!.fullName} (${_selectedLead!.phoneNumber})'
-                                  : (_createAsInvoice ? 'Create official tax invoice with fixed pricing' : 'Create sales estimate with auto-saving catalog'),
-                              style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
-                            ),
-                          ],
-                        ),
-                      ],
+                          ),
+                        ],
+                      ),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.close_rounded, color: Color(0xFF64748B)),
+                      icon: const Icon(Icons.close_rounded, color: Color(0xFF64748B), size: 20),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                       onPressed: () => Navigator.of(context).pop(),
                     ),
                   ],

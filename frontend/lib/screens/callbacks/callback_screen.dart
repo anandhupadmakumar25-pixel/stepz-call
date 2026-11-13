@@ -485,7 +485,7 @@ class _CallbackScreenState extends State<CallbackScreen> with SingleTickerProvid
                                   opacity: 0.12,
                                   borderRadius: BorderRadius.circular(16),
                                   borderColor: AppColors.glassBorder,
-                                  padding: const EdgeInsets.all(20),
+                                  padding: EdgeInsets.all(isMobile ? 14 : 20),
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
@@ -493,7 +493,7 @@ class _CallbackScreenState extends State<CallbackScreen> with SingleTickerProvid
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
                                           Container(
-                                            padding: const EdgeInsets.all(12),
+                                            padding: EdgeInsets.all(isMobile ? 10 : 12),
                                             decoration: BoxDecoration(
                                               color: statusColor.withValues(alpha: 0.12),
                                               borderRadius: BorderRadius.circular(14),
@@ -502,29 +502,31 @@ class _CallbackScreenState extends State<CallbackScreen> with SingleTickerProvid
                                             child: Icon(
                                               cb.status == 'OVERDUE' ? Icons.warning_amber_rounded : Icons.alarm_rounded,
                                               color: statusColor,
-                                              size: 22,
+                                              size: isMobile ? 18 : 22,
                                             ),
                                           ),
-                                          const SizedBox(width: 14),
+                                          const SizedBox(width: 12),
                                           Expanded(
                                             child: Column(
                                               crossAxisAlignment: CrossAxisAlignment.start,
                                               children: [
                                                 Wrap(
-                                                  spacing: 10,
-                                                  runSpacing: 6,
+                                                  spacing: 8,
+                                                  runSpacing: 4,
                                                   crossAxisAlignment: WrapCrossAlignment.center,
                                                   children: [
                                                     Text(
                                                       cb.leadName,
                                                       style: GoogleFonts.inter(
-                                                        fontSize: 15,
+                                                        fontSize: isMobile ? 14 : 15,
                                                         fontWeight: FontWeight.w800,
                                                         color: const Color(0xFF0F172A),
                                                       ),
+                                                      maxLines: 1,
+                                                      overflow: TextOverflow.ellipsis,
                                                     ),
                                                     Container(
-                                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                                                       decoration: BoxDecoration(
                                                         color: AppColors.neonCyan.withValues(alpha: 0.12),
                                                         borderRadius: BorderRadius.circular(6),
@@ -533,7 +535,7 @@ class _CallbackScreenState extends State<CallbackScreen> with SingleTickerProvid
                                                       child: Text(
                                                         cb.leadPhone,
                                                         style: GoogleFonts.robotoMono(
-                                                          fontSize: 12,
+                                                          fontSize: 11,
                                                           color: AppColors.neonCyan,
                                                           fontWeight: FontWeight.w700,
                                                         ),
@@ -542,20 +544,20 @@ class _CallbackScreenState extends State<CallbackScreen> with SingleTickerProvid
                                                     AnimatedStatusBadge(label: cb.status, statusColor: statusColor),
                                                   ],
                                                 ),
-                                                const SizedBox(height: 8),
+                                                const SizedBox(height: 6),
                                                 Wrap(
-                                                  spacing: 14,
-                                                  runSpacing: 6,
+                                                  spacing: 12,
+                                                  runSpacing: 4,
                                                   children: [
                                                     Row(
                                                       mainAxisSize: MainAxisSize.min,
                                                       children: [
-                                                        const Icon(Icons.schedule_rounded, size: 14, color: AppColors.neonViolet),
-                                                        const SizedBox(width: 5),
+                                                        const Icon(Icons.schedule_rounded, size: 13, color: AppColors.neonViolet),
+                                                        const SizedBox(width: 4),
                                                         Text(
-                                                          'Scheduled: ${cb.scheduledAt.replaceAll('T', ' ').substring(0, 16)}',
+                                                          'Due: ${cb.scheduledAt.replaceAll('T', ' ').substring(0, 16)}',
                                                           style: GoogleFonts.inter(
-                                                            fontSize: 12,
+                                                            fontSize: 11.5,
                                                             fontWeight: FontWeight.w600,
                                                             color: const Color(0xFF475569),
                                                           ),
@@ -565,11 +567,11 @@ class _CallbackScreenState extends State<CallbackScreen> with SingleTickerProvid
                                                     Row(
                                                       mainAxisSize: MainAxisSize.min,
                                                       children: [
-                                                        const Icon(Icons.person_outline_rounded, size: 14, color: Color(0xFF64748B)),
-                                                        const SizedBox(width: 5),
+                                                        const Icon(Icons.person_outline_rounded, size: 13, color: Color(0xFF64748B)),
+                                                        const SizedBox(width: 4),
                                                         Text(
                                                           'Caller: ${cb.assignedEmployeeName}',
-                                                          style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
+                                                          style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B)),
                                                         ),
                                                       ],
                                                     ),
@@ -579,7 +581,7 @@ class _CallbackScreenState extends State<CallbackScreen> with SingleTickerProvid
                                                   const SizedBox(height: 6),
                                                   Text(
                                                     'Notes: ${cb.initialNotes}',
-                                                    style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
+                                                    style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B)),
                                                   ),
                                                 ],
                                               ],

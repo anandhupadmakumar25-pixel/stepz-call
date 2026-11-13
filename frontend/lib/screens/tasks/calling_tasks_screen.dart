@@ -110,101 +110,195 @@ class _CallingTasksScreenState extends State<CallingTasksScreen> {
           children: [
             // Header
             // Header with Back Button
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Row(
+            isMobile
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      const AppBackButton(fallbackRoute: AppRoutes.dashboard),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
+                      Row(
+                        children: [
+                          const AppBackButton(fallbackRoute: AppRoutes.dashboard),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Flexible(
-                                  child: Text(
-                                    isTelecaller ? 'My Calling Tasks' : 'Calling Tasks & Assignments',
-                                    style: GoogleFonts.inter(
-                                      fontSize: isMobile ? 18 : 22,
-                                      fontWeight: FontWeight.w800,
-                                      color: const Color(0xFF0F172A),
-                                      letterSpacing: -0.3,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                AnimatedStatusBadge(
-                                  label: '${leadProvider.tasks.length} Batches',
-                                  statusColor: const Color(0xFF2563EB),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              isTelecaller
-                                  ? 'Your assigned lead queues, live calling targets, and follow-ups'
-                                  : 'Organize leads into actionable calling tasks with target branches, categories, and deadlines',
-                              style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            if (widget.employeeName != null && _selectedEmployeeId != null) ...[
-                              const SizedBox(height: 6),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFEFF6FF),
-                                  borderRadius: BorderRadius.circular(6),
-                                  border: Border.all(color: const Color(0xFF93C5FD)),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
+                                Row(
                                   children: [
-                                    const Icon(Icons.person_rounded, size: 14, color: Color(0xFF1D4ED8)),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      'Filtered by Staff: ${widget.employeeName}',
-                                      style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF1D4ED8)),
+                                    Flexible(
+                                      child: Text(
+                                        isTelecaller ? 'My Calling Tasks' : 'Calling Tasks',
+                                        style: GoogleFonts.inter(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.w800,
+                                          color: const Color(0xFF0F172A),
+                                          letterSpacing: -0.3,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
                                     ),
-                                    const SizedBox(width: 6),
-                                    InkWell(
-                                      onTap: () {
-                                        setState(() => _selectedEmployeeId = null);
-                                        _loadData();
-                                      },
-                                      child: const Icon(Icons.close_rounded, size: 14, color: Color(0xFF1D4ED8)),
+                                    const SizedBox(width: 8),
+                                    AnimatedStatusBadge(
+                                      label: '${leadProvider.tasks.length} Batches',
+                                      statusColor: const Color(0xFF2563EB),
                                     ),
                                   ],
                                 ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  isTelecaller
+                                      ? 'Your assigned lead queues, targets & pacing'
+                                      : 'Organize leads into actionable calling tasks',
+                                  style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                if (widget.employeeName != null && _selectedEmployeeId != null) ...[
+                                  const SizedBox(height: 4),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFEFF6FF),
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(color: const Color(0xFF93C5FD)),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(Icons.person_rounded, size: 12, color: Color(0xFF1D4ED8)),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          'Staff: ${widget.employeeName}',
+                                          style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w700, color: const Color(0xFF1D4ED8)),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        InkWell(
+                                          onTap: () {
+                                            setState(() => _selectedEmployeeId = null);
+                                            _loadData();
+                                          },
+                                          child: const Icon(Icons.close_rounded, size: 12, color: Color(0xFF1D4ED8)),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (canCreateTask) ...[
+                        const SizedBox(height: 10),
+                        GradientPrimaryButton(
+                          text: 'Create Task',
+                          icon: Icons.add_task_rounded,
+                          onPressed: () async {
+                            await Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => const CreateCallingTaskScreen()),
+                            );
+                            _loadData();
+                          },
+                        ),
+                      ],
+                    ],
+                  )
+                : Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Row(
+                          children: [
+                            const AppBackButton(fallbackRoute: AppRoutes.dashboard),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Flexible(
+                                        child: Text(
+                                          isTelecaller ? 'My Calling Tasks' : 'Calling Tasks & Assignments',
+                                          style: GoogleFonts.inter(
+                                            fontSize: 22,
+                                            fontWeight: FontWeight.w800,
+                                            color: const Color(0xFF0F172A),
+                                            letterSpacing: -0.3,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      AnimatedStatusBadge(
+                                        label: '${leadProvider.tasks.length} Batches',
+                                        statusColor: const Color(0xFF2563EB),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    isTelecaller
+                                        ? 'Your assigned lead queues, live calling targets, and follow-ups'
+                                        : 'Organize leads into actionable calling tasks with target branches, categories, and deadlines',
+                                    style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  if (widget.employeeName != null && _selectedEmployeeId != null) ...[
+                                    const SizedBox(height: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFEFF6FF),
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(color: const Color(0xFF93C5FD)),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(Icons.person_rounded, size: 14, color: Color(0xFF1D4ED8)),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            'Filtered by Staff: ${widget.employeeName}',
+                                            style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF1D4ED8)),
+                                          ),
+                                          const SizedBox(width: 6),
+                                          InkWell(
+                                            onTap: () {
+                                              setState(() => _selectedEmployeeId = null);
+                                              _loadData();
+                                            },
+                                            child: const Icon(Icons.close_rounded, size: 14, color: Color(0xFF1D4ED8)),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ],
                               ),
-                            ],
+                            ),
                           ],
                         ),
                       ),
+                      if (canCreateTask) ...[
+                        const SizedBox(width: 12),
+                        GradientPrimaryButton(
+                          text: 'Create Task',
+                          icon: Icons.add_task_rounded,
+                          onPressed: () async {
+                            await Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => const CreateCallingTaskScreen()),
+                            );
+                            _loadData();
+                          },
+                        ),
+                      ],
                     ],
                   ),
-                ),
-                if (canCreateTask) ...[
-                  const SizedBox(width: 12),
-                  GradientPrimaryButton(
-                    text: 'Create Task',
-                    icon: Icons.add_task_rounded,
-                    onPressed: () async {
-                      await Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => const CreateCallingTaskScreen()),
-                      );
-                      _loadData();
-                    },
-                  ),
-                ],
-              ],
-            ),
             const SizedBox(height: 18),
 
             // Frosted Glass Toolbar

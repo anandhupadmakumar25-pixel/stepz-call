@@ -42,7 +42,7 @@ class _QuotationDetailDialogState extends State<QuotationDetailDialog> {
     Navigator.of(context).pop(invoice);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Fixed Price Invoice ${invoice.invoiceNumber} generated successfully at agreed price ₹${invoice.grandTotal.toStringAsFixed(2)}!'),
+        content: Text('Fixed Price Invoice ${invoice.invoiceNumber} generated successfully at agreed price Rs. ${invoice.grandTotal.toStringAsFixed(2)}!'),
         backgroundColor: const Color(0xFF10B981),
         action: SnackBarAction(
           label: 'Record Payment',
@@ -61,6 +61,7 @@ class _QuotationDetailDialogState extends State<QuotationDetailDialog> {
   @override
   Widget build(BuildContext context) {
     final q = _quotation;
+    final isMobile = MediaQuery.of(context).size.width < 600;
 
     final authUser = context.watch<AuthProvider>().currentUser;
     final comp = context.watch<CompanyProvider>().activeCompanyDetail;
@@ -89,15 +90,15 @@ class _QuotationDetailDialogState extends State<QuotationDetailDialog> {
 
     return Dialog(
       backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      insetPadding: EdgeInsets.symmetric(horizontal: isMobile ? 8 : 16, vertical: isMobile ? 12 : 24),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 720, maxHeight: 820),
+        constraints: BoxConstraints(maxWidth: 720, maxHeight: isMobile ? MediaQuery.of(context).size.height * 0.95 : 820),
         child: GlassCard(
           blur: 24,
           opacity: 0.98,
           borderRadius: BorderRadius.circular(20),
           borderColor: const Color(0xFFCBD5E1),
-          padding: const EdgeInsets.all(24),
+          padding: EdgeInsets.all(isMobile ? 14 : 24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -105,50 +106,60 @@ class _QuotationDetailDialogState extends State<QuotationDetailDialog> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF2563EB).withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(10),
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF2563EB).withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(Icons.description_outlined, color: const Color(0xFF2563EB), size: isMobile ? 20 : 24),
                         ),
-                        child: const Icon(Icons.description_outlined, color: Color(0xFF2563EB), size: 24),
-                      ),
-                      const SizedBox(width: 12),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                q.quotationNumber,
-                                style: GoogleFonts.robotoMono(fontSize: 18, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+                              Row(
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      q.quotationNumber,
+                                      style: GoogleFonts.robotoMono(fontSize: isMobile ? 15 : 18, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  _buildStatusBadge(q.status),
+                                  const SizedBox(width: 6),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFFEF3C7),
+                                      borderRadius: BorderRadius.circular(4),
+                                      border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.5)),
+                                    ),
+                                    child: Text(
+                                      'ESTIMATE',
+                                      style: GoogleFonts.inter(fontSize: 8.5, fontWeight: FontWeight.w800, color: const Color(0xFFB45309)),
+                                    ),
+                                  ),
+                                ],
                               ),
-                              const SizedBox(width: 8),
-                              _buildStatusBadge(q.status),
-                              const SizedBox(width: 6),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFFEF3C7),
-                                  borderRadius: BorderRadius.circular(4),
-                                  border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.5)),
-                                ),
-                                child: Text(
-                                  'APPROXIMATE ESTIMATE',
-                                  style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w800, color: const Color(0xFFB45309)),
-                                ),
-                              ),
+                              Text('Created on ${q.date}', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B))),
                             ],
                           ),
-                          Text('Created on ${q.date}', style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B))),
-                        ],
-                      ),
-                    ],
+                        ),
+                      ],
+                    ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.close_rounded, color: Color(0xFF64748B)),
+                    icon: const Icon(Icons.close_rounded, color: Color(0xFF64748B), size: 20),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                     onPressed: () => Navigator.of(context).pop(),
                   ),
                 ],

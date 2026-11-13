@@ -718,17 +718,17 @@ class _LeadDirectoryScreenState extends State<LeadDirectoryScreen> {
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             color: isSelected
-                ? const Color(0xFF6366F1).withValues(alpha: 0.20)
-                : Colors.white.withValues(alpha: 0.08),
+                ? const Color(0xFFEFF6FF)
+                : Colors.white,
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
               color: isSelected
-                  ? const Color(0xFF6366F1)
-                  : Colors.white.withValues(alpha: 0.16),
+                  ? const Color(0xFF2563EB)
+                  : const Color(0xFFE2E8F0),
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.2),
+                color: Colors.black.withValues(alpha: 0.04),
                 blurRadius: 8,
                 offset: const Offset(0, 2),
               ),

@@ -58,17 +58,19 @@ class _InvoiceDetailDialogState extends State<InvoiceDetailDialog> {
         ? comp!.website
         : (authUser?.companyWebsite ?? '');
 
+    final isMobile = MediaQuery.of(context).size.width < 600;
+
     return Dialog(
       backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      insetPadding: EdgeInsets.symmetric(horizontal: isMobile ? 8 : 16, vertical: isMobile ? 12 : 24),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 760, maxHeight: 840),
+        constraints: BoxConstraints(maxWidth: 760, maxHeight: isMobile ? MediaQuery.of(context).size.height * 0.95 : 840),
         child: GlassCard(
           blur: 24,
           opacity: 0.98,
           borderRadius: BorderRadius.circular(20),
           borderColor: const Color(0xFFCBD5E1),
-          padding: const EdgeInsets.all(24),
+          padding: EdgeInsets.all(isMobile ? 14 : 24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -76,37 +78,47 @@ class _InvoiceDetailDialogState extends State<InvoiceDetailDialog> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF10B981).withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(10),
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF10B981).withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(Icons.receipt_long_rounded, color: const Color(0xFF059669), size: isMobile ? 20 : 24),
                         ),
-                        child: const Icon(Icons.receipt_long_rounded, color: Color(0xFF059669), size: 24),
-                      ),
-                      const SizedBox(width: 12),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                inv.invoiceNumber,
-                                style: GoogleFonts.robotoMono(fontSize: 18, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+                              Row(
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      inv.invoiceNumber,
+                                      style: GoogleFonts.robotoMono(fontSize: isMobile ? 15 : 18, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  _buildPaymentStatusBadge(inv.paymentStatus),
+                                ],
                               ),
-                              const SizedBox(width: 8),
-                              _buildPaymentStatusBadge(inv.paymentStatus),
+                              Text('Billed on ${inv.date} · Due: ${inv.dueDate ?? 'Upon receipt'}', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B))),
                             ],
                           ),
-                          Text('Billed on ${inv.date} · Due: ${inv.dueDate ?? 'Upon receipt'}', style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B))),
-                        ],
-                      ),
-                    ],
+                        ),
+                      ],
+                    ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.close_rounded, color: Color(0xFF64748B)),
+                    icon: const Icon(Icons.close_rounded, color: Color(0xFF64748B), size: 20),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                     onPressed: () => Navigator.of(context).pop(),
                   ),
                 ],
