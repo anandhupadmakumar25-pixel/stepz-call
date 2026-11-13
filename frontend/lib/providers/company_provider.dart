@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../core/network/api_client.dart';
 import '../models/company_model.dart';
 import '../models/plan_model.dart';
+import '../models/company_renewal_request_model.dart';
+import '../models/company_subscription_history_model.dart';
 
 class CompanyProvider extends ChangeNotifier {
   List<CompanyModel> _companies = [];
@@ -23,11 +25,33 @@ class CompanyProvider extends ChangeNotifier {
   bool _isLoadingSuperAdmins = false;
   String? _selectedSuperAdminFilter;
 
+  List<CompanyRenewalRequestModel> _renewalRequests = [];
+  Map<String, int> _renewalRequestMetrics = {
+    'pending_count': 0,
+    'approved_count': 0,
+    'rejected_count': 0,
+    'total_count': 0,
+  };
+  bool _isLoadingRenewalRequests = false;
+
+  List<CompanySubscriptionHistoryModel> _subscriptionHistory = [];
+  SubscriptionHistoryMetrics _historyMetrics = SubscriptionHistoryMetrics();
+  bool _isLoadingHistory = false;
+
   List<Map<String, dynamic>> get superAdmins => _superAdmins;
   int get totalSuperAdmins => _totalSuperAdmins;
   int get totalPlatformTenants => _totalPlatformTenants;
   bool get isLoadingSuperAdmins => _isLoadingSuperAdmins;
   String? get selectedSuperAdminFilter => _selectedSuperAdminFilter;
+
+  List<CompanyRenewalRequestModel> get renewalRequests => _renewalRequests;
+  int get pendingRenewalCount => _renewalRequestMetrics['pending_count'] ?? 0;
+  Map<String, int> get renewalRequestMetrics => _renewalRequestMetrics;
+  bool get isLoadingRenewalRequests => _isLoadingRenewalRequests;
+
+  List<CompanySubscriptionHistoryModel> get subscriptionHistory => _subscriptionHistory;
+  SubscriptionHistoryMetrics get historyMetrics => _historyMetrics;
+  bool get isLoadingHistory => _isLoadingHistory;
 
   CompanyPayrollPolicyModel? get payrollPolicy => _payrollPolicy;
   List<CompanyCustomRuleModel> get companyRules => _companyRules;
@@ -581,6 +605,173 @@ class CompanyProvider extends ChangeNotifier {
       _errorMessage = e.toString();
       notifyListeners();
       return false;
+    }
+  }
+
+  // ── Renewal Requests & Subscription History ──────────────────────────────
+
+  Future<void> fetchRenewalRequests({String? status, String? companyId}) async {
+    _isLoadingRenewalRequests = true;
+    notifyListeners();
+
+    try {
+      final queryParams = <String, String>{};
+      if (status != null && status.isNotEmpty) queryParams['status'] = status;
+      if (companyId != null && companyId.isNotEmpty) queryParams['company_id'] = companyId;
+
+      final queryString = queryParams.isNotEmpty
+          ? '?${queryParams.entries.map((e) => '${e.key}=${Uri.encodeComponent(e.value)}').join('&')}'
+          : '';
+
+      final res = await ApiClient.get('/companies/renewal-requests/$queryString');
+      if (res is Map<String, dynamic>) {
+        if (res['requests'] is List) {
+          _renewalRequests = (res['requests'] as List)
+              .map((r) => CompanyRenewalRequestModel.fromJson(r as Map<String, dynamic>))
+              .toList();
+        }
+        if (res['metrics'] is Map<String, dynamic>) {
+          _renewalRequestMetrics = {
+            'pending_count': res['metrics']['pending_count'] ?? 0,
+            'approved_count': res['metrics']['approved_count'] ?? 0,
+            'rejected_count': res['metrics']['rejected_count'] ?? 0,
+            'total_count': res['metrics']['total_count'] ?? 0,
+          };
+        }
+      }
+    } catch (e) {
+      _errorMessage = e.toString();
+    } finally {
+      _isLoadingRenewalRequests = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> createRenewalRequest({
+    String? companyId,
+    required String billingCycle,
+    int requestedDays = 30,
+    String? requestedDate,
+    String paymentReference = '',
+    String notes = '',
+    String? planId,
+  }) async {
+    try {
+      final payload = <String, dynamic>{
+        'billing_cycle': billingCycle,
+        'requested_days': requestedDays,
+        'payment_reference': paymentReference,
+        'notes': notes,
+      };
+      if (companyId != null && companyId.isNotEmpty) payload['company_id'] = companyId;
+      if (requestedDate != null && requestedDate.isNotEmpty) payload['requested_date'] = requestedDate;
+      if (planId != null && planId.isNotEmpty) payload['plan_id'] = planId;
+
+      final res = await ApiClient.post('/companies/renewal-requests/', payload);
+      if (res is Map<String, dynamic>) {
+        await fetchRenewalRequests();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> approveRenewalRequest(
+    String requestId, {
+    String? billingCycle,
+    int? extensionDays,
+    String? targetExpiryDate,
+    double? amountPaid,
+    String? currency,
+    String? planId,
+    String? adminNotes,
+  }) async {
+    try {
+      final payload = <String, dynamic>{};
+      if (billingCycle != null) payload['billing_cycle'] = billingCycle;
+      if (extensionDays != null) payload['extension_days'] = extensionDays;
+      if (targetExpiryDate != null) payload['target_expiry_date'] = targetExpiryDate;
+      if (amountPaid != null) payload['amount_paid'] = amountPaid;
+      if (currency != null) payload['currency'] = currency;
+      if (planId != null && planId.isNotEmpty) payload['plan_id'] = planId;
+      if (adminNotes != null) payload['admin_notes'] = adminNotes;
+
+      final res = await ApiClient.post('/companies/renewal-requests/$requestId/approve/', payload);
+      if (res is Map<String, dynamic>) {
+        if (res['company'] != null) {
+          final updatedComp = CompanyModel.fromJson(res['company']);
+          final idx = _companies.indexWhere((c) => c.id == updatedComp.id);
+          if (idx != -1) {
+            _companies[idx] = updatedComp;
+          }
+          if (_activeCompanyDetail?.id == updatedComp.id) {
+            _activeCompanyDetail = updatedComp;
+          }
+        }
+        await fetchRenewalRequests();
+        await fetchSubscriptionHistory();
+        notifyListeners();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> rejectRenewalRequest(String requestId, {String? adminNotes}) async {
+    try {
+      final payload = <String, dynamic>{
+        'admin_notes': adminNotes ?? '',
+      };
+      final res = await ApiClient.post('/companies/renewal-requests/$requestId/reject/', payload);
+      if (res is Map<String, dynamic>) {
+        await fetchRenewalRequests();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<void> fetchSubscriptionHistory({String? companyId, String? billingCycle}) async {
+    _isLoadingHistory = true;
+    notifyListeners();
+
+    try {
+      final queryParams = <String, String>{};
+      if (companyId != null && companyId.isNotEmpty) queryParams['company_id'] = companyId;
+      if (billingCycle != null && billingCycle.isNotEmpty) queryParams['billing_cycle'] = billingCycle;
+
+      final queryString = queryParams.isNotEmpty
+          ? '?${queryParams.entries.map((e) => '${e.key}=${Uri.encodeComponent(e.value)}').join('&')}'
+          : '';
+
+      final res = await ApiClient.get('/companies/subscription-history/$queryString');
+      if (res is Map<String, dynamic>) {
+        if (res['history'] is List) {
+          _subscriptionHistory = (res['history'] as List)
+              .map((h) => CompanySubscriptionHistoryModel.fromJson(h as Map<String, dynamic>))
+              .toList();
+        }
+        if (res['metrics'] is Map<String, dynamic>) {
+          _historyMetrics = SubscriptionHistoryMetrics.fromJson(res['metrics']);
+        }
+      }
+    } catch (e) {
+      _errorMessage = e.toString();
+    } finally {
+      _isLoadingHistory = false;
+      notifyListeners();
     }
   }
 }

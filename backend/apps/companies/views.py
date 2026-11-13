@@ -8,7 +8,15 @@ from rest_framework.response import Response
 from django.db import transaction
 from django.contrib.auth import get_user_model
 from django.db.models import Sum, Count, Q
-from apps.companies.models import Company, Plan, ALL_MENU_KEYS, CompanyPayrollPolicy, CompanyCustomRule
+from apps.companies.models import (
+    Company,
+    Plan,
+    ALL_MENU_KEYS,
+    CompanyPayrollPolicy,
+    CompanyCustomRule,
+    CompanyRenewalRequest,
+    CompanySubscriptionHistory,
+)
 from apps.companies.serializers import (
     CompanySerializer,
     CompanyCreateSerializer,
@@ -16,6 +24,10 @@ from apps.companies.serializers import (
     CompanyPayrollPolicySerializer,
     CompanyCustomRuleSerializer,
     CompanyRenewPlanSerializer,
+    CompanyRenewalRequestSerializer,
+    CompanyRenewalRequestCreateSerializer,
+    CompanyRenewalRequestApproveSerializer,
+    CompanySubscriptionHistorySerializer,
 )
 from apps.core.permissions import IsSuperAdmin, IsCompanyAdmin, IsEmployee, IsMasterAdmin
 
@@ -296,15 +308,19 @@ class CompanyRenewPlanView(views.APIView):
         reactivate = data.get('reactivate', True)
 
         now = timezone.now()
+        previous_expiry = company.plan_expires_at
 
         if new_expires_at:
             company.plan_expires_at = new_expires_at
+            base_calc = previous_expiry if (previous_expiry and previous_expiry > now) else now
+            calc_days = max(1, (new_expires_at - base_calc).days)
         else:
             if company.plan_expires_at and company.plan_expires_at > now:
                 base_time = company.plan_expires_at
             else:
                 base_time = now
             company.plan_expires_at = base_time + timedelta(days=extension_days)
+            calc_days = extension_days
 
         company.plan_billing_cycle = billing_cycle
 
@@ -317,6 +333,20 @@ class CompanyRenewPlanView(views.APIView):
             company.status = 'ACTIVE'
 
         company.save()
+
+        # Log into history
+        CompanySubscriptionHistory.objects.create(
+            company=company,
+            plan_name=company.plan.name if company.plan else 'Standard',
+            billing_cycle=billing_cycle,
+            extension_days=calc_days,
+            previous_expiry=previous_expiry,
+            new_expiry=company.plan_expires_at,
+            amount_paid=0.00,
+            currency=company.plan.currency if company.plan else 'INR',
+            approved_by=request.user,
+            notes='Direct renewal by Admin'
+        )
 
         return Response({
             "message": f"Plan renewed successfully until {company.plan_expires_at.strftime('%d %b %Y')}.",
@@ -829,3 +859,331 @@ class CompanySuperAdminRequestView(views.APIView):
             "message": f"Your {request_type.lower().replace('_', ' ')} request for '{company.name}' has been submitted to Master Admin.",
             "company": CompanySerializer(company).data
         })
+
+
+# ── Tenant Renewal Requests & Subscription History Views ──────────────────────
+
+class CompanyRenewalRequestListCreateView(views.APIView):
+    def get_permissions(self):
+        if self.request.method == 'POST':
+            return [IsEmployee()]
+        return [IsEmployee()]
+
+    def get(self, request):
+        user = request.user
+        queryset = CompanyRenewalRequest.objects.select_related('company', 'plan', 'requested_by', 'assigned_super_admin', 'approved_by')
+
+        if user.is_master_admin:
+            pass  # Master Admin can see all requests
+        elif user.role == 'SUPER_ADMIN':
+            queryset = queryset.filter(
+                Q(assigned_super_admin=user) |
+                Q(company__assigned_super_admin=user) |
+                Q(company__created_by=user)
+            )
+        elif user.role in ['COMPANY_ADMIN', 'MANAGER']:
+            if not user.company:
+                return Response({"requests": [], "metrics": {"pending_count": 0, "total_count": 0}})
+            queryset = queryset.filter(company=user.company)
+        else:
+            return Response({"error": "Unauthorized"}, status=status.HTTP_403_FORBIDDEN)
+
+        status_filter = request.query_params.get('status')
+        if status_filter:
+            queryset = queryset.filter(status=status_filter.upper())
+
+        company_id = request.query_params.get('company_id')
+        if company_id:
+            queryset = queryset.filter(company_id=company_id)
+
+        all_user_requests = queryset
+        pending_count = all_user_requests.filter(status='PENDING').count()
+        approved_count = all_user_requests.filter(status='APPROVED').count()
+        rejected_count = all_user_requests.filter(status='REJECTED').count()
+        total_count = all_user_requests.count()
+
+        items = queryset.order_by('-created_at')[:100]
+
+        return Response({
+            "requests": CompanyRenewalRequestSerializer(items, many=True).data,
+            "metrics": {
+                "pending_count": pending_count,
+                "approved_count": approved_count,
+                "rejected_count": rejected_count,
+                "total_count": total_count,
+            }
+        })
+
+    def post(self, request):
+        user = request.user
+        serializer = CompanyRenewalRequestCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        # Determine target company
+        if user.role in ['COMPANY_ADMIN', 'MANAGER', 'EMPLOYEE']:
+            company = user.company
+            if not company:
+                return Response({"error": "No company associated with user account."}, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            company_id = request.data.get('company_id')
+            if not company_id:
+                return Response({"error": "company_id is required."}, status=status.HTTP_400_BAD_REQUEST)
+            company = Company.objects.filter(id=company_id).first()
+            if not company:
+                return Response({"error": "Company not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        plan_id = data.get('plan_id', '').strip()
+        requested_plan = get_plan_by_id_or_code(plan_id) if plan_id else company.plan
+
+        assigned_sa = company.assigned_super_admin or company.created_by
+
+        renewal_request = CompanyRenewalRequest.objects.create(
+            company=company,
+            requested_by=user,
+            assigned_super_admin=assigned_sa,
+            plan=requested_plan,
+            billing_cycle=data.get('billing_cycle', 'MONTHLY'),
+            requested_days=data.get('requested_days', 30),
+            requested_date=data.get('requested_date'),
+            payment_reference=data.get('payment_reference', '').strip(),
+            notes=data.get('notes', '').strip(),
+            status='PENDING'
+        )
+
+        # Notify assigned Super Admin
+        from apps.notifications.models import Notification
+        cycle_label = dict(CompanyRenewalRequest.CYCLE_CHOICES).get(renewal_request.billing_cycle, renewal_request.billing_cycle)
+
+        if assigned_sa:
+            Notification.objects.create(
+                user=assigned_sa,
+                company=company,
+                title=f"Plan Renewal Request: {company.name} ⏳",
+                message=f"{user.full_name} from {company.name} requested a plan renewal ({cycle_label}). Please review and approve.",
+                notification_type='SYSTEM',
+                entity_type='renewal_request',
+                entity_id=str(renewal_request.id)
+            )
+        else:
+            # Fallback: notify Master Admins
+            for ma in User.objects.filter(role='MASTER_ADMIN'):
+                Notification.objects.create(
+                    user=ma,
+                    company=company,
+                    title=f"Plan Renewal Request: {company.name} ⏳",
+                    message=f"{user.full_name} from {company.name} requested a plan renewal ({cycle_label}).",
+                    notification_type='SYSTEM',
+                    entity_type='renewal_request',
+                    entity_id=str(renewal_request.id)
+                )
+
+        return Response({
+            "message": f"Renewal request for '{company.name}' submitted successfully. Your Super Admin has been notified.",
+            "renewal_request": CompanyRenewalRequestSerializer(renewal_request).data
+        }, status=status.HTTP_201_CREATED)
+
+
+class CompanyRenewalRequestApproveView(views.APIView):
+    permission_classes = [IsSuperAdmin]
+
+    def post(self, request, pk):
+        renewal_req = CompanyRenewalRequest.objects.select_related('company', 'plan').filter(id=pk).first()
+        if not renewal_req:
+            return Response({"error": "Renewal request not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        if renewal_req.status == 'APPROVED':
+            return Response({"error": "This request has already been approved."}, status=status.HTTP_400_BAD_REQUEST)
+
+        company = renewal_req.company
+        user = request.user
+
+        # Authorization check: Master Admin OR Super Admin managing this company
+        if not user.is_master_admin and company.assigned_super_admin_id != user.id and company.created_by_id != user.id:
+            return Response({"error": "You do not have permission to approve renewals for this company."}, status=status.HTTP_403_FORBIDDEN)
+
+        serializer = CompanyRenewalRequestApproveSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        billing_cycle = data.get('billing_cycle') or renewal_req.billing_cycle
+        plan_id = data.get('plan_id', '').strip()
+        admin_notes = data.get('admin_notes', '').strip()
+        amount_paid = data.get('amount_paid', 0.00)
+        currency = data.get('currency', 'INR')
+
+        now = timezone.now()
+        previous_expiry = company.plan_expires_at
+
+        # ZERO-CALCULATION RULE:
+        # If the plan is already expired or has no expiry date, start from ZERO (now).
+        # Otherwise, extend from the current active expiry date.
+        if not company.plan_expires_at or company.plan_expires_at <= now:
+            base_time = now
+        else:
+            base_time = company.plan_expires_at
+
+        target_date = data.get('target_expiry_date') or renewal_req.requested_date
+
+        if billing_cycle == 'CUSTOM_DATE' and target_date:
+            new_expiry = target_date
+            extension_days = max(1, (new_expiry - base_time).days)
+        elif billing_cycle == 'YEARLY':
+            extension_days = 365
+            new_expiry = base_time + timedelta(days=365)
+        elif billing_cycle == 'MONTHLY':
+            extension_days = 30
+            new_expiry = base_time + timedelta(days=30)
+        elif billing_cycle == 'DAYS':
+            extension_days = data.get('extension_days') or renewal_req.requested_days or 30
+            new_expiry = base_time + timedelta(days=extension_days)
+        else:
+            extension_days = data.get('extension_days') or renewal_req.requested_days or 30
+            new_expiry = base_time + timedelta(days=extension_days)
+
+        if plan_id:
+            new_plan = get_plan_by_id_or_code(plan_id)
+            if new_plan:
+                company.plan = new_plan
+
+        company.plan_expires_at = new_expiry
+        company.plan_billing_cycle = billing_cycle
+        if company.status == 'SUSPENDED':
+            company.status = 'ACTIVE'
+        company.save()
+
+        # Update request
+        renewal_req.status = 'APPROVED'
+        renewal_req.approved_by = user
+        renewal_req.approved_at = now
+        renewal_req.admin_notes = admin_notes
+        renewal_req.save()
+
+        # Create history entry
+        CompanySubscriptionHistory.objects.create(
+            company=company,
+            plan_name=company.plan.name if company.plan else 'Standard',
+            billing_cycle=billing_cycle,
+            extension_days=extension_days,
+            previous_expiry=previous_expiry,
+            new_expiry=new_expiry,
+            amount_paid=amount_paid,
+            currency=currency,
+            approved_by=user,
+            renewal_request=renewal_req,
+            notes=admin_notes or f"Renewal approved by {user.full_name}"
+        )
+
+        # Send notification to tenant admin
+        from apps.notifications.models import Notification
+        tenant_admins = User.objects.filter(company=company, role='COMPANY_ADMIN')
+        for admin in tenant_admins:
+            Notification.objects.create(
+                user=admin,
+                company=company,
+                title=f"Plan Renewed Successfully! 🎉",
+                message=f"Your renewal request for {company.name} has been approved by {user.full_name}. Plan extended until {new_expiry.strftime('%d %b %Y')}.",
+                notification_type='SYSTEM',
+                entity_type='renewal_request',
+                entity_id=str(renewal_req.id)
+            )
+
+        return Response({
+            "message": f"Renewal approved successfully! Plan active until {new_expiry.strftime('%d %b %Y')}.",
+            "renewal_request": CompanyRenewalRequestSerializer(renewal_req).data,
+            "company": CompanySerializer(company).data
+        }, status=status.HTTP_200_OK)
+
+
+class CompanyRenewalRequestRejectView(views.APIView):
+    permission_classes = [IsSuperAdmin]
+
+    def post(self, request, pk):
+        renewal_req = CompanyRenewalRequest.objects.select_related('company').filter(id=pk).first()
+        if not renewal_req:
+            return Response({"error": "Renewal request not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        company = renewal_req.company
+        user = request.user
+
+        if not user.is_master_admin and company.assigned_super_admin_id != user.id and company.created_by_id != user.id:
+            return Response({"error": "You do not have permission to review renewals for this company."}, status=status.HTTP_403_FORBIDDEN)
+
+        admin_notes = request.data.get('admin_notes', '').strip()
+        renewal_req.status = 'REJECTED'
+        renewal_req.approved_by = user
+        renewal_req.approved_at = timezone.now()
+        renewal_req.admin_notes = admin_notes
+        renewal_req.save()
+
+        # Send notification to tenant admin
+        from apps.notifications.models import Notification
+        tenant_admins = User.objects.filter(company=company, role='COMPANY_ADMIN')
+        for admin in tenant_admins:
+            Notification.objects.create(
+                user=admin,
+                company=company,
+                title=f"Plan Renewal Request Update",
+                message=f"Your renewal request for {company.name} was not approved. Note: {admin_notes or 'Please contact your Super Admin.'}",
+                notification_type='SYSTEM',
+                entity_type='renewal_request',
+                entity_id=str(renewal_req.id)
+            )
+
+        return Response({
+            "message": "Renewal request marked as rejected.",
+            "renewal_request": CompanyRenewalRequestSerializer(renewal_req).data
+        })
+
+
+class CompanySubscriptionHistoryListView(views.APIView):
+    def get_permissions(self):
+        return [IsEmployee()]
+
+    def get(self, request):
+        user = request.user
+        queryset = CompanySubscriptionHistory.objects.select_related('company', 'approved_by', 'renewal_request')
+
+        if user.is_master_admin:
+            pass  # Master admin sees all
+        elif user.role == 'SUPER_ADMIN':
+            queryset = queryset.filter(
+                Q(company__assigned_super_admin=user) | Q(company__created_by=user)
+            )
+        elif user.role in ['COMPANY_ADMIN', 'MANAGER']:
+            if not user.company:
+                return Response({"history": [], "metrics": {}})
+            queryset = queryset.filter(company=user.company)
+        else:
+            return Response({"error": "Unauthorized"}, status=status.HTTP_403_FORBIDDEN)
+
+        company_id = request.query_params.get('company_id')
+        if company_id:
+            queryset = queryset.filter(company_id=company_id)
+
+        cycle_filter = request.query_params.get('billing_cycle')
+        if cycle_filter:
+            queryset = queryset.filter(billing_cycle=cycle_filter.upper())
+
+        # Metrics breakdown
+        total_count = queryset.count()
+        yearly_count = queryset.filter(billing_cycle='YEARLY').count()
+        monthly_count = queryset.filter(billing_cycle='MONTHLY').count()
+        days_count = queryset.filter(billing_cycle='DAYS').count()
+        custom_date_count = queryset.filter(billing_cycle='CUSTOM_DATE').count()
+        total_revenue = queryset.aggregate(total=Sum('amount_paid'))['total'] or 0.00
+
+        history_items = queryset.order_by('-created_at')[:200]
+
+        return Response({
+            "history": CompanySubscriptionHistorySerializer(history_items, many=True).data,
+            "metrics": {
+                "total_renewals": total_count,
+                "yearly_count": yearly_count,
+                "monthly_count": monthly_count,
+                "days_count": days_count,
+                "custom_date_count": custom_date_count,
+                "total_revenue": float(total_revenue),
+            }
+        })
+

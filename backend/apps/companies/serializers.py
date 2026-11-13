@@ -1,5 +1,12 @@
 from rest_framework import serializers
-from apps.companies.models import Company, Plan, CompanyPayrollPolicy, CompanyCustomRule
+from apps.companies.models import (
+    Company,
+    Plan,
+    CompanyPayrollPolicy,
+    CompanyCustomRule,
+    CompanyRenewalRequest,
+    CompanySubscriptionHistory,
+)
 
 class PlanSerializer(serializers.ModelSerializer):
     company_count = serializers.SerializerMethodField()
@@ -162,3 +169,91 @@ class CompanyCustomRuleSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'category_display', 'action_type_display', 'created_at', 'updated_at']
+
+
+class CompanyRenewalRequestSerializer(serializers.ModelSerializer):
+    company_name = serializers.CharField(source='company.name', read_only=True)
+    company_subdomain = serializers.CharField(source='company.subdomain', read_only=True)
+    requested_by_name = serializers.SerializerMethodField()
+    requested_by_email = serializers.CharField(source='requested_by.email', read_only=True, default='')
+    assigned_super_admin_name = serializers.SerializerMethodField()
+    approved_by_name = serializers.SerializerMethodField()
+    plan_name = serializers.CharField(source='plan.name', read_only=True, default='')
+    current_expiry = serializers.DateTimeField(source='company.plan_expires_at', read_only=True)
+    is_company_expired = serializers.BooleanField(source='company.is_plan_expired', read_only=True)
+    days_until_expiry = serializers.IntegerField(source='company.days_until_expiry', read_only=True, allow_null=True)
+
+    class Meta:
+        model = CompanyRenewalRequest
+        fields = [
+            'id', 'company', 'company_name', 'company_subdomain',
+            'requested_by', 'requested_by_name', 'requested_by_email',
+            'assigned_super_admin', 'assigned_super_admin_name',
+            'plan', 'plan_name', 'billing_cycle',
+            'requested_days', 'requested_date',
+            'payment_reference', 'notes', 'status',
+            'approved_by', 'approved_by_name', 'approved_at', 'admin_notes',
+            'current_expiry', 'is_company_expired', 'days_until_expiry',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = [
+            'id', 'company_name', 'company_subdomain', 'requested_by_name', 'requested_by_email',
+            'assigned_super_admin_name', 'approved_by_name', 'plan_name',
+            'current_expiry', 'is_company_expired', 'days_until_expiry',
+            'created_at', 'updated_at'
+        ]
+
+    def get_requested_by_name(self, obj):
+        return obj.requested_by.full_name if obj.requested_by else 'Tenant Admin'
+
+    def get_assigned_super_admin_name(self, obj):
+        return obj.assigned_super_admin.full_name if obj.assigned_super_admin else 'Unassigned'
+
+    def get_approved_by_name(self, obj):
+        return obj.approved_by.full_name if obj.approved_by else None
+
+
+class CompanyRenewalRequestCreateSerializer(serializers.Serializer):
+    billing_cycle = serializers.ChoiceField(
+        choices=['MONTHLY', 'YEARLY', 'DAYS', 'CUSTOM_DATE'],
+        default='MONTHLY'
+    )
+    requested_days = serializers.IntegerField(required=False, default=30)
+    requested_date = serializers.DateTimeField(required=False, allow_null=True, default=None)
+    payment_reference = serializers.CharField(required=False, allow_blank=True, default='')
+    notes = serializers.CharField(required=False, allow_blank=True, default='')
+    plan_id = serializers.CharField(required=False, allow_blank=True, default='')
+
+
+class CompanyRenewalRequestApproveSerializer(serializers.Serializer):
+    billing_cycle = serializers.ChoiceField(
+        choices=['MONTHLY', 'YEARLY', 'DAYS', 'CUSTOM_DATE'],
+        required=False
+    )
+    extension_days = serializers.IntegerField(required=False)
+    target_expiry_date = serializers.DateTimeField(required=False, allow_null=True)
+    amount_paid = serializers.DecimalField(max_digits=12, decimal_places=2, required=False, default=0.00)
+    currency = serializers.CharField(max_length=10, required=False, default='INR')
+    plan_id = serializers.CharField(required=False, allow_blank=True)
+    admin_notes = serializers.CharField(required=False, allow_blank=True, default='')
+
+
+class CompanySubscriptionHistorySerializer(serializers.ModelSerializer):
+    company_name = serializers.CharField(source='company.name', read_only=True)
+    approved_by_name = serializers.SerializerMethodField()
+    billing_cycle_display = serializers.CharField(source='get_billing_cycle_display', read_only=True)
+
+    class Meta:
+        model = CompanySubscriptionHistory
+        fields = [
+            'id', 'company', 'company_name', 'plan_name',
+            'billing_cycle', 'billing_cycle_display', 'extension_days',
+            'previous_expiry', 'new_expiry', 'amount_paid', 'currency',
+            'approved_by', 'approved_by_name', 'renewal_request',
+            'notes', 'created_at'
+        ]
+        read_only_fields = ['id', 'company_name', 'approved_by_name', 'billing_cycle_display', 'created_at']
+
+    def get_approved_by_name(self, obj):
+        return obj.approved_by.full_name if obj.approved_by else 'System / Super Admin'
+

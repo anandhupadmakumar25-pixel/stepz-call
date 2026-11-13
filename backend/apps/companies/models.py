@@ -236,3 +236,132 @@ class CompanyCustomRule(TenantModel):
 
     def __str__(self):
         return f"{self.name} ({self.company.name})"
+
+
+class CompanyRenewalRequest(TimeStampedModel):
+    CYCLE_CHOICES = [
+        ('MONTHLY', 'Monthly (30 Days)'),
+        ('YEARLY', 'Yearly (365 Days)'),
+        ('DAYS', 'Custom Days'),
+        ('CUSTOM_DATE', 'Custom Date Target'),
+    ]
+
+    STATUS_CHOICES = [
+        ('PENDING', 'Pending Approval'),
+        ('APPROVED', 'Approved'),
+        ('REJECTED', 'Rejected'),
+        ('CANCELLED', 'Cancelled'),
+    ]
+
+    company = models.ForeignKey(
+        Company,
+        on_delete=models.CASCADE,
+        related_name='renewal_requests'
+    )
+    requested_by = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='company_renewal_requests'
+    )
+    assigned_super_admin = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='managed_renewal_requests',
+        help_text="Super Admin responsible for reviewing this renewal request"
+    )
+    plan = models.ForeignKey(
+        Plan,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='renewal_requests'
+    )
+    billing_cycle = models.CharField(
+        max_length=20,
+        choices=CYCLE_CHOICES,
+        default='MONTHLY'
+    )
+    requested_days = models.PositiveIntegerField(
+        default=30,
+        help_text="Number of extension days requested (if cycle is DAYS or MONTHLY/YEARLY)"
+    )
+    requested_date = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Specific target expiry date (if cycle is CUSTOM_DATE)"
+    )
+    payment_reference = models.CharField(
+        max_length=150,
+        blank=True,
+        help_text="Transaction reference / UTR / invoice note"
+    )
+    notes = models.TextField(blank=True, help_text="Customer remarks or renewal requirements")
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='PENDING',
+        db_index=True
+    )
+    approved_by = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='approved_renewal_requests'
+    )
+    approved_at = models.DateTimeField(null=True, blank=True)
+    admin_notes = models.TextField(blank=True, help_text="Notes from reviewing Super Admin")
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Renewal Request: {self.company.name} ({self.billing_cycle} - {self.status})"
+
+
+class CompanySubscriptionHistory(TimeStampedModel):
+    CYCLE_CHOICES = [
+        ('MONTHLY', 'Monthly'),
+        ('YEARLY', 'Yearly'),
+        ('DAYS', 'Custom Days'),
+        ('CUSTOM_DATE', 'Custom Date Target'),
+    ]
+
+    company = models.ForeignKey(
+        Company,
+        on_delete=models.CASCADE,
+        related_name='subscription_history'
+    )
+    plan_name = models.CharField(max_length=150)
+    billing_cycle = models.CharField(max_length=20, choices=CYCLE_CHOICES, default='MONTHLY')
+    extension_days = models.PositiveIntegerField(default=0)
+    previous_expiry = models.DateTimeField(null=True, blank=True)
+    new_expiry = models.DateTimeField()
+    amount_paid = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    currency = models.CharField(max_length=10, default='INR')
+    approved_by = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='logged_subscription_renewals'
+    )
+    renewal_request = models.ForeignKey(
+        CompanyRenewalRequest,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='history_logs'
+    )
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.company.name} renewed ({self.billing_cycle}) until {self.new_expiry.strftime('%Y-%m-%d')}"
+

@@ -14,6 +14,7 @@ import '../../providers/company_provider.dart';
 import '../../core/widgets/company_logo_view.dart';
 import 'edit_company_dialog.dart';
 import 'renew_plan_dialog.dart';
+import 'renewal_request_dialog.dart';
 
 class CompanyDetailScreen extends StatefulWidget {
   final String companyId;
@@ -902,6 +903,22 @@ Login URL: https://app.stepzcrm.com
                 ),
               ),
 
+              // Request Renewal Button (Mobile)
+              OutlinedButton.icon(
+                onPressed: () => SubmitRenewalRequestDialog.show(context, company: company),
+                icon: const Icon(Icons.send_rounded, size: 14, color: Color(0xFF0F766E)),
+                label: Text(
+                  'Request',
+                  style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF0F766E)),
+                ),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Color(0xFF99F6E4)),
+                  backgroundColor: const Color(0xFFF0FDFA),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
+
               // Extend / Renew Plan Button (Mobile)
               OutlinedButton.icon(
                 onPressed: () => _showRenewPlanDialog(company),
@@ -1062,6 +1079,20 @@ Login URL: https://app.stepzcrm.com
               style: OutlinedButton.styleFrom(
                 side: const BorderSide(color: Color(0xFFBFDBFE)),
                 backgroundColor: const Color(0xFFEFF6FF),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+            OutlinedButton.icon(
+              onPressed: () => SubmitRenewalRequestDialog.show(context, company: company),
+              icon: const Icon(Icons.send_rounded, size: 16, color: Color(0xFF0F766E)),
+              label: Text(
+                'Request Renewal',
+                style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFF0F766E)),
+              ),
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: Color(0xFF99F6E4)),
+                backgroundColor: const Color(0xFFF0FDFA),
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               ),
@@ -1427,6 +1458,18 @@ Login URL: https://app.stepzcrm.com
                   ),
                 ),
                 const SizedBox(width: 8),
+                OutlinedButton.icon(
+                  onPressed: () => SubmitRenewalRequestDialog.show(context, company: company),
+                  icon: const Icon(Icons.send_rounded, size: 13, color: Color(0xFF0F766E)),
+                  label: Text('Request Renewal', style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w700, color: const Color(0xFF0F766E))),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Color(0xFF99F6E4)),
+                    backgroundColor: const Color(0xFFF0FDFA),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+                const SizedBox(width: 6),
                 ElevatedButton.icon(
                   onPressed: () => _showRenewPlanDialog(company),
                   icon: const Icon(Icons.bolt_rounded, size: 14),

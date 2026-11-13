@@ -18,6 +18,10 @@ from apps.companies.views import (
     SuperAdminToggleStatusView,
     SuperAdminResetPasswordView,
     ReassignTenantsView,
+    CompanyRenewalRequestListCreateView,
+    CompanyRenewalRequestApproveView,
+    CompanyRenewalRequestRejectView,
+    CompanySubscriptionHistoryListView,
 )
 
 urlpatterns = [
@@ -25,6 +29,10 @@ urlpatterns = [
     path('super-admins/<uuid:pk>/toggle-status/', SuperAdminToggleStatusView.as_view(), name='super_admin_toggle_status'),
     path('super-admins/<uuid:pk>/reset-password/', SuperAdminResetPasswordView.as_view(), name='super_admin_reset_password'),
     path('super-admins/reassign-tenants/', ReassignTenantsView.as_view(), name='reassign_tenants'),
+    path('renewal-requests/', CompanyRenewalRequestListCreateView.as_view(), name='company_renewal_requests'),
+    path('renewal-requests/<uuid:pk>/approve/', CompanyRenewalRequestApproveView.as_view(), name='company_renewal_request_approve'),
+    path('renewal-requests/<uuid:pk>/reject/', CompanyRenewalRequestRejectView.as_view(), name='company_renewal_request_reject'),
+    path('subscription-history/', CompanySubscriptionHistoryListView.as_view(), name='company_subscription_history'),
     path('plans/', PlanListCreateView.as_view(), name='plan_list_create'),
     path('plans/<int:pk>/', PlanDetailView.as_view(), name='plan_detail'),
     path('billing/overview/', PlatformBillingOverviewView.as_view(), name='platform_billing_overview'),
