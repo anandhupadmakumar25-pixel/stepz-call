@@ -4,6 +4,7 @@ from apps.companies.views import (
     CompanyDetailView,
     MyCompanyView,
     CompanyPermissionsView,
+    CompanyRenewPlanView,
     CompanyResetPasswordView,
     PlanListCreateView,
     PlanDetailView,
@@ -33,6 +34,7 @@ urlpatterns = [
     path('', CompanyListCreateView.as_view(), name='company_list_create'),
     path('my-company/', MyCompanyView.as_view(), name='my_company'),
     path('<uuid:pk>/', CompanyDetailView.as_view(), name='company_detail'),
+    path('<uuid:pk>/renew-plan/', CompanyRenewPlanView.as_view(), name='company_renew_plan'),
     path('<uuid:pk>/permissions/', CompanyPermissionsView.as_view(), name='company_permissions'),
     path('<uuid:pk>/reset-password/', CompanyResetPasswordView.as_view(), name='company_reset_password'),
 ]

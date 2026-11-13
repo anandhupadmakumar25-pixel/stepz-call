@@ -34,6 +34,186 @@ class _LoginScreenState extends State<LoginScreen> {
     });
   }
 
+  void _showSubscriptionExpiredDialog({
+    required String message,
+    String? companyName,
+    String? expiredAt,
+  }) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        String formattedDate = '';
+        if (expiredAt != null && expiredAt.isNotEmpty) {
+          try {
+            final dt = DateTime.parse(expiredAt);
+            final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            formattedDate = '${dt.day.toString().padLeft(2, '0')} ${months[dt.month - 1]} ${dt.year}';
+          } catch (_) {
+            formattedDate = expiredAt;
+          }
+        }
+
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 460),
+            padding: const EdgeInsets.all(28),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.18),
+                  blurRadius: 30,
+                  offset: const Offset(0, 12),
+                ),
+              ],
+              border: Border.all(
+                color: const Color(0xFFEF4444).withValues(alpha: 0.35),
+                width: 1.5,
+              ),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 64,
+                  height: 64,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEF2F2),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: const Color(0xFFFCA5A5), width: 2),
+                  ),
+                  child: const Center(
+                    child: Icon(
+                      Icons.lock_clock_rounded,
+                      color: Color(0xFFDC2626),
+                      size: 34,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  'Subscription Plan Expired',
+                  style: GoogleFonts.outfit(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF0F172A),
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                if (companyName != null && companyName.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      companyName,
+                      style: GoogleFonts.inter(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF475569),
+                      ),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 16),
+                Text(
+                  message,
+                  style: GoogleFonts.inter(
+                    fontSize: 14,
+                    color: const Color(0xFF475569),
+                    height: 1.5,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                if (formattedDate.isNotEmpty) ...[
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEF2F2),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFF87171).withValues(alpha: 0.4)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.event_busy_rounded, color: Color(0xFFDC2626), size: 16),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Ended on $formattedDate',
+                          style: GoogleFonts.inter(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFFB91C1C),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 24),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.info_outline_rounded, size: 18, color: Color(0xFF64748B)),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Please contact your organization administrator or platform support to renew your subscription plan.',
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            color: const Color(0xFF64748B),
+                            height: 1.35,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  height: 44,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0F172A),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      elevation: 0,
+                    ),
+                    child: Text(
+                      'Back to Login',
+                      style: GoogleFonts.inter(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Future<void> _submit() async {
     final auth = context.read<AuthProvider>();
     final success = await auth.login(
@@ -48,6 +228,21 @@ class _LoginScreenState extends State<LoginScreen> {
       );
       return;
     }
+
+    final isExpired = auth.errorCode == 'PLAN_EXPIRED' ||
+        (auth.errorMessage?.toLowerCase().contains('expired') == true) ||
+        (auth.errorMessage?.toLowerCase().contains('subscription') == true);
+
+    if (isExpired) {
+      final errData = auth.lastErrorData;
+      _showSubscriptionExpiredDialog(
+        message: auth.errorMessage ?? 'Your company plan has expired. Please contact your administrator to renew.',
+        companyName: errData?['company_name']?.toString(),
+        expiredAt: errData?['plan_expires_at']?.toString(),
+      );
+      return;
+    }
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(

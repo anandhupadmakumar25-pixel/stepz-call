@@ -203,7 +203,11 @@ class ApiClient {
       if (response.statusCode == 401 && (errorMessage.contains('401') || errorMessage.contains('credentials'))) {
         errorMessage = 'Invalid email or password. Please verify your credentials.';
       }
-      throw ApiException(errorMessage, response.statusCode);
+      throw ApiException(
+        errorMessage,
+        response.statusCode,
+        data: body is Map<String, dynamic> ? body : null,
+      );
     }
   }
 }
@@ -211,8 +215,9 @@ class ApiClient {
 class ApiException implements Exception {
   final String message;
   final int statusCode;
+  final Map<String, dynamic>? data;
 
-  ApiException(this.message, this.statusCode);
+  ApiException(this.message, this.statusCode, {this.data});
 
   @override
   String toString() => message;

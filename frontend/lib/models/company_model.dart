@@ -34,6 +34,12 @@ class CompanyModel {
   final String createdByEmail;
   final String? assignedSuperAdminId;
   final String assignedSuperAdminName;
+  final String planBillingCycle;
+  final String? planStartsAt;
+  final String? planExpiresAt;
+  final int gracePeriodDays;
+  final bool isPlanExpired;
+  final int? daysUntilExpiry;
   final String createdAt;
 
   CompanyModel({
@@ -55,6 +61,12 @@ class CompanyModel {
     this.planCurrencySymbol = '₹',
     this.planPriceMonthly = 0.0,
     this.planPriceYearly = 0.0,
+    this.planBillingCycle = 'MONTHLY',
+    this.planStartsAt,
+    this.planExpiresAt,
+    this.gracePeriodDays = 0,
+    this.isPlanExpired = false,
+    this.daysUntilExpiry,
     this.planMaxUsers = 5,
     this.planMaxLeads = 5000,
     this.allowedMenus = const [],
@@ -75,8 +87,21 @@ class CompanyModel {
 
   bool get isActive => status.toUpperCase() == 'ACTIVE';
   bool get isSuspended => status.toUpperCase() == 'SUSPENDED';
+  bool get isPlanOverdue => isPlanExpired || (daysUntilExpiry != null && daysUntilExpiry! < 0);
+  bool get isExpiringSoon => !isPlanOverdue && daysUntilExpiry != null && daysUntilExpiry! <= 7;
   int get employeeCount => userCount;
   String get adminEmail => explicitAdminEmail != null && explicitAdminEmail!.isNotEmpty ? explicitAdminEmail! : contactEmail;
+
+  String get expiryFormatted {
+    if (planExpiresAt == null || planExpiresAt!.isEmpty) return 'No expiry set';
+    try {
+      final dt = DateTime.parse(planExpiresAt!);
+      final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      return '${dt.day.toString().padLeft(2, '0')} ${months[dt.month - 1]} ${dt.year}';
+    } catch (_) {
+      return planExpiresAt!;
+    }
+  }
 
   bool hasMenuPermission(String menuKey) => allowedMenus.contains(menuKey);
 
@@ -123,6 +148,12 @@ class CompanyModel {
           : (json['plan_currency'] != null ? PlanModel.getSymbolForCurrency(json['plan_currency'].toString()) : '₹'),
       planPriceMonthly: parsePrice(json['plan_price_monthly']),
       planPriceYearly: parsePrice(json['plan_price_yearly']),
+      planBillingCycle: json['plan_billing_cycle']?.toString() ?? 'MONTHLY',
+      planStartsAt: json['plan_starts_at']?.toString(),
+      planExpiresAt: json['plan_expires_at']?.toString(),
+      gracePeriodDays: json['grace_period_days'] is int ? json['grace_period_days'] : int.tryParse(json['grace_period_days']?.toString() ?? '0') ?? 0,
+      isPlanExpired: json['is_plan_expired'] == true,
+      daysUntilExpiry: json['days_until_expiry'] is int ? json['days_until_expiry'] : int.tryParse(json['days_until_expiry']?.toString() ?? ''),
       planMaxUsers: json['plan_max_users'] is int ? json['plan_max_users'] : int.tryParse(json['plan_max_users']?.toString() ?? '5') ?? 5,
       planMaxLeads: json['plan_max_leads'] is int ? json['plan_max_leads'] : int.tryParse(json['plan_max_leads']?.toString() ?? '5000') ?? 5000,
       allowedMenus: parsedMenus,

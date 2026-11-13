@@ -17,6 +17,7 @@ import '../../providers/company_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../admin/super_admin_management_dialog.dart';
 import '../../core/widgets/company_logo_view.dart';
+import 'renew_plan_dialog.dart';
 
 class CompanyDirectoryScreen extends StatefulWidget {
   const CompanyDirectoryScreen({super.key});
@@ -1136,6 +1137,18 @@ Login URL: https://app.stepzcrm.com
     );
   }
 
+  void _showRenewPlanDialog(CompanyModel company) {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (_) => RenewPlanDialog(company: company),
+    ).then((val) {
+      if (val == true && mounted) {
+        context.read<CompanyProvider>().fetchCompanies();
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final compProvider = context.watch<CompanyProvider>();
@@ -1353,6 +1366,67 @@ Login URL: https://app.stepzcrm.com
                                                         style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, color: const Color(0xFF92400E)),
                                                       ),
                                                     ),
+                                                    // Plan Expiry Status Badge
+                                                    if (comp.isPlanOverdue || comp.isSuspended)
+                                                      Container(
+                                                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                                        decoration: BoxDecoration(
+                                                          color: const Color(0xFFFEF2F2),
+                                                          borderRadius: BorderRadius.circular(6),
+                                                          border: Border.all(color: const Color(0xFFFCA5A5)),
+                                                        ),
+                                                        child: Row(
+                                                          mainAxisSize: MainAxisSize.min,
+                                                          children: [
+                                                            const Icon(Icons.error_outline_rounded, size: 11, color: Color(0xFFDC2626)),
+                                                            const SizedBox(width: 4),
+                                                            Text(
+                                                              comp.isPlanOverdue ? 'Expired (${comp.expiryFormatted})' : 'Suspended',
+                                                              style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, color: const Color(0xFFDC2626)),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      )
+                                                    else if (comp.isExpiringSoon)
+                                                      Container(
+                                                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                                        decoration: BoxDecoration(
+                                                          color: const Color(0xFFFFFBEB),
+                                                          borderRadius: BorderRadius.circular(6),
+                                                          border: Border.all(color: const Color(0xFFFCD34D)),
+                                                        ),
+                                                        child: Row(
+                                                          mainAxisSize: MainAxisSize.min,
+                                                          children: [
+                                                            const Icon(Icons.warning_amber_rounded, size: 11, color: Color(0xFFD97706)),
+                                                            const SizedBox(width: 4),
+                                                            Text(
+                                                              'Expires in ${comp.daysUntilExpiry}d',
+                                                              style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, color: const Color(0xFFD97706)),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      )
+                                                    else if (comp.planExpiresAt != null)
+                                                      Container(
+                                                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                                        decoration: BoxDecoration(
+                                                          color: const Color(0xFFF0FDF4),
+                                                          borderRadius: BorderRadius.circular(6),
+                                                          border: Border.all(color: const Color(0xFF86EFAC)),
+                                                        ),
+                                                        child: Row(
+                                                          mainAxisSize: MainAxisSize.min,
+                                                          children: [
+                                                            const Icon(Icons.check_circle_outline_rounded, size: 11, color: Color(0xFF16A34A)),
+                                                            const SizedBox(width: 4),
+                                                            Text(
+                                                              'Valid until ${comp.expiryFormatted}',
+                                                              style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, color: const Color(0xFF16A34A)),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      ),
                                                     if (isMasterAdmin && comp.createdByName.isNotEmpty)
                                                       Container(
                                                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -1467,6 +1541,18 @@ Login URL: https://app.stepzcrm.com
                                                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                                   ),
                                                 ),
+                                                // Renew Plan Button
+                                                OutlinedButton.icon(
+                                                  onPressed: () => _showRenewPlanDialog(comp),
+                                                  icon: const Icon(Icons.bolt_rounded, size: 14, color: Color(0xFF4F46E5)),
+                                                  label: Text('Renew Plan', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF4338CA))),
+                                                  style: OutlinedButton.styleFrom(
+                                                    side: const BorderSide(color: Color(0xFFC7D2FE)),
+                                                    backgroundColor: const Color(0xFFEEF2FF),
+                                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                                  ),
+                                                ),
                                                 IconButton(
                                                   tooltip: 'Generate New Temporary Password',
                                                   icon: const Icon(Icons.lock_reset_rounded, size: 20, color: Color(0xFFD4AF37)),
@@ -1527,6 +1613,18 @@ Login URL: https://app.stepzcrm.com
                                             Row(
                                               mainAxisSize: MainAxisSize.min,
                                               children: [
+                                                OutlinedButton.icon(
+                                                  onPressed: () => _showRenewPlanDialog(comp),
+                                                  icon: const Icon(Icons.bolt_rounded, size: 13, color: Color(0xFF4F46E5)),
+                                                  label: Text('Renew', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF4338CA))),
+                                                  style: OutlinedButton.styleFrom(
+                                                    side: const BorderSide(color: Color(0xFFC7D2FE)),
+                                                    backgroundColor: const Color(0xFFEEF2FF),
+                                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 6),
                                                 OutlinedButton.icon(
                                                   onPressed: () => _showPermissionsDialog(comp),
                                                   icon: const Icon(Icons.tune_rounded, size: 13, color: Color(0xFF2563EB)),

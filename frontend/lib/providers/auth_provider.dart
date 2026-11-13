@@ -6,11 +6,15 @@ class AuthProvider extends ChangeNotifier {
   UserModel? _currentUser;
   bool _isLoading = false;
   String? _errorMessage;
+  String? _errorCode;
+  Map<String, dynamic>? _lastErrorData;
 
   UserModel? get currentUser => _currentUser;
   bool get isAuthenticated => _currentUser != null;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
+  String? get errorCode => _errorCode;
+  Map<String, dynamic>? get lastErrorData => _lastErrorData;
 
   Future<void> initAuth() async {
     _isLoading = true;
@@ -33,6 +37,8 @@ class AuthProvider extends ChangeNotifier {
   Future<bool> login(String email, String password) async {
     _isLoading = true;
     _errorMessage = null;
+    _errorCode = null;
+    _lastErrorData = null;
     notifyListeners();
 
     try {
@@ -52,11 +58,15 @@ class AuthProvider extends ChangeNotifier {
       return true;
     } on ApiException catch (e) {
       _errorMessage = e.message;
+      _errorCode = e.data?['code']?.toString();
+      _lastErrorData = e.data;
       _isLoading = false;
       notifyListeners();
       return false;
     } catch (e) {
       _errorMessage = 'Connection error: ${e.toString()}';
+      _errorCode = null;
+      _lastErrorData = null;
       _isLoading = false;
       notifyListeners();
       return false;

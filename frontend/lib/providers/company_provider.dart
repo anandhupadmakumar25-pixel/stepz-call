@@ -484,6 +484,46 @@ class CompanyProvider extends ChangeNotifier {
     return false;
   }
 
+  Future<bool> renewCompanyPlan(
+    String companyId, {
+    String billingCycle = 'MONTHLY',
+    int extensionDays = 30,
+    String? planId,
+    String? newExpiresAt,
+  }) async {
+    try {
+      final payload = <String, dynamic>{
+        'billing_cycle': billingCycle,
+        'extension_days': extensionDays,
+        'reactivate': true,
+      };
+      if (planId != null && planId.isNotEmpty) {
+        payload['plan_id'] = planId;
+      }
+      if (newExpiresAt != null && newExpiresAt.isNotEmpty) {
+        payload['new_expires_at'] = newExpiresAt;
+      }
+
+      final res = await ApiClient.post('/companies/$companyId/renew-plan/', payload);
+      if (res is Map<String, dynamic> && res['company'] != null) {
+        final updated = CompanyModel.fromJson(res['company']);
+        final idx = _companies.indexWhere((c) => c.id == companyId);
+        if (idx != -1) {
+          _companies[idx] = updated;
+        }
+        if (_activeCompanyDetail?.id == companyId) {
+          _activeCompanyDetail = updated;
+        }
+        notifyListeners();
+        return true;
+      }
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
+    }
+    return false;
+  }
+
   Future<bool> loadRulePreset(String presetKey, {bool replaceExisting = false}) async {
     try {
       final res = await ApiClient.post('/companies/rules/preset/', {

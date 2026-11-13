@@ -39,6 +39,8 @@ class CompanySerializer(serializers.ModelSerializer):
     created_by_email = serializers.CharField(source='created_by.email', read_only=True, default='')
     assigned_super_admin_id = serializers.UUIDField(source='assigned_super_admin.id', read_only=True, allow_null=True)
     assigned_super_admin_name = serializers.SerializerMethodField()
+    is_plan_expired = serializers.BooleanField(read_only=True)
+    days_until_expiry = serializers.IntegerField(read_only=True, allow_null=True)
 
     class Meta:
         model = Company
@@ -48,6 +50,8 @@ class CompanySerializer(serializers.ModelSerializer):
             'logo', 'address', 'gstin', 'website',
             'plan', 'plan_name', 'plan_code', 'plan_currency', 'plan_currency_symbol',
             'plan_price_monthly', 'plan_price_yearly',
+            'plan_billing_cycle', 'plan_starts_at', 'plan_expires_at', 'grace_period_days',
+            'is_plan_expired', 'days_until_expiry',
             'plan_max_users', 'plan_max_leads', 'allowed_menus',
             'resolved_allowed_menus', 'can_manage_branches',
             'created_by_id', 'created_by_name', 'created_by_email',
@@ -55,7 +59,7 @@ class CompanySerializer(serializers.ModelSerializer):
             'settings', 'user_count', 'lead_count', 'branch_count', 'task_count',
             'admin_name', 'admin_email', 'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'is_plan_expired', 'days_until_expiry', 'created_at', 'updated_at']
 
     def get_created_by_name(self, obj):
         return obj.created_by.full_name if obj.created_by else 'Platform Master'
@@ -107,7 +111,24 @@ class CompanyCreateSerializer(serializers.Serializer):
     gstin = serializers.CharField(required=False, allow_blank=True, default='')
     website = serializers.CharField(required=False, allow_blank=True, default='')
     plan_id = serializers.CharField(required=False, allow_blank=True, default='')
+    plan_billing_cycle = serializers.ChoiceField(
+        choices=['MONTHLY', 'QUARTERLY', 'YEARLY', 'CUSTOM'],
+        required=False,
+        default='MONTHLY'
+    )
+    plan_duration_days = serializers.IntegerField(required=False, default=30)
     allowed_menus = serializers.ListField(child=serializers.CharField(), required=False, default=list)
+
+
+class CompanyRenewPlanSerializer(serializers.Serializer):
+    billing_cycle = serializers.ChoiceField(
+        choices=['MONTHLY', 'QUARTERLY', 'YEARLY', 'CUSTOM'],
+        default='MONTHLY'
+    )
+    extension_days = serializers.IntegerField(required=False, default=30)
+    plan_id = serializers.CharField(required=False, allow_blank=True, default='')
+    new_expires_at = serializers.DateTimeField(required=False, allow_null=True, default=None)
+    reactivate = serializers.BooleanField(required=False, default=True)
 
 
 class CompanyPayrollPolicySerializer(serializers.ModelSerializer):

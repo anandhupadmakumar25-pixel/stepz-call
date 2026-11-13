@@ -57,6 +57,13 @@ class Company(TimeStampedModel):
         ('TRIAL', 'Trial'),
     ]
 
+    PLAN_BILLING_CYCLE_CHOICES = [
+        ('MONTHLY', 'Monthly'),
+        ('QUARTERLY', 'Quarterly'),
+        ('YEARLY', 'Yearly'),
+        ('CUSTOM', 'Custom'),
+    ]
+
     name = models.CharField(max_length=255)
     subdomain = models.CharField(max_length=100, unique=True, null=True, blank=True)
     contact_email = models.EmailField()
@@ -69,6 +76,10 @@ class Company(TimeStampedModel):
     gstin = models.CharField(max_length=50, blank=True, default='')
     website = models.CharField(max_length=255, blank=True, default='')
     plan = models.ForeignKey(Plan, on_delete=models.SET_NULL, null=True, blank=True, related_name='companies')
+    plan_billing_cycle = models.CharField(max_length=20, choices=PLAN_BILLING_CYCLE_CHOICES, default='MONTHLY')
+    plan_starts_at = models.DateTimeField(null=True, blank=True)
+    plan_expires_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    grace_period_days = models.PositiveIntegerField(default=0)
     created_by = models.ForeignKey(
         'accounts.User',
         on_delete=models.SET_NULL,
@@ -98,6 +109,34 @@ class Company(TimeStampedModel):
     @property
     def logo_url(self):
         return self.logo
+
+    @property
+    def is_plan_expired(self):
+        if not self.plan_expires_at:
+            return False
+        from django.utils import timezone
+        from datetime import timedelta
+        cutoff = self.plan_expires_at + timedelta(days=self.grace_period_days)
+        return timezone.now() > cutoff
+
+    @property
+    def days_until_expiry(self):
+        if not self.plan_expires_at:
+            return None
+        from django.utils import timezone
+        delta = self.plan_expires_at - timezone.now()
+        # Returns whole days remaining (can be negative if expired)
+        return delta.days
+
+    def check_and_update_status(self):
+        """
+        Auto-suspend the company if its plan has passed the expiry cutoff date.
+        """
+        if self.is_plan_expired and self.status != 'SUSPENDED':
+            self.status = 'SUSPENDED'
+            self.save(update_fields=['status'])
+            return True
+        return False
 
     def get_allowed_menus(self):
         if self.allowed_menus and len(self.allowed_menus) > 0:

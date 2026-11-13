@@ -20,13 +20,33 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         if not user.is_active:
             raise serializers.ValidationError({"detail": "User account is disabled."})
 
-        if user.company and user.company.status == 'SUSPENDED':
-            raise serializers.ValidationError({"detail": "Company account is suspended. Please contact administrator."})
+        # Multi-Tenant Plan Expiration & Suspension Interception
+        if not user.is_super_admin and user.company:
+            # Check and auto-suspend if overdue
+            user.company.check_and_update_status()
+
+            if user.company.is_plan_expired:
+                expiry_str = user.company.plan_expires_at.strftime('%d %b %Y') if user.company.plan_expires_at else 'Unknown date'
+                raise serializers.ValidationError({
+                    "detail": f"Your company subscription plan expired on {expiry_str}. Please contact your company administrator to renew your plan.",
+                    "code": "PLAN_EXPIRED",
+                    "plan_expires_at": user.company.plan_expires_at.isoformat() if user.company.plan_expires_at else None,
+                    "company_name": user.company.name,
+                })
+
+            if user.company.status == 'SUSPENDED':
+                raise serializers.ValidationError({
+                    "detail": "Company account is suspended. Please contact your company administrator or support.",
+                    "code": "COMPANY_SUSPENDED",
+                    "company_name": user.company.name,
+                })
 
         company = user.company
         allowed_menus = company.get_allowed_menus() if company else []
         can_branches = company.can_manage_branches() if company else False
         plan_name = company.plan.name if (company and company.plan) else 'Default'
+        plan_expires_at_iso = company.plan_expires_at.isoformat() if (company and company.plan_expires_at) else None
+        days_left = company.days_until_expiry if company else None
 
         data['user'] = {
             'id': str(user.id),
@@ -44,6 +64,11 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             'company_address': company.address if company else None,
             'company_gstin': company.gstin if company else None,
             'company_website': company.website if company else None,
+            'company_status': company.status if company else 'ACTIVE',
+            'plan_billing_cycle': company.plan_billing_cycle if company else 'MONTHLY',
+            'plan_expires_at': plan_expires_at_iso,
+            'is_plan_expired': company.is_plan_expired if company else False,
+            'days_until_expiry': days_left,
             'branch_id': str(user.branch.id) if user.branch else None,
             'branch_name': user.branch.name if user.branch else None,
             'is_staff': user.is_staff,

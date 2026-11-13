@@ -1,13 +1,22 @@
 import uuid
 import secrets
 import string
+from datetime import timedelta
+from django.utils import timezone
 from rest_framework import generics, status, views
 from rest_framework.response import Response
 from django.db import transaction
 from django.contrib.auth import get_user_model
 from django.db.models import Sum, Count, Q
 from apps.companies.models import Company, Plan, ALL_MENU_KEYS, CompanyPayrollPolicy, CompanyCustomRule
-from apps.companies.serializers import CompanySerializer, CompanyCreateSerializer, PlanSerializer, CompanyPayrollPolicySerializer, CompanyCustomRuleSerializer
+from apps.companies.serializers import (
+    CompanySerializer,
+    CompanyCreateSerializer,
+    PlanSerializer,
+    CompanyPayrollPolicySerializer,
+    CompanyCustomRuleSerializer,
+    CompanyRenewPlanSerializer,
+)
 from apps.core.permissions import IsSuperAdmin, IsCompanyAdmin, IsEmployee, IsMasterAdmin
 
 User = get_user_model()
@@ -88,6 +97,19 @@ class CompanyListCreateView(views.APIView):
         if not plan:
             plan = Plan.objects.filter(code='starter').first() or Plan.objects.first()
 
+        plan_billing_cycle = data.get('plan_billing_cycle', 'MONTHLY')
+        plan_duration_days = data.get('plan_duration_days', 30)
+        if plan_billing_cycle == 'YEARLY':
+            plan_duration_days = 365
+        elif plan_billing_cycle == 'QUARTERLY':
+            plan_duration_days = 90
+        elif plan_billing_cycle == 'MONTHLY' and not plan_duration_days:
+            plan_duration_days = 30
+
+        now = timezone.now()
+        plan_starts_at = now
+        plan_expires_at = now + timedelta(days=plan_duration_days)
+
         # If allowed_menus was not explicitly passed, inherit from plan or default
         if not allowed_menus:
             if plan and plan.allowed_menus:
@@ -107,6 +129,9 @@ class CompanyListCreateView(views.APIView):
                 gstin=data.get('gstin', '').strip(),
                 website=data.get('website', '').strip(),
                 plan=plan,
+                plan_billing_cycle=plan_billing_cycle,
+                plan_starts_at=plan_starts_at,
+                plan_expires_at=plan_expires_at,
                 allowed_menus=allowed_menus,
                 created_by=request.user,
                 assigned_super_admin=request.user,
@@ -242,6 +267,61 @@ class CompanyPermissionsView(views.APIView):
             "message": "Company permissions updated successfully.",
             "company": CompanySerializer(company).data
         })
+
+class CompanyRenewPlanView(views.APIView):
+    permission_classes = [IsSuperAdmin]
+
+    def post(self, request, pk):
+        if request.user.is_master_admin:
+            company = Company.objects.filter(id=pk).first()
+        elif request.user.role == 'SUPER_ADMIN':
+            company = Company.objects.filter(
+                Q(created_by=request.user) | Q(assigned_super_admin=request.user),
+                id=pk
+            ).first()
+        else:
+            return Response({"error": "Unauthorized"}, status=status.HTTP_403_FORBIDDEN)
+
+        if not company:
+            return Response({"error": "Company not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = CompanyRenewPlanSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        billing_cycle = data.get('billing_cycle', 'MONTHLY')
+        extension_days = data.get('extension_days', 30)
+        new_expires_at = data.get('new_expires_at')
+        plan_id = data.get('plan_id', '').strip()
+        reactivate = data.get('reactivate', True)
+
+        now = timezone.now()
+
+        if new_expires_at:
+            company.plan_expires_at = new_expires_at
+        else:
+            if company.plan_expires_at and company.plan_expires_at > now:
+                base_time = company.plan_expires_at
+            else:
+                base_time = now
+            company.plan_expires_at = base_time + timedelta(days=extension_days)
+
+        company.plan_billing_cycle = billing_cycle
+
+        if plan_id:
+            new_plan = get_plan_by_id_or_code(plan_id)
+            if new_plan:
+                company.plan = new_plan
+
+        if reactivate or company.status == 'SUSPENDED':
+            company.status = 'ACTIVE'
+
+        company.save()
+
+        return Response({
+            "message": f"Plan renewed successfully until {company.plan_expires_at.strftime('%d %b %Y')}.",
+            "company": CompanySerializer(company).data
+        }, status=status.HTTP_200_OK)
 
 class CompanyResetPasswordView(views.APIView):
     permission_classes = [IsSuperAdmin]
