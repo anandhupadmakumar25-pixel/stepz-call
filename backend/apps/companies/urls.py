@@ -5,6 +5,7 @@ from apps.companies.views import (
     MyCompanyView,
     CompanyPermissionsView,
     CompanyRenewPlanView,
+    CompanySuperAdminRequestView,
     CompanyResetPasswordView,
     PlanListCreateView,
     PlanDetailView,
@@ -35,6 +36,7 @@ urlpatterns = [
     path('my-company/', MyCompanyView.as_view(), name='my_company'),
     path('<uuid:pk>/', CompanyDetailView.as_view(), name='company_detail'),
     path('<uuid:pk>/renew-plan/', CompanyRenewPlanView.as_view(), name='company_renew_plan'),
+    path('<uuid:pk>/super-admin-request/', CompanySuperAdminRequestView.as_view(), name='company_super_admin_request'),
     path('<uuid:pk>/permissions/', CompanyPermissionsView.as_view(), name='company_permissions'),
     path('<uuid:pk>/reset-password/', CompanyResetPasswordView.as_view(), name='company_reset_password'),
 ]

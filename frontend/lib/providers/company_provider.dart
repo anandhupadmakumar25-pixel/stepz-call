@@ -548,4 +548,39 @@ class CompanyProvider extends ChangeNotifier {
     }
     return false;
   }
+
+  Future<bool> sendSuperAdminRequest(
+    String companyId, {
+    required String requestType,
+    String? notes,
+    String? targetSuperAdminId,
+  }) async {
+    try {
+      final payload = <String, dynamic>{
+        'request_type': requestType,
+        'notes': notes ?? '',
+      };
+      if (targetSuperAdminId != null && targetSuperAdminId.isNotEmpty) {
+        payload['target_super_admin_id'] = targetSuperAdminId;
+      }
+      final res = await ApiClient.post('/companies/$companyId/super-admin-request/', payload);
+      if (res is Map<String, dynamic> && res['company'] != null) {
+        final updated = CompanyModel.fromJson(res['company']);
+        final idx = _companies.indexWhere((c) => c.id == companyId);
+        if (idx != -1) {
+          _companies[idx] = updated;
+        }
+        if (_activeCompanyDetail?.id == companyId) {
+          _activeCompanyDetail = updated;
+        }
+        notifyListeners();
+        return true;
+      }
+      return true;
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
+      return false;
+    }
+  }
 }

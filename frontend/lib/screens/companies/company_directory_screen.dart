@@ -46,10 +46,7 @@ class _CompanyDirectoryScreenState extends State<CompanyDirectoryScreen> {
       final compProv = context.read<CompanyProvider>();
       compProv.fetchCompanies();
       compProv.fetchPlans();
-      final authUser = context.read<AuthProvider>().currentUser;
-      if (authUser?.isRootMasterAdmin == true) {
-        compProv.fetchSuperAdmins();
-      }
+      compProv.fetchSuperAdmins();
     });
   }
 
@@ -1149,6 +1146,553 @@ Login URL: https://app.stepzcrm.com
     });
   }
 
+  void _showSuperAdminRequestDialog(CompanyModel comp) {
+    final compProv = context.read<CompanyProvider>();
+    final currentUser = context.read<AuthProvider>().currentUser;
+    final isMasterAdmin = currentUser?.isRootMasterAdmin ?? false;
+    final superAdmins = compProv.superAdmins;
+
+    String? selectedTargetAdminId = comp.assignedSuperAdminId ?? (superAdmins.isNotEmpty ? superAdmins.first['id']?.toString() : null);
+    String selectedRequestType = 'REASSIGNMENT';
+    final notesController = TextEditingController();
+    bool isSubmitting = false;
+
+    final requestTypes = [
+      {'key': 'REASSIGNMENT', 'title': 'Tenant Reassignment', 'desc': 'Request transfer to another Super Admin'},
+      {'key': 'PLAN_EXTENSION', 'title': 'Plan Extension & Grace', 'desc': 'Request renewal grace period or approval'},
+      {'key': 'QUOTA_UPGRADE', 'title': 'Quota & User Upgrade', 'desc': 'Request higher telecaller or lead storage capacity'},
+      {'key': 'SUPPORT', 'title': 'Support & General Inquiry', 'desc': 'Send note or question directly to Master Admin'},
+    ];
+
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.70),
+      builder: (ctx) => StatefulBuilder(
+        builder: (dialogCtx, setModalState) {
+          final isMobile = ResponsiveLayout.isMobile(dialogCtx);
+          return Dialog(
+            backgroundColor: Colors.transparent,
+            insetPadding: EdgeInsets.symmetric(horizontal: isMobile ? 14 : 20, vertical: 20),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 520),
+              child: GlassCard(
+                blur: 24,
+                opacity: 0.98,
+                borderRadius: BorderRadius.circular(20),
+                padding: EdgeInsets.all(isMobile ? 18 : 24),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Header
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEEF2FF),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Icon(Icons.shield_rounded, color: Color(0xFF4F46E5), size: 22),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  isMasterAdmin ? 'Reassign Tenant Super Admin' : 'Super Admin Request Option',
+                                  style: GoogleFonts.inter(
+                                    fontSize: isMobile ? 15 : 17,
+                                    fontWeight: FontWeight.w800,
+                                    color: const Color(0xFF0F172A),
+                                  ),
+                                ),
+                                Text(
+                                  comp.name,
+                                  style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
+                                ),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close_rounded, size: 20, color: Color(0xFF64748B)),
+                            onPressed: () => Navigator.pop(ctx),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Current Attribution Card
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.account_balance_rounded, size: 16, color: Color(0xFF64748B)),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Managing Admin: ${comp.assignedSuperAdminName.isNotEmpty ? comp.assignedSuperAdminName : (comp.createdByName.isNotEmpty ? comp.createdByName : "Platform Master")}',
+                                style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF334155)),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      if (isMasterAdmin) ...[
+                        Text(
+                          'Select Target Super Admin:',
+                          style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
+                        ),
+                        const SizedBox(height: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: const Color(0xFFCBD5E1)),
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              value: selectedTargetAdminId,
+                              isExpanded: true,
+                              hint: const Text('Select Super Admin'),
+                              items: superAdmins.map((sa) {
+                                return DropdownMenuItem<String>(
+                                  value: sa['id']?.toString(),
+                                  child: Text(
+                                    '${sa['full_name']} (${sa['email']})',
+                                    style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w500),
+                                  ),
+                                );
+                              }).toList(),
+                              onChanged: (val) {
+                                if (val != null) {
+                                  setModalState(() => selectedTargetAdminId = val);
+                                }
+                              },
+                            ),
+                          ),
+                        ),
+                      ] else ...[
+                        Text(
+                          'Request Category:',
+                          style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
+                        ),
+                        const SizedBox(height: 8),
+                        ...requestTypes.map((rt) {
+                          final isSelected = selectedRequestType == rt['key'];
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: InkWell(
+                              onTap: () => setModalState(() => selectedRequestType = rt['key']!),
+                              borderRadius: BorderRadius.circular(10),
+                              child: Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: isSelected ? const Color(0xFFEEF2FF) : Colors.white,
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: isSelected ? const Color(0xFF6366F1) : const Color(0xFFE2E8F0),
+                                    width: isSelected ? 1.6 : 1.0,
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      isSelected ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
+                                      size: 18,
+                                      color: isSelected ? const Color(0xFF4F46E5) : const Color(0xFFCBD5E1),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            rt['title']!,
+                                            style: GoogleFonts.inter(
+                                              fontSize: 13,
+                                              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+                                              color: const Color(0xFF0F172A),
+                                            ),
+                                          ),
+                                          Text(
+                                            rt['desc']!,
+                                            style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          );
+                        }),
+                      ],
+
+                      const SizedBox(height: 12),
+                      Text(
+                        'Request Notes / Details:',
+                        style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
+                      ),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: notesController,
+                        maxLines: 3,
+                        style: GoogleFonts.inter(fontSize: 13),
+                        decoration: InputDecoration(
+                          hintText: isMasterAdmin
+                              ? 'Optional notes regarding this reassignment...'
+                              : 'Explain reason for reassignment, quota request, or inquiry...',
+                          hintStyle: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8)),
+                          filled: true,
+                          fillColor: const Color(0xFFF8FAFC),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFCBD5E1))),
+                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFCBD5E1))),
+                        ),
+                      ),
+
+                      const SizedBox(height: 20),
+
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          TextButton(
+                            onPressed: isSubmitting ? null : () => Navigator.pop(ctx),
+                            child: Text('Cancel', style: GoogleFonts.inter(color: const Color(0xFF64748B), fontWeight: FontWeight.w600)),
+                          ),
+                          const SizedBox(width: 10),
+                          ElevatedButton.icon(
+                            onPressed: isSubmitting
+                                ? null
+                                : () async {
+                                    setModalState(() => isSubmitting = true);
+                                    final messenger = ScaffoldMessenger.of(context);
+                                    final ok = await compProv.sendSuperAdminRequest(
+                                      comp.id,
+                                      requestType: isMasterAdmin ? 'REASSIGNMENT' : selectedRequestType,
+                                      notes: notesController.text.trim(),
+                                      targetSuperAdminId: isMasterAdmin ? selectedTargetAdminId : null,
+                                    );
+                                    if (mounted) {
+                                      Navigator.pop(ctx);
+                                      messenger.showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            isMasterAdmin
+                                                ? 'Tenant reassigned successfully!'
+                                                : 'Request submitted to Master Admin!',
+                                          ),
+                                          backgroundColor: ok ? AppColors.success : AppColors.danger,
+                                        ),
+                                      );
+                                    }
+                                  },
+                            icon: const Icon(Icons.send_rounded, size: 16),
+                            label: Text(
+                              isMasterAdmin ? 'Confirm Reassign' : 'Submit Request',
+                              style: GoogleFonts.inter(fontWeight: FontWeight.w700),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF4F46E5),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              elevation: 0,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildCenterLifecycleBlock(CompanyModel comp, bool isMasterAdmin, {bool isMobile = false}) {
+    final statusColor = comp.isPlanOverdue
+        ? const Color(0xFFDC2626)
+        : (comp.isExpiringSoon ? const Color(0xFFD97706) : const Color(0xFF16A34A));
+    final statusBg = comp.isPlanOverdue
+        ? const Color(0xFFFEF2F2)
+        : (comp.isExpiringSoon ? const Color(0xFFFFFBEB) : const Color(0xFFF0FDF4));
+    final statusBorder = comp.isPlanOverdue
+        ? const Color(0xFFFCA5A5)
+        : (comp.isExpiringSoon ? const Color(0xFFFCD34D) : const Color(0xFFBBF7D0));
+    final daysText = comp.isPlanOverdue
+        ? 'Expired'
+        : (comp.daysUntilExpiry != null ? '${comp.daysUntilExpiry}d left' : 'Active');
+
+    final saName = comp.assignedSuperAdminName.isNotEmpty
+        ? comp.assignedSuperAdminName
+        : (comp.createdByName.isNotEmpty ? comp.createdByName : 'Platform Master');
+
+    if (isMobile) {
+      return Container(
+        margin: const EdgeInsets.only(top: 8, bottom: 4),
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF8FAFC),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+        ),
+        child: Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.calendar_today_rounded, size: 12, color: Color(0xFF64748B)),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Reg: ${comp.registeredFormatted}',
+                      style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF334155)),
+                    ),
+                  ],
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: statusBg,
+                    borderRadius: BorderRadius.circular(5),
+                    border: Border.all(color: statusBorder),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        comp.isPlanOverdue ? Icons.error_outline_rounded : Icons.timer_outlined,
+                        size: 11,
+                        color: statusColor,
+                      ),
+                      const SizedBox(width: 3),
+                      Text(
+                        'Exp: ${comp.expiryFormatted} ($daysText)',
+                        style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, color: statusColor),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            const Divider(color: Color(0xFFE2E8F0), height: 1),
+            const SizedBox(height: 6),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.shield_outlined, size: 12, color: Color(0xFF4338CA)),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Super Admin: $saName',
+                      style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF4338CA)),
+                    ),
+                  ],
+                ),
+                InkWell(
+                  onTap: () => _showSuperAdminRequestDialog(comp),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    child: Row(
+                      children: [
+                        Icon(isMasterAdmin ? Icons.swap_horiz_rounded : Icons.touch_app_rounded, size: 12, color: const Color(0xFF2563EB)),
+                        const SizedBox(width: 4),
+                        Text(
+                          isMasterAdmin ? 'Reassign' : 'Request Option',
+                          style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF2563EB)),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // 1. Registered Date
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.calendar_today_rounded, size: 11, color: Color(0xFF64748B)),
+                  const SizedBox(width: 4),
+                  Text(
+                    'REGISTERED',
+                    style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w700, color: const Color(0xFF64748B), letterSpacing: 0.5),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 3),
+              Text(
+                comp.registeredFormatted,
+                style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFF1E293B)),
+              ),
+            ],
+          ),
+
+          const SizedBox(width: 14),
+          Container(width: 1, height: 28, color: const Color(0xFFE2E8F0)),
+          const SizedBox(width: 14),
+
+          // 2. Plan Expiry Date & Countdown
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.timer_outlined, size: 11, color: Color(0xFF64748B)),
+                  const SizedBox(width: 4),
+                  Text(
+                    'PLAN EXPIRY',
+                    style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w700, color: const Color(0xFF64748B), letterSpacing: 0.5),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 3),
+              Row(
+                children: [
+                  Text(
+                    comp.expiryFormatted,
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: comp.isPlanOverdue ? const Color(0xFFDC2626) : const Color(0xFF1E293B),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                    decoration: BoxDecoration(
+                      color: statusBg,
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: statusBorder),
+                    ),
+                    child: Text(
+                      daysText,
+                      style: GoogleFonts.inter(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w800,
+                        color: statusColor,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+
+          const SizedBox(width: 14),
+          Container(width: 1, height: 28, color: const Color(0xFFE2E8F0)),
+          const SizedBox(width: 14),
+
+          // 3. Super Admin & Request Option
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.shield_outlined, size: 11, color: Color(0xFF4338CA)),
+                  const SizedBox(width: 4),
+                  Text(
+                    'SUPER ADMIN',
+                    style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w700, color: const Color(0xFF4338CA), letterSpacing: 0.5),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 2),
+              InkWell(
+                onTap: () => _showSuperAdminRequestDialog(comp),
+                borderRadius: BorderRadius.circular(6),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 1.5),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        saName,
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFF1E293B),
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEFF6FF),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: const Color(0xFFBFDBFE)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              isMasterAdmin ? Icons.swap_horiz_rounded : Icons.touch_app_rounded,
+                              size: 10,
+                              color: const Color(0xFF2563EB),
+                            ),
+                            const SizedBox(width: 3),
+                            Text(
+                              isMasterAdmin ? 'Reassign' : 'Request',
+                              style: GoogleFonts.inter(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFF1D4ED8),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final compProvider = context.watch<CompanyProvider>();
@@ -1487,7 +2031,9 @@ Login URL: https://app.stepzcrm.com
                                             ),
                                           ),
                                           if (!isMobile) ...[
-                                            const SizedBox(width: 12),
+                                            const SizedBox(width: 16),
+                                            _buildCenterLifecycleBlock(comp, isMasterAdmin),
+                                            const SizedBox(width: 16),
                                             Wrap(
                                               spacing: 8,
                                               crossAxisAlignment: WrapCrossAlignment.center,
@@ -1564,7 +2110,8 @@ Login URL: https://app.stepzcrm.com
                                         ],
                                       ),
                                       if (isMobile) ...[
-                                        const SizedBox(height: 12),
+                                        _buildCenterLifecycleBlock(comp, isMasterAdmin, isMobile: true),
+                                        const SizedBox(height: 6),
                                         const Divider(color: Color(0xFFE2E8F0), height: 1),
                                         const SizedBox(height: 10),
                                         Wrap(

@@ -103,6 +103,17 @@ class CompanyModel {
     }
   }
 
+  String get registeredFormatted {
+    if (createdAt.isEmpty) return 'Recent';
+    try {
+      final dt = DateTime.parse(createdAt);
+      final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      return '${dt.day.toString().padLeft(2, '0')} ${months[dt.month - 1]} ${dt.year}';
+    } catch (_) {
+      return createdAt.length >= 10 ? createdAt.substring(0, 10) : createdAt;
+    }
+  }
+
   bool hasMenuPermission(String menuKey) => allowedMenus.contains(menuKey);
 
   factory CompanyModel.fromJson(Map<String, dynamic> json) {

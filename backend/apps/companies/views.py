@@ -784,3 +784,48 @@ class ReassignTenantsView(views.APIView):
             "reassigned_count": count,
             "message": f"Successfully reassigned {count} company tenants to {to_sa.full_name} ({to_sa.email})."
         })
+
+
+class CompanySuperAdminRequestView(views.APIView):
+    permission_classes = [IsSuperAdmin]
+
+    def post(self, request, pk):
+        company = Company.objects.filter(id=pk).first()
+        if not company:
+            return Response({"error": "Company not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        request_type = request.data.get('request_type', 'SUPPORT')
+        notes = request.data.get('notes', '').strip()
+        target_super_admin_id = request.data.get('target_super_admin_id')
+        user = request.user
+
+        # If master admin is performing reassignment directly
+        if user.is_master_admin and request_type == 'REASSIGNMENT' and target_super_admin_id:
+            target_sa = User.objects.filter(id=target_super_admin_id, role__in=['SUPER_ADMIN', 'MASTER_ADMIN']).first()
+            if target_sa:
+                company.assigned_super_admin = target_sa
+                company.created_by = target_sa
+                company.save(update_fields=['assigned_super_admin', 'created_by'])
+                return Response({
+                    "message": f"Tenant '{company.name}' successfully reassigned to {target_sa.full_name}.",
+                    "company": CompanySerializer(company).data
+                })
+
+        # Notify master admins
+        master_admins = User.objects.filter(role='MASTER_ADMIN')
+        from apps.notifications.models import Notification
+        for ma in master_admins:
+            Notification.objects.create(
+                user=ma,
+                company=company,
+                title=f"Tenant Request: {company.name} ({request_type})",
+                message=f"Super Admin {user.full_name} submitted a {request_type} request for {company.name}: {notes or 'No additional notes'}",
+                notification_type='SYSTEM',
+                entity_type='company',
+                entity_id=str(company.id)
+            )
+
+        return Response({
+            "message": f"Your {request_type.lower().replace('_', ' ')} request for '{company.name}' has been submitted to Master Admin.",
+            "company": CompanySerializer(company).data
+        })
