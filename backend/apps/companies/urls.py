@@ -14,12 +14,14 @@ from apps.companies.views import (
     CompanyRulePresetLoadView,
     SuperAdminManagementView,
     SuperAdminToggleStatusView,
+    SuperAdminResetPasswordView,
     ReassignTenantsView,
 )
 
 urlpatterns = [
     path('super-admins/', SuperAdminManagementView.as_view(), name='super_admin_management'),
     path('super-admins/<uuid:pk>/toggle-status/', SuperAdminToggleStatusView.as_view(), name='super_admin_toggle_status'),
+    path('super-admins/<uuid:pk>/reset-password/', SuperAdminResetPasswordView.as_view(), name='super_admin_reset_password'),
     path('super-admins/reassign-tenants/', ReassignTenantsView.as_view(), name='reassign_tenants'),
     path('plans/', PlanListCreateView.as_view(), name='plan_list_create'),
     path('plans/<int:pk>/', PlanDetailView.as_view(), name='plan_detail'),

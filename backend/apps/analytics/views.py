@@ -20,10 +20,24 @@ class AdminDashboardMetricsView(views.APIView):
         if not company and not request.user.is_super_admin:
             return Response({})
 
-        lead_qs = Lead.objects.all() if request.user.is_super_admin else Lead.objects.filter(company=company)
-        call_qs = CallAttempt.objects.all() if request.user.is_super_admin else CallAttempt.objects.filter(company=company)
-        cb_qs = Callback.objects.all() if request.user.is_super_admin else Callback.objects.filter(company=company)
-        emp_qs = User.objects.filter(role__in=['EMPLOYEE', 'MANAGER'], is_active=True) if request.user.is_super_admin else User.objects.filter(company=company, role__in=['EMPLOYEE', 'MANAGER'], is_active=True)
+        if request.user.is_master_admin:
+            comp_qs = Company.objects.all()
+            lead_qs = Lead.objects.all()
+            call_qs = CallAttempt.objects.all()
+            cb_qs = Callback.objects.all()
+            emp_qs = User.objects.filter(role__in=['EMPLOYEE', 'MANAGER'], is_active=True)
+        elif request.user.role == 'SUPER_ADMIN':
+            comp_qs = Company.objects.filter(Q(created_by=request.user) | Q(assigned_super_admin=request.user))
+            lead_qs = Lead.objects.filter(company__in=comp_qs)
+            call_qs = CallAttempt.objects.filter(company__in=comp_qs)
+            cb_qs = Callback.objects.filter(company__in=comp_qs)
+            emp_qs = User.objects.filter(company__in=comp_qs, role__in=['EMPLOYEE', 'MANAGER'], is_active=True)
+        else:
+            comp_qs = Company.objects.filter(id=company.id) if company else Company.objects.none()
+            lead_qs = Lead.objects.filter(company=company)
+            call_qs = CallAttempt.objects.filter(company=company)
+            cb_qs = Callback.objects.filter(company=company)
+            emp_qs = User.objects.filter(company=company, role__in=['EMPLOYEE', 'MANAGER'], is_active=True)
 
         now = timezone.now()
         today = now.date()
@@ -41,12 +55,42 @@ class AdminDashboardMetricsView(views.APIView):
         completed_callbacks = cb_qs.filter(status='COMPLETED').count()
         overdue_callbacks = cb_qs.filter(status='OVERDUE').count()
 
-        # Platform-level Company metrics
-        total_companies = Company.objects.count()
-        active_companies = Company.objects.filter(status='ACTIVE').count()
-        suspended_companies = Company.objects.filter(status='SUSPENDED').count()
-        total_employees = User.objects.filter(role__in=['EMPLOYEE', 'MANAGER', 'COMPANY_ADMIN']).count()
-        recent_companies = CompanySerializer(Company.objects.all().order_by('-created_at')[:5], many=True).data
+        # Company metrics scoped to viewer
+        total_companies = comp_qs.count()
+        active_companies = comp_qs.filter(status='ACTIVE').count()
+        suspended_companies = comp_qs.filter(status='SUSPENDED').count()
+        total_employees = User.objects.filter(company__in=comp_qs, role__in=['EMPLOYEE', 'MANAGER', 'COMPANY_ADMIN']).count()
+        recent_companies = CompanySerializer(comp_qs.order_by('-created_at')[:5], many=True).data
+
+        # 1b. Master Admin Super Admins Breakdown (how many tenants added/purchased per super admin)
+        super_admins_breakdown = []
+        if request.user.is_master_admin:
+            for sa in User.objects.filter(role__in=['SUPER_ADMIN', 'MASTER_ADMIN']).order_by('-created_at'):
+                sa_companies = sa.onboarded_companies.all()
+                super_admins_breakdown.append({
+                    'id': str(sa.id),
+                    'full_name': sa.full_name,
+                    'email': sa.email,
+                    'phone': sa.phone,
+                    'role': sa.role,
+                    'is_active': sa.is_active,
+                    'is_master_admin': sa.is_master_admin,
+                    'tenants_count': sa_companies.count(),
+                    'active_tenants': sa_companies.filter(status='ACTIVE').count(),
+                    'total_staff': User.objects.filter(company__in=sa_companies).count(),
+                    'companies': [
+                        {
+                            'id': str(c.id),
+                            'name': c.name,
+                            'subdomain': c.subdomain,
+                            'status': c.status,
+                            'plan_name': c.plan.name if c.plan else 'Starter Lite',
+                            'plan_price': float(c.plan.price_monthly) if c.plan else 0.0,
+                            'created_at': c.created_at.isoformat() if c.created_at else None,
+                        }
+                        for c in sa_companies.select_related('plan').order_by('-created_at')
+                    ]
+                })
 
         # 2. Call Outcomes Distribution
         outcome_counts = list(
@@ -122,6 +166,7 @@ class AdminDashboardMetricsView(views.APIView):
             'activity_timeline': activity_timeline,
             'employee_performance': employee_performance,
             'recent_companies': recent_companies,
+            'super_admins_breakdown': super_admins_breakdown,
             'onboarding_rate': 75,
         })
 

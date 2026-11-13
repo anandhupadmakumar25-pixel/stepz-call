@@ -152,6 +152,18 @@ class CompanyProvider extends ChangeNotifier {
     }
   }
 
+  Future<Map<String, dynamic>?> resetSuperAdminPassword(String superAdminId, {String? newPassword}) async {
+    try {
+      final res = await ApiClient.post('/companies/super-admins/$superAdminId/reset-password/', {
+        if (newPassword != null && newPassword.isNotEmpty) 'password': newPassword,
+      });
+      return res is Map<String, dynamic> ? res : {};
+    } catch (e) {
+      _errorMessage = e.toString();
+      return null;
+    }
+  }
+
   Future<void> fetchPlans() async {
     try {
       final res = await ApiClient.get('/companies/plans/');

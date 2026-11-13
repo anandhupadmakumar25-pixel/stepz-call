@@ -23,6 +23,7 @@ import '../attendance/attendance_screen.dart';
 import '../companies/company_directory_screen.dart';
 import '../admin/plan_management_screen.dart';
 import '../admin/platform_billing_screen.dart';
+import '../admin/master_super_admin_screen.dart';
 import '../billing/invoice_list_screen.dart';
 import '../auth/login_screen.dart';
 import '../notifications/notification_drawer.dart';
@@ -123,58 +124,95 @@ class _MainLayoutState extends State<MainLayout> {
     final navItems = <_NavItem>[];
 
     if (isSuperAdmin) {
-      // ==========================================
-      // SUPER ADMIN PLATFORM SUITE
-      // Only manages Companies, Plans, Billing, Permissions & Platform Control
-      // ==========================================
-      navItems.addAll([
-        _NavItem(
-          section: 'PLATFORM CONTROL',
-          title: 'Platform Hub',
-          icon: Icons.dashboard_outlined,
-          activeIcon: Icons.dashboard_rounded,
-          routeKey: 'dashboard',
-          screen: const AdminDashboardScreen(),
-        ),
-        _NavItem(
-          section: 'PLATFORM CONTROL',
-          title: 'Companies (Tenants)',
-          icon: Icons.business_outlined,
-          activeIcon: Icons.business_rounded,
-          badge: 'Tenants',
-          badgeColor: AppColors.goldLuxury,
-          routeKey: 'companies',
-          screen: const CompanyDirectoryScreen(),
-        ),
-        _NavItem(
-          section: 'SUBSCRIPTION & BILLING',
-          title: 'Subscription Plans',
-          icon: Icons.workspace_premium_outlined,
-          activeIcon: Icons.workspace_premium_rounded,
-          badge: 'Pricing',
-          badgeColor: const Color(0xFF10B981),
-          routeKey: 'plans',
-          screen: const PlanManagementScreen(),
-        ),
-        _NavItem(
-          section: 'SUBSCRIPTION & BILLING',
-          title: 'Platform Billing',
-          icon: Icons.monetization_on_outlined,
-          activeIcon: Icons.monetization_on_rounded,
-          badge: 'MRR',
-          badgeColor: AppColors.goldLuxury,
-          routeKey: 'billing',
-          screen: const PlatformBillingScreen(),
-        ),
-        _NavItem(
-          section: 'GOVERNANCE',
-          title: 'Audit Trails',
-          icon: Icons.manage_history_rounded,
-          activeIcon: Icons.manage_history_rounded,
-          routeKey: 'audit',
-          screen: const AdminDashboardScreen(),
-        ),
-      ]);
+      if (user.isRootMasterAdmin) {
+        // ==========================================
+        // MASTER ADMIN (ROOT COMMAND & GOVERNANCE)
+        // Manages all Super Admins, Tenant Attribution & Platform Infrastructure
+        // ==========================================
+        navItems.addAll([
+          _NavItem(
+            section: 'MASTER COMMAND',
+            title: 'Master Command',
+            icon: Icons.shield_outlined,
+            activeIcon: Icons.shield_rounded,
+            badge: 'Root',
+            badgeColor: const Color(0xFF6366F1),
+            routeKey: 'dashboard',
+            screen: const MasterSuperAdminScreen(),
+          ),
+          _NavItem(
+            section: 'PLATFORM CONTROL',
+            title: 'All Companies (Tenants)',
+            icon: Icons.business_outlined,
+            activeIcon: Icons.business_rounded,
+            badge: 'All Tenants',
+            badgeColor: AppColors.goldLuxury,
+            routeKey: 'companies',
+            screen: const CompanyDirectoryScreen(),
+          ),
+          _NavItem(
+            section: 'PLATFORM CONTROL',
+            title: 'Platform Analytics',
+            icon: Icons.analytics_outlined,
+            activeIcon: Icons.analytics_rounded,
+            routeKey: 'platform_hub',
+            screen: const AdminDashboardScreen(),
+          ),
+          _NavItem(
+            section: 'SUBSCRIPTION & BILLING',
+            title: 'Subscription Plans',
+            icon: Icons.workspace_premium_outlined,
+            activeIcon: Icons.workspace_premium_rounded,
+            badge: 'Pricing',
+            badgeColor: const Color(0xFF10B981),
+            routeKey: 'plans',
+            screen: const PlanManagementScreen(),
+          ),
+          _NavItem(
+            section: 'SUBSCRIPTION & BILLING',
+            title: 'Platform Billing',
+            icon: Icons.monetization_on_outlined,
+            activeIcon: Icons.monetization_on_rounded,
+            badge: 'MRR',
+            badgeColor: AppColors.goldLuxury,
+            routeKey: 'billing',
+            screen: const PlatformBillingScreen(),
+          ),
+        ]);
+      } else {
+        // ==========================================
+        // SCOPED SUPER ADMIN (PARTNER / ONBOARDER)
+        // Strictly manages only their own onboarded tenants!
+        // ==========================================
+        navItems.addAll([
+          _NavItem(
+            section: 'PARTNER WORKSPACE',
+            title: 'Portfolio Dashboard',
+            icon: Icons.dashboard_outlined,
+            activeIcon: Icons.dashboard_rounded,
+            routeKey: 'dashboard',
+            screen: const AdminDashboardScreen(),
+          ),
+          _NavItem(
+            section: 'PARTNER WORKSPACE',
+            title: 'My Tenants',
+            icon: Icons.business_outlined,
+            activeIcon: Icons.business_rounded,
+            badge: 'My Portfolio',
+            badgeColor: const Color(0xFF0284C7),
+            routeKey: 'companies',
+            screen: const CompanyDirectoryScreen(),
+          ),
+          _NavItem(
+            section: 'SUBSCRIPTION',
+            title: 'Subscription Plans',
+            icon: Icons.workspace_premium_outlined,
+            activeIcon: Icons.workspace_premium_rounded,
+            routeKey: 'plans',
+            screen: const PlanManagementScreen(),
+          ),
+        ]);
+      }
     } else {
       // ==========================================
       // TENANT COMPANY SUITE (COMPANY ADMIN & TELECALLERS)

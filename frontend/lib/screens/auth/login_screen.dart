@@ -479,10 +479,11 @@ class _LoginScreenState extends State<LoginScreen> {
             runSpacing: 8,
             alignment: WrapAlignment.center,
             children: [
+              _buildDemoChip('Master Admin', 'masteradmin@platform.com', 'masteradmin123', const Color(0xFF4338CA)),
+              _buildDemoChip('Super Admin (John)', 'superadmin@platform.com', 'superadmin123', const Color(0xFF0284C7)),
+              _buildDemoChip('Super Admin (Sarah)', 'partner.sarah@platform.com', 'superadmin123', const Color(0xFF0D9488)),
               _buildDemoChip('Company Admin', 'admin@company.com', 'admin123', const Color(0xFF047857)),
-              _buildDemoChip('Super Admin', 'superadmin@platform.com', 'superadmin123', const Color(0xFF064E3B)),
               _buildDemoChip('Telecaller', 'telecaller@company.com', 'telecaller123', const Color(0xFFB45309)),
-              _buildDemoChip('Apex Admin', 'admin@apex.com', 'Admin123!', const Color(0xFF0F766E)),
             ],
           ),
         ],

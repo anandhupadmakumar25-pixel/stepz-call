@@ -558,6 +558,22 @@ class SuperAdminManagementView(views.APIView):
             active_tenants = onboarded_qs.filter(status='ACTIVE').count()
             total_users = User.objects.filter(company__in=onboarded_qs).count()
 
+            companies_data = [
+                {
+                    "id": str(c.id),
+                    "name": c.name,
+                    "subdomain": c.subdomain,
+                    "logo": c.logo,
+                    "status": c.status,
+                    "contact_email": c.contact_email,
+                    "contact_phone": c.contact_phone,
+                    "plan_name": c.plan.name if c.plan else 'Starter Lite',
+                    "user_count": c.users.count(),
+                    "created_at": c.created_at,
+                }
+                for c in onboarded_qs.select_related('plan').order_by('-created_at')
+            ]
+
             data.append({
                 "id": str(sa.id),
                 "email": sa.email,
@@ -571,6 +587,7 @@ class SuperAdminManagementView(views.APIView):
                 "total_tenants": total_tenants,
                 "active_tenants": active_tenants,
                 "total_users": total_users,
+                "companies": companies_data,
                 "created_at": sa.created_at,
             })
         return Response({
@@ -634,6 +651,30 @@ class SuperAdminToggleStatusView(views.APIView):
             "id": str(sa.id),
             "is_active": sa.is_active,
             "message": f"Super Admin {'activated' if sa.is_active else 'deactivated'} successfully."
+        })
+
+
+class SuperAdminResetPasswordView(views.APIView):
+    permission_classes = [IsMasterAdmin]
+
+    def post(self, request, pk):
+        sa = User.objects.filter(id=pk, role__in=['SUPER_ADMIN', 'MASTER_ADMIN']).first()
+        if not sa:
+            return Response({"error": "Super Admin not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        new_password = request.data.get('password', '').strip()
+        if not new_password:
+            new_password = generate_temporary_password(10)
+
+        sa.set_password(new_password)
+        sa.save(update_fields=['password'])
+
+        return Response({
+            "id": str(sa.id),
+            "email": sa.email,
+            "full_name": sa.full_name,
+            "temp_password": new_password,
+            "message": f"Password for {sa.full_name} ({sa.email}) reset successfully."
         })
 
 

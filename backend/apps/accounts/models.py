@@ -84,7 +84,7 @@ class User(AbstractBaseUser, PermissionsMixin, TimeStampedModel):
 
     @property
     def is_master_admin(self):
-        return self.role == 'MASTER_ADMIN' or (self.role == 'SUPER_ADMIN' and self.is_superuser)
+        return self.role == 'MASTER_ADMIN'
 
     @property
     def is_super_admin(self):
