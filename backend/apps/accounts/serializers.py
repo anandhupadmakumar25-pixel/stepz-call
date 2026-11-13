@@ -103,6 +103,9 @@ class UserProfileSerializer(serializers.ModelSerializer):
     company_allowed_menus = serializers.SerializerMethodField()
     can_manage_branches = serializers.SerializerMethodField()
     company_plan_name = serializers.SerializerMethodField()
+    company_plan_expires_at = serializers.SerializerMethodField()
+    company_days_until_expiry = serializers.SerializerMethodField()
+    company_is_plan_expired = serializers.SerializerMethodField()
     is_master_admin = serializers.BooleanField(read_only=True)
 
     class Meta:
@@ -113,6 +116,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
             'company_logo', 'company_phone', 'company_email', 'company_address', 'company_gstin', 'company_website',
             'branch', 'branch_name',
             'company_allowed_menus', 'can_manage_branches', 'company_plan_name',
+            'company_plan_expires_at', 'company_days_until_expiry', 'company_is_plan_expired',
             'is_active', 'created_at'
         ]
         read_only_fields = ['id', 'email', 'role', 'company', 'company_name', 'created_at']
@@ -125,6 +129,15 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
     def get_company_plan_name(self, obj):
         return obj.company.plan.name if (obj.company and obj.company.plan) else 'Default'
+
+    def get_company_plan_expires_at(self, obj):
+        return obj.company.plan_expires_at.isoformat() if (obj.company and obj.company.plan_expires_at) else None
+
+    def get_company_days_until_expiry(self, obj):
+        return obj.company.days_until_expiry() if obj.company else None
+
+    def get_company_is_plan_expired(self, obj):
+        return obj.company.is_plan_expired() if obj.company else False
 
 class TeamSerializer(serializers.ModelSerializer):
     manager_name = serializers.CharField(source='manager.full_name', read_only=True)

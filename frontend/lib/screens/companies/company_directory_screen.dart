@@ -18,9 +18,9 @@ import '../../providers/auth_provider.dart';
 import '../admin/super_admin_management_dialog.dart';
 import '../../core/widgets/company_logo_view.dart';
 import 'renew_plan_dialog.dart';
-import '../../models/company_renewal_request_model.dart';
-import '../../models/company_subscription_history_model.dart';
 import 'renewal_request_dialog.dart';
+import '../../models/company_subscription_history_model.dart';
+import '../../models/company_renewal_request_model.dart';
 
 class CompanyDirectoryScreen extends StatefulWidget {
   const CompanyDirectoryScreen({super.key});
@@ -41,10 +41,6 @@ class _CompanyDirectoryScreenState extends State<CompanyDirectoryScreen> {
     'call_history': 'Call Logs & History',
     'analytics': 'Analytics & Performance Reports',
   };
-
-  int _selectedTabIndex = 0; // 0 = Tenants, 1 = Renewal Requests, 2 = Renewal History
-  String _selectedRequestStatusFilter = 'ALL'; // ALL, PENDING, APPROVED, REJECTED
-  String _selectedHistoryCycleFilter = 'ALL'; // ALL, YEARLY, MONTHLY, DAYS, CUSTOM_DATE
 
   @override
   void initState() {
@@ -558,7 +554,9 @@ Login URL: https://app.stepzcrm.com
                         ),
                         child: DropdownButtonHideUnderline(
                           child: DropdownButton<String>(
-                            value: selectedPlanId,
+                            value: compProv.plans.any((p) => p.code == selectedPlanId)
+                                ? selectedPlanId
+                                : (compProv.plans.isNotEmpty ? compProv.plans.first.code : null),
                             isExpanded: true,
                             dropdownColor: Colors.white,
                             style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF0F172A), fontWeight: FontWeight.w600),
@@ -813,7 +811,9 @@ Login URL: https://app.stepzcrm.com
                         ),
                         child: DropdownButtonHideUnderline(
                           child: DropdownButton<String>(
-                            value: selectedPlanId,
+                            value: compProv.plans.any((p) => p.code == selectedPlanId)
+                                ? selectedPlanId
+                                : (compProv.plans.isNotEmpty ? compProv.plans.first.code : null),
                             isExpanded: true,
                             dropdownColor: Colors.white,
                             style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF0F172A), fontWeight: FontWeight.w600),
@@ -1272,7 +1272,9 @@ Login URL: https://app.stepzcrm.com
                           ),
                           child: DropdownButtonHideUnderline(
                             child: DropdownButton<String>(
-                              value: selectedTargetAdminId,
+                              value: superAdmins.any((sa) => sa['id']?.toString() == selectedTargetAdminId)
+                                  ? selectedTargetAdminId
+                                  : null,
                               isExpanded: true,
                               hint: const Text('Select Super Admin'),
                               items: superAdmins.map((sa) {
@@ -1430,6 +1432,592 @@ Login URL: https://app.stepzcrm.com
             ),
           );
         },
+      ),
+    );
+  }
+
+  void _showRenewalRequestsManagerDialog() {
+    context.read<CompanyProvider>().fetchRenewalRequests();
+    context.read<CompanyProvider>().fetchSubscriptionHistory();
+
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.70),
+      builder: (ctx) {
+        final isMobile = ResponsiveLayout.isMobile(ctx);
+        int selectedTab = 0; // 0: Pending, 1: All Requests, 2: History
+
+        return StatefulBuilder(
+          builder: (dialogCtx, setDialogState) {
+            final compProv = dialogCtx.watch<CompanyProvider>();
+            final pendingRequests = compProv.renewalRequests.where((r) => r.status == 'PENDING').toList();
+            final allRequests = compProv.renewalRequests;
+            final history = compProv.subscriptionHistory;
+            final metrics = compProv.historyMetrics;
+
+            return Dialog(
+              backgroundColor: Colors.transparent,
+              insetPadding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 24, vertical: isMobile ? 14 : 24),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: 880, maxHeight: MediaQuery.of(dialogCtx).size.height * 0.88),
+                child: GlassCard(
+                  blur: 24,
+                  opacity: 0.98,
+                  borderRadius: BorderRadius.circular(20),
+                  padding: EdgeInsets.all(isMobile ? 16 : 24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Header
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFEF3C7),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: const Color(0xFFFDE68A)),
+                            ),
+                            child: const Icon(Icons.pending_actions_rounded, color: Color(0xFFD97706), size: 22),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Flexible(
+                                      child: Text(
+                                        'Tenant Renewal Requests & Billing',
+                                        style: GoogleFonts.inter(fontSize: isMobile ? 16 : 19, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    if (pendingRequests.isNotEmpty) ...[
+                                      const SizedBox(width: 8),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFDC2626),
+                                          borderRadius: BorderRadius.circular(10),
+                                        ),
+                                        child: Text(
+                                          '${pendingRequests.length} Pending',
+                                          style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w800, color: Colors.white),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Review customer renewal requests, approve plan extensions, and track payment history',
+                                  style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () => Navigator.pop(dialogCtx),
+                            icon: const Icon(Icons.close_rounded, color: Color(0xFF64748B)),
+                            splashRadius: 20,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Tabs
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            _buildRequestTabItem(
+                              label: 'Pending',
+                              count: pendingRequests.length,
+                              isSelected: selectedTab == 0,
+                              onTap: () => setDialogState(() => selectedTab = 0),
+                              badgeColor: const Color(0xFFDC2626),
+                            ),
+                            const SizedBox(width: 8),
+                            _buildRequestTabItem(
+                              label: 'All Requests',
+                              count: allRequests.length,
+                              isSelected: selectedTab == 1,
+                              onTap: () => setDialogState(() => selectedTab = 1),
+                              badgeColor: const Color(0xFF64748B),
+                            ),
+                            const SizedBox(width: 8),
+                            _buildRequestTabItem(
+                              label: 'Payment & Plan History',
+                              count: history.length,
+                              isSelected: selectedTab == 2,
+                              onTap: () => setDialogState(() => selectedTab = 2),
+                              badgeColor: const Color(0xFF059669),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      const Divider(color: Color(0xFFE2E8F0), height: 1),
+                      const SizedBox(height: 14),
+
+                      // Tab Content
+                      Expanded(
+                        child: selectedTab == 2
+                            ? _buildHistoryTabView(history, metrics, isMobile)
+                            : _buildRequestsTabView(
+                                selectedTab == 0 ? pendingRequests : allRequests,
+                                isPendingOnly: selectedTab == 0,
+                                isMobile: isMobile,
+                                onActionComplete: () {
+                                  compProv.fetchRenewalRequests();
+                                  compProv.fetchCompanies();
+                                  compProv.fetchSubscriptionHistory();
+                                },
+                              ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildRequestTabItem({
+    required String label,
+    required int count,
+    required bool isSelected,
+    required VoidCallback onTap,
+    required Color badgeColor,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFFEEF2FF) : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isSelected ? const Color(0xFF6366F1) : const Color(0xFFCBD5E1),
+            width: isSelected ? 1.5 : 1.0,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: GoogleFonts.inter(
+                fontSize: 12.5,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+                color: isSelected ? const Color(0xFF4338CA) : const Color(0xFF475569),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+              decoration: BoxDecoration(
+                color: isSelected ? badgeColor : const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                '$count',
+                style: GoogleFonts.inter(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w800,
+                  color: isSelected ? Colors.white : const Color(0xFF64748B),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRequestsTabView(
+    List<CompanyRenewalRequestModel> requests, {
+    required bool isPendingOnly,
+    required bool isMobile,
+    required VoidCallback onActionComplete,
+  }) {
+    if (requests.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.inbox_rounded, size: 48, color: const Color(0xFFCBD5E1)),
+            const SizedBox(height: 12),
+            Text(
+              isPendingOnly ? 'No pending renewal requests' : 'No renewal requests submitted yet',
+              style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600, color: const Color(0xFF64748B)),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Customer requests from expired or active companies will appear here.',
+              style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8)),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return ListView.separated(
+      itemCount: requests.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      itemBuilder: (ctx, i) {
+        final req = requests[i];
+        final isPending = req.status == 'PENDING';
+        final isApproved = req.status == 'APPROVED';
+
+        Color statusColor;
+        Color statusBg;
+        if (isApproved) {
+          statusColor = const Color(0xFF047857);
+          statusBg = const Color(0xFFD1FAE5);
+        } else if (isPending) {
+          statusColor = const Color(0xFFD97706);
+          statusBg = const Color(0xFFFEF3C7);
+        } else {
+          statusColor = const Color(0xFFDC2626);
+          statusBg = const Color(0xFFFEE2E2);
+        }
+
+        return Container(
+          padding: EdgeInsets.all(isMobile ? 12 : 16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: isPending ? const Color(0xFFFDE68A) : const Color(0xFFE2E8F0)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.02),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                req.companyName,
+                                style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                              decoration: BoxDecoration(color: statusBg, borderRadius: BorderRadius.circular(6)),
+                              child: Text(
+                                req.status,
+                                style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w800, color: statusColor),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          'Requested: ${req.billingCycleDisplay} • Plan: ${req.planName.isNotEmpty ? req.planName : 'Current'}',
+                          style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF4338CA)),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Text(
+                    req.formattedCreatedAt,
+                    style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF94A3B8)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+
+              // Details row
+              Wrap(
+                spacing: 16,
+                runSpacing: 6,
+                children: [
+                  if (req.currentExpiry != null)
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.event_outlined, size: 14, color: Color(0xFF64748B)),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Current Expiry: ${req.currentExpiry!.length >= 10 ? req.currentExpiry!.substring(0, 10) : req.currentExpiry}',
+                          style: GoogleFonts.inter(
+                            fontSize: 11.5,
+                            color: req.isCompanyExpired ? const Color(0xFFDC2626) : const Color(0xFF475569),
+                            fontWeight: req.isCompanyExpired ? FontWeight.w700 : FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  if (req.paymentReference.isNotEmpty)
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.receipt_long_rounded, size: 14, color: Color(0xFF047857)),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Ref: ${req.paymentReference}',
+                          style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF047857), fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
+                ],
+              ),
+              if (req.notes.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFF1F5F9)),
+                  ),
+                  child: Text(
+                    'Notes: "${req.notes}"',
+                    style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF475569), fontStyle: FontStyle.italic),
+                  ),
+                ),
+              ],
+              if (isPending) ...[
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Color(0xFFFECDD3)),
+                        foregroundColor: const Color(0xFFDC2626),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      onPressed: () => _confirmRejectRenewal(req, onActionComplete),
+                      child: Text('Reject', style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w600)),
+                    ),
+                    const SizedBox(width: 10),
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF047857),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        elevation: 0,
+                      ),
+                      icon: const Icon(Icons.verified_rounded, size: 15),
+                      label: Text('Approve & Extend Plan', style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w700)),
+                      onPressed: () {
+                        ApproveRenewalRequestDialog.show(context, request: req).then((ok) {
+                          if (ok == true) onActionComplete();
+                        });
+                      },
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _confirmRejectRenewal(CompanyRenewalRequestModel req, VoidCallback onActionComplete) {
+    final notesCtrl = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (dlgCtx) => AlertDialog(
+        title: Text('Reject Renewal Request', style: GoogleFonts.inter(fontWeight: FontWeight.w700)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Provide optional rejection reason for ${req.companyName}:', style: GoogleFonts.inter(fontSize: 13)),
+            const SizedBox(height: 10),
+            TextField(
+              controller: notesCtrl,
+              maxLines: 2,
+              decoration: const InputDecoration(
+                hintText: 'e.g. Payment not verified, invalid UTR...',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dlgCtx), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFDC2626), foregroundColor: Colors.white),
+            onPressed: () async {
+              Navigator.pop(dlgCtx);
+              await context.read<CompanyProvider>().rejectRenewalRequest(req.id, adminNotes: notesCtrl.text.trim());
+              onActionComplete();
+            },
+            child: const Text('Confirm Reject'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHistoryTabView(
+    List<CompanySubscriptionHistoryModel> history,
+    SubscriptionHistoryMetrics metrics,
+    bool isMobile,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // KPI row: Breakdown of how many paid Yearly, Monthly, Days, Custom Date
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            _buildHistoryKpiCard('Total Renewals', '${metrics.totalRenewals}', const Color(0xFF4F46E5), const Color(0xFFEEF2FF)),
+            _buildHistoryKpiCard('Yearly (Annual)', '${metrics.yearlyCount}', const Color(0xFF047857), const Color(0xFFD1FAE5)),
+            _buildHistoryKpiCard('Monthly', '${metrics.monthlyCount}', const Color(0xFF0284C7), const Color(0xFFE0F2FE)),
+            _buildHistoryKpiCard('Days / Custom', '${metrics.daysCount + metrics.customDateCount}', const Color(0xFFD97706), const Color(0xFFFEF3C7)),
+            _buildHistoryKpiCard('Total Paid', '₹${metrics.totalRevenue.toStringAsFixed(0)}', const Color(0xFF0F766E), const Color(0xFFCCFBF1)),
+          ],
+        ),
+        const SizedBox(height: 14),
+
+        // History list
+        Expanded(
+          child: history.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.history_toggle_off_rounded, size: 48, color: const Color(0xFFCBD5E1)),
+                      const SizedBox(height: 10),
+                      Text('No subscription extension history recorded yet.', style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF64748B))),
+                    ],
+                  ),
+                )
+              : ListView.separated(
+                  itemCount: history.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 10),
+                  itemBuilder: (ctx, i) {
+                    final item = history[i];
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 36,
+                            height: 36,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF1F5F9),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Center(
+                              child: Icon(Icons.receipt_rounded, size: 18, color: Color(0xFF475569)),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Flexible(
+                                      child: Text(
+                                        item.companyName,
+                                        style: GoogleFonts.inter(fontSize: 13.5, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFEEF2FF),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        item.billingCycleDisplay,
+                                        style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w700, color: const Color(0xFF4338CA)),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Plan: ${item.planName} (+${item.extensionDays} days) • New Expiry: ${item.formattedNewExpiry}',
+                                  style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B)),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(
+                                '${item.currency} ${item.amountPaid.toStringAsFixed(0)}',
+                                style: GoogleFonts.inter(fontSize: 13.5, fontWeight: FontWeight.w800, color: const Color(0xFF047857)),
+                              ),
+                              Text(
+                                item.formattedCreatedAt,
+                                style: GoogleFonts.inter(fontSize: 10.5, color: const Color(0xFF94A3B8)),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHistoryKpiCard(String title, String value, Color textColor, Color bgColor) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: textColor.withValues(alpha: 0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(title, style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w600, color: textColor.withValues(alpha: 0.9))),
+          const SizedBox(height: 2),
+          Text(value, style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w800, color: textColor)),
+        ],
       ),
     );
   }
@@ -1599,6 +2187,50 @@ Login URL: https://app.stepzcrm.com
                           );
                         },
                       ),
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        padding: EdgeInsets.symmetric(horizontal: isMobile ? 10 : 14, vertical: isMobile ? 8 : 10),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        side: BorderSide(
+                          color: compProvider.pendingRenewalCount > 0 ? const Color(0xFFF59E0B) : const Color(0xFFCBD5E1),
+                          width: compProvider.pendingRenewalCount > 0 ? 1.5 : 1.0,
+                        ),
+                        backgroundColor: compProvider.pendingRenewalCount > 0 ? const Color(0xFFFFFBEB) : Colors.white,
+                      ),
+                      icon: Icon(
+                        Icons.pending_actions_rounded,
+                        size: 16,
+                        color: compProvider.pendingRenewalCount > 0 ? const Color(0xFFD97706) : const Color(0xFF475569),
+                      ),
+                      label: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'Renewal Requests',
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: compProvider.pendingRenewalCount > 0 ? const Color(0xFF92400E) : const Color(0xFF334155),
+                            ),
+                          ),
+                          if (compProvider.pendingRenewalCount > 0) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFDC2626),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                '${compProvider.pendingRenewalCount}',
+                                style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w800, color: Colors.white),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                      onPressed: _showRenewalRequestsManagerDialog,
+                    ),
                     GradientPrimaryButton(
                       icon: Icons.add_rounded,
                       text: 'Create Company',
@@ -1645,937 +2277,263 @@ Login URL: https://app.stepzcrm.com
             ],
             SizedBox(height: isMobile ? 10 : 18),
 
-            // Tab Switcher: Tenants | Renewal Requests | Renewal History
-            _buildTabNavigationBar(compProvider, isMobile),
-            SizedBox(height: isMobile ? 12 : 16),
-
-            // Tab Content Body
+            // Companies List
             Expanded(
-              child: _selectedTabIndex == 0
-                  ? _buildTenantsListView(compProvider, isMasterAdmin, isMobile)
-                  : (_selectedTabIndex == 1
-                      ? _buildRenewalRequestsView(compProvider, isMasterAdmin, isMobile)
-                      : _buildRenewalHistoryView(compProvider, isMasterAdmin, isMobile)),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ── Tab Bar Navigation ─────────────────────────────────────────────────────
-
-  Widget _buildTabNavigationBar(CompanyProvider compProvider, bool isMobile) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          _buildTabItem(
-            index: 0,
-            title: 'Tenants Directory',
-            count: compProvider.companies.length,
-            icon: Icons.domain_rounded,
-          ),
-          const SizedBox(width: 8),
-          _buildTabItem(
-            index: 1,
-            title: 'Renewal Requests',
-            count: compProvider.pendingRenewalCount,
-            icon: Icons.mark_email_unread_rounded,
-            isAlert: compProvider.pendingRenewalCount > 0,
-            badgeLabel: compProvider.pendingRenewalCount > 0 ? '${compProvider.pendingRenewalCount} PENDING' : '0',
-          ),
-          const SizedBox(width: 8),
-          _buildTabItem(
-            index: 2,
-            title: 'Renewal History & Breakdown',
-            count: compProvider.historyMetrics.totalRenewals,
-            icon: Icons.history_edu_rounded,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTabItem({
-    required int index,
-    required String title,
-    required int count,
-    required IconData icon,
-    bool isAlert = false,
-    String? badgeLabel,
-  }) {
-    final isSelected = _selectedTabIndex == index;
-    return InkWell(
-      onTap: () {
-        setState(() => _selectedTabIndex = index);
-        if (index == 1) {
-          context.read<CompanyProvider>().fetchRenewalRequests();
-        } else if (index == 2) {
-          context.read<CompanyProvider>().fetchSubscriptionHistory();
-        }
-      },
-      borderRadius: BorderRadius.circular(12),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? const Color(0xFF0F172A)
-              : Colors.white.withValues(alpha: 0.8),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isSelected ? const Color(0xFF0F172A) : const Color(0xFFE2E8F0),
-            width: 1.2,
-          ),
-          boxShadow: isSelected
-              ? [
-                  BoxShadow(
-                    color: const Color(0xFF0F172A).withValues(alpha: 0.15),
-                    blurRadius: 8,
-                    offset: const Offset(0, 3),
-                  ),
-                ]
-              : null,
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              size: 16,
-              color: isSelected
-                  ? Colors.white
-                  : (isAlert ? const Color(0xFFDC2626) : const Color(0xFF64748B)),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              title,
-              style: GoogleFonts.inter(
-                fontSize: 12.5,
-                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
-                color: isSelected ? Colors.white : const Color(0xFF334155),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-              decoration: BoxDecoration(
-                color: isSelected
-                    ? Colors.white.withValues(alpha: 0.2)
-                    : (isAlert ? const Color(0xFFFEF2F2) : const Color(0xFFF1F5F9)),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: isSelected
-                      ? Colors.white.withValues(alpha: 0.3)
-                      : (isAlert ? const Color(0xFFFCA5A5) : const Color(0xFFE2E8F0)),
-                ),
-              ),
-              child: Text(
-                badgeLabel ?? count.toString(),
-                style: GoogleFonts.inter(
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.w700,
-                  color: isSelected
-                      ? Colors.white
-                      : (isAlert ? const Color(0xFFDC2626) : const Color(0xFF475569)),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ── Tab 0: Tenants List View ───────────────────────────────────────────────
-
-  Widget _buildTenantsListView(CompanyProvider compProvider, bool isMasterAdmin, bool isMobile) {
-    if (compProvider.isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (compProvider.companies.isEmpty) {
-      return Center(
-        child: GlassCard(
-          padding: const EdgeInsets.all(36),
-          opacity: 0.90,
-          child: Text('No tenant companies registered yet.', style: GoogleFonts.inter(color: const Color(0xFF64748B))),
-        ),
-      );
-    }
-
-    return ListView.separated(
-      itemCount: compProvider.companies.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 12),
-      itemBuilder: (ctx, i) {
-        final comp = compProvider.companies[i];
-        return Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: () => Navigator.pushNamed(context, AppRoutes.companyDetail, arguments: comp),
-            borderRadius: BorderRadius.circular(20),
-            child: GlassCard(
-              padding: EdgeInsets.symmetric(horizontal: isMobile ? 14 : 20, vertical: 16),
-              opacity: 0.95,
-              borderColor: const Color(0xFFE2E8F0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      CompanyLogoView(
-                        logo: comp.logo,
-                        companyName: comp.name,
-                        size: 46,
-                        borderRadius: BorderRadius.circular(12),
-                        borderColor: const Color(0xFFCBD5E1),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Flexible(
-                                  child: Text(
-                                    comp.name,
-                                    style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
-                                    overflow: TextOverflow.ellipsis,
+              child: compProvider.isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : compProvider.companies.isEmpty
+                      ? Center(
+                          child: GlassCard(
+                            padding: const EdgeInsets.all(36),
+                            opacity: 0.90,
+                            child: Text('No tenant companies registered yet.', style: GoogleFonts.inter(color: const Color(0xFF64748B))),
+                          ),
+                        )
+                      : ListView.separated(
+                          itemCount: compProvider.companies.length,
+                          separatorBuilder: (_, __) => const SizedBox(height: 12),
+                          itemBuilder: (ctx, i) {
+                            final comp = compProvider.companies[i];
+                            return Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: () => Navigator.pushNamed(context, AppRoutes.companyDetail, arguments: comp),
+                                borderRadius: BorderRadius.circular(20),
+                                child: GlassCard(
+                                  padding: EdgeInsets.symmetric(horizontal: isMobile ? 14 : 20, vertical: 16),
+                                  opacity: 0.95,
+                                  borderColor: const Color(0xFFE2E8F0),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          CompanyLogoView(
+                                            logo: comp.logo,
+                                            companyName: comp.name,
+                                            size: 46,
+                                            borderRadius: BorderRadius.circular(12),
+                                            borderColor: const Color(0xFFCBD5E1),
+                                          ),
+                                          const SizedBox(width: 14),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Row(
+                                                  children: [
+                                                    Flexible(
+                                                      child: Text(
+                                                        comp.name,
+                                                        style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+                                                        overflow: TextOverflow.ellipsis,
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 8),
+                                                    Container(
+                                                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                                      decoration: BoxDecoration(
+                                                        color: const Color(0xFFFEF3C7),
+                                                        borderRadius: BorderRadius.circular(6),
+                                                        border: Border.all(color: const Color(0xFFD4AF37)),
+                                                      ),
+                                                      child: Text(
+                                                        comp.planName,
+                                                        style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, color: const Color(0xFF92400E)),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                                const SizedBox(height: 4),
+                                                Text(
+                                                  '${comp.subdomain != null && comp.subdomain!.isNotEmpty ? "${comp.subdomain}.stepzcrm.com • " : ""}${comp.adminEmail}',
+                                                  style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
+                                                  overflow: TextOverflow.ellipsis,
+                                                  maxLines: 1,
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          if (!isMobile) ...[
+                                            const SizedBox(width: 16),
+                                            _buildCenterLifecycleBlock(comp, isMasterAdmin),
+                                            const SizedBox(width: 16),
+                                            Wrap(
+                                              spacing: 8,
+                                              crossAxisAlignment: WrapCrossAlignment.center,
+                                              children: [
+                                                // View Company Button
+                                                OutlinedButton.icon(
+                                                  onPressed: () => Navigator.pushNamed(context, AppRoutes.companyDetail, arguments: comp),
+                                                  icon: const Icon(Icons.remove_red_eye_outlined, size: 14, color: Color(0xFF0F172A)),
+                                                  label: Text('View Details', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A))),
+                                                  style: OutlinedButton.styleFrom(
+                                                    side: const BorderSide(color: Color(0xFFE2E8F0)),
+                                                    backgroundColor: Colors.white,
+                                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                                  ),
+                                                ),
+                                                // Suspend / Activate Action Button
+                                                OutlinedButton.icon(
+                                                  onPressed: () => _confirmToggleStatus(comp),
+                                                  icon: Icon(
+                                                    comp.isActive ? Icons.pause_circle_outline_rounded : Icons.play_circle_outline_rounded,
+                                                    size: 14,
+                                                    color: comp.isActive ? const Color(0xFFDC2626) : const Color(0xFF047857),
+                                                  ),
+                                                  label: Text(
+                                                    comp.isActive ? 'Suspend' : 'Activate',
+                                                    style: GoogleFonts.inter(
+                                                      fontSize: 11,
+                                                      fontWeight: FontWeight.w700,
+                                                      color: comp.isActive ? const Color(0xFFDC2626) : const Color(0xFF047857),
+                                                    ),
+                                                  ),
+                                                  style: OutlinedButton.styleFrom(
+                                                    side: BorderSide(
+                                                      color: comp.isActive ? const Color(0xFFFECDD3) : const Color(0xFFBBF7D0),
+                                                    ),
+                                                    backgroundColor: comp.isActive ? const Color(0xFFFFF1F2) : const Color(0xFFF0FDF4),
+                                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                                  ),
+                                                ),
+                                                // Permissions Button
+                                                OutlinedButton.icon(
+                                                  onPressed: () => _showPermissionsDialog(comp),
+                                                  icon: const Icon(Icons.tune_rounded, size: 14, color: Color(0xFF2563EB)),
+                                                  label: Text('Permissions', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF1D4ED8))),
+                                                  style: OutlinedButton.styleFrom(
+                                                    side: const BorderSide(color: Color(0xFFBFDBFE)),
+                                                    backgroundColor: const Color(0xFFEFF6FF),
+                                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                                  ),
+                                                ),
+                                                // Renew Plan Button
+                                                OutlinedButton.icon(
+                                                  onPressed: () => _showRenewPlanDialog(comp),
+                                                  icon: const Icon(Icons.bolt_rounded, size: 14, color: Color(0xFF4F46E5)),
+                                                  label: Text('Renew Plan', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF4338CA))),
+                                                  style: OutlinedButton.styleFrom(
+                                                    side: const BorderSide(color: Color(0xFFC7D2FE)),
+                                                    backgroundColor: const Color(0xFFEEF2FF),
+                                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                                  ),
+                                                ),
+                                                IconButton(
+                                                  tooltip: 'Generate New Temporary Password',
+                                                  icon: const Icon(Icons.lock_reset_rounded, size: 20, color: Color(0xFFD4AF37)),
+                                                  onPressed: () => _showResetPasswordDialog(comp),
+                                                ),
+                                                if (isMasterAdmin)
+                                                  IconButton(
+                                                    tooltip: 'Reassign Super Admin',
+                                                    icon: const Icon(Icons.swap_horiz_rounded, size: 20, color: Color(0xFF4338CA)),
+                                                    onPressed: () => _showSuperAdminRequestDialog(comp),
+                                                  ),
+                                              ],
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                      if (isMobile) ...[
+                                        _buildCenterLifecycleBlock(comp, isMasterAdmin, isMobile: true),
+                                        const SizedBox(height: 6),
+                                        const Divider(color: Color(0xFFE2E8F0), height: 1),
+                                        const SizedBox(height: 10),
+                                        Wrap(
+                                          spacing: 8,
+                                          runSpacing: 8,
+                                          alignment: WrapAlignment.spaceBetween,
+                                          crossAxisAlignment: WrapCrossAlignment.center,
+                                          children: [
+                                            // View Details button
+                                            OutlinedButton.icon(
+                                              onPressed: () => Navigator.pushNamed(context, AppRoutes.companyDetail, arguments: comp),
+                                              icon: const Icon(Icons.remove_red_eye_outlined, size: 13, color: Color(0xFF0F172A)),
+                                              label: Text('View', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A))),
+                                              style: OutlinedButton.styleFrom(
+                                                side: const BorderSide(color: Color(0xFFE2E8F0)),
+                                                backgroundColor: Colors.white,
+                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                              ),
+                                            ),
+                                            // Suspend / Activate Toggle
+                                            OutlinedButton.icon(
+                                              onPressed: () => _confirmToggleStatus(comp),
+                                              icon: Icon(
+                                                comp.isActive ? Icons.pause_circle_outline_rounded : Icons.play_circle_outline_rounded,
+                                                size: 13,
+                                                color: comp.isActive ? const Color(0xFFDC2626) : const Color(0xFF047857),
+                                              ),
+                                              label: Text(
+                                                comp.isActive ? 'Suspend' : 'Activate',
+                                                style: GoogleFonts.inter(
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: comp.isActive ? const Color(0xFFDC2626) : const Color(0xFF047857),
+                                                ),
+                                              ),
+                                              style: OutlinedButton.styleFrom(
+                                                side: BorderSide(
+                                                  color: comp.isActive ? const Color(0xFFFECDD3) : const Color(0xFFBBF7D0),
+                                                ),
+                                                backgroundColor: comp.isActive ? const Color(0xFFFFF1F2) : const Color(0xFFF0FDF4),
+                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                              ),
+                                            ),
+                                            Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                OutlinedButton.icon(
+                                                  onPressed: () => _showRenewPlanDialog(comp),
+                                                  icon: const Icon(Icons.bolt_rounded, size: 13, color: Color(0xFF4F46E5)),
+                                                  label: Text('Renew', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF4338CA))),
+                                                  style: OutlinedButton.styleFrom(
+                                                    side: const BorderSide(color: Color(0xFFC7D2FE)),
+                                                    backgroundColor: const Color(0xFFEEF2FF),
+                                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 6),
+                                                OutlinedButton.icon(
+                                                  onPressed: () => _showPermissionsDialog(comp),
+                                                  icon: const Icon(Icons.tune_rounded, size: 13, color: Color(0xFF2563EB)),
+                                                  label: Text('Perms', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF1D4ED8))),
+                                                  style: OutlinedButton.styleFrom(
+                                                    side: const BorderSide(color: Color(0xFFBFDBFE)),
+                                                    backgroundColor: const Color(0xFFEFF6FF),
+                                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                                  ),
+                                                ),
+                                                IconButton(
+                                                  tooltip: 'Generate New Temporary Password',
+                                                  icon: const Icon(Icons.lock_reset_rounded, size: 18, color: Color(0xFFD4AF37)),
+                                                  onPressed: () => _showResetPasswordDialog(comp),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ],
                                   ),
                                 ),
-                                const SizedBox(width: 8),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFFEF3C7),
-                                    borderRadius: BorderRadius.circular(6),
-                                    border: Border.all(color: const Color(0xFFD4AF37)),
-                                  ),
-                                  child: Text(
-                                    comp.planName,
-                                    style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, color: const Color(0xFF92400E)),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '${comp.subdomain != null && comp.subdomain!.isNotEmpty ? "${comp.subdomain}.stepzcrm.com • " : ""}${comp.adminEmail}',
-                              style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
-                              overflow: TextOverflow.ellipsis,
-                              maxLines: 1,
-                            ),
-                          ],
-                        ),
-                      ),
-                      if (!isMobile) ...[
-                        const SizedBox(width: 16),
-                        _buildCenterLifecycleBlock(comp, isMasterAdmin),
-                        const SizedBox(width: 16),
-                        Wrap(
-                          spacing: 8,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          children: [
-                            // View Company Button
-                            OutlinedButton.icon(
-                              onPressed: () => Navigator.pushNamed(context, AppRoutes.companyDetail, arguments: comp),
-                              icon: const Icon(Icons.remove_red_eye_outlined, size: 14, color: Color(0xFF0F172A)),
-                              label: Text('View Details', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A))),
-                              style: OutlinedButton.styleFrom(
-                                side: const BorderSide(color: Color(0xFFE2E8F0)),
-                                backgroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                               ),
-                            ),
-                            // Suspend / Activate Action Button
-                            OutlinedButton.icon(
-                              onPressed: () => _confirmToggleStatus(comp),
-                              icon: Icon(
-                                comp.isActive ? Icons.pause_circle_outline_rounded : Icons.play_circle_outline_rounded,
-                                size: 14,
-                                color: comp.isActive ? const Color(0xFFDC2626) : const Color(0xFF047857),
-                              ),
-                              label: Text(
-                                comp.isActive ? 'Suspend' : 'Activate',
-                                style: GoogleFonts.inter(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                  color: comp.isActive ? const Color(0xFFDC2626) : const Color(0xFF047857),
-                                ),
-                              ),
-                              style: OutlinedButton.styleFrom(
-                                side: BorderSide(
-                                  color: comp.isActive ? const Color(0xFFFECDD3) : const Color(0xFFBBF7D0),
-                                ),
-                                backgroundColor: comp.isActive ? const Color(0xFFFFF1F2) : const Color(0xFFF0FDF4),
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                              ),
-                            ),
-                            // Permissions Button
-                            OutlinedButton.icon(
-                              onPressed: () => _showPermissionsDialog(comp),
-                              icon: const Icon(Icons.tune_rounded, size: 14, color: Color(0xFF2563EB)),
-                              label: Text('Permissions', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF1D4ED8))),
-                              style: OutlinedButton.styleFrom(
-                                side: const BorderSide(color: Color(0xFFBFDBFE)),
-                                backgroundColor: const Color(0xFFEFF6FF),
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                              ),
-                            ),
-                            // Renew Plan Button
-                            OutlinedButton.icon(
-                              onPressed: () => _showRenewPlanDialog(comp),
-                              icon: const Icon(Icons.bolt_rounded, size: 14, color: Color(0xFF4F46E5)),
-                              label: Text('Renew Plan', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF4338CA))),
-                              style: OutlinedButton.styleFrom(
-                                side: const BorderSide(color: Color(0xFFC7D2FE)),
-                                backgroundColor: const Color(0xFFEEF2FF),
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                              ),
-                            ),
-                            IconButton(
-                              tooltip: 'Generate New Temporary Password',
-                              icon: const Icon(Icons.lock_reset_rounded, size: 20, color: Color(0xFFD4AF37)),
-                              onPressed: () => _showResetPasswordDialog(comp),
-                            ),
-                            IconButton(
-                              tooltip: isMasterAdmin ? 'Reassign Super Admin' : 'Super Admin Request',
-                              icon: Icon(isMasterAdmin ? Icons.swap_horiz_rounded : Icons.contact_support_outlined, size: 20, color: const Color(0xFF6366F1)),
-                              onPressed: () => _showSuperAdminRequestDialog(comp),
-                            ),
-                          ],
+                            );
+                          },
                         ),
-                      ],
-                    ],
-                  ),
-                  if (isMobile) ...[
-                    _buildCenterLifecycleBlock(comp, isMasterAdmin, isMobile: true),
-                    const SizedBox(height: 6),
-                    const Divider(color: Color(0xFFE2E8F0), height: 1),
-                    const SizedBox(height: 10),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      alignment: WrapAlignment.spaceBetween,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        // View Details button
-                        OutlinedButton.icon(
-                          onPressed: () => Navigator.pushNamed(context, AppRoutes.companyDetail, arguments: comp),
-                          icon: const Icon(Icons.remove_red_eye_outlined, size: 13, color: Color(0xFF0F172A)),
-                          label: Text('View', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A))),
-                          style: OutlinedButton.styleFrom(
-                            side: const BorderSide(color: Color(0xFFE2E8F0)),
-                            backgroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          ),
-                        ),
-                        // Suspend / Activate Toggle
-                        OutlinedButton.icon(
-                          onPressed: () => _confirmToggleStatus(comp),
-                          icon: Icon(
-                            comp.isActive ? Icons.pause_circle_outline_rounded : Icons.play_circle_outline_rounded,
-                            size: 13,
-                            color: comp.isActive ? const Color(0xFFDC2626) : const Color(0xFF047857),
-                          ),
-                          label: Text(
-                            comp.isActive ? 'Suspend' : 'Activate',
-                            style: GoogleFonts.inter(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              color: comp.isActive ? const Color(0xFFDC2626) : const Color(0xFF047857),
-                            ),
-                          ),
-                          style: OutlinedButton.styleFrom(
-                            side: BorderSide(
-                              color: comp.isActive ? const Color(0xFFFECDD3) : const Color(0xFFBBF7D0),
-                            ),
-                            backgroundColor: comp.isActive ? const Color(0xFFFFF1F2) : const Color(0xFFF0FDF4),
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          ),
-                        ),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            OutlinedButton.icon(
-                              onPressed: () => _showRenewPlanDialog(comp),
-                              icon: const Icon(Icons.bolt_rounded, size: 13, color: Color(0xFF4F46E5)),
-                              label: Text('Renew', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF4338CA))),
-                              style: OutlinedButton.styleFrom(
-                                side: const BorderSide(color: Color(0xFFC7D2FE)),
-                                backgroundColor: const Color(0xFFEEF2FF),
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            OutlinedButton.icon(
-                              onPressed: () => _showPermissionsDialog(comp),
-                              icon: const Icon(Icons.tune_rounded, size: 13, color: Color(0xFF2563EB)),
-                              label: Text('Perms', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF1D4ED8))),
-                              style: OutlinedButton.styleFrom(
-                                side: const BorderSide(color: Color(0xFFBFDBFE)),
-                                backgroundColor: const Color(0xFFEFF6FF),
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                              ),
-                            ),
-                            IconButton(
-                              tooltip: 'Generate New Temporary Password',
-                              icon: const Icon(Icons.lock_reset_rounded, size: 18, color: Color(0xFFD4AF37)),
-                              onPressed: () => _showResetPasswordDialog(comp),
-                            ),
-                            IconButton(
-                              tooltip: isMasterAdmin ? 'Reassign Super Admin' : 'Super Admin Request',
-                              icon: Icon(isMasterAdmin ? Icons.swap_horiz_rounded : Icons.contact_support_outlined, size: 18, color: const Color(0xFF6366F1)),
-                              onPressed: () => _showSuperAdminRequestDialog(comp),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  // ── Tab 1: Renewal Requests View ───────────────────────────────────────────
-
-  Widget _buildRenewalRequestsView(CompanyProvider compProvider, bool isMasterAdmin, bool isMobile) {
-    if (compProvider.isLoadingRenewalRequests) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    final allReqs = compProvider.renewalRequests;
-    final filteredReqs = _selectedRequestStatusFilter == 'ALL'
-        ? allReqs
-        : allReqs.where((r) => r.status == _selectedRequestStatusFilter).toList();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // Status filter bar
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            _buildRequestFilterChip('ALL', 'All Requests (${allReqs.length})'),
-            _buildRequestFilterChip('PENDING', 'Pending (${compProvider.pendingRenewalCount})', alert: compProvider.pendingRenewalCount > 0),
-            _buildRequestFilterChip('APPROVED', 'Approved (${compProvider.renewalRequestMetrics['approved_count'] ?? 0})'),
-            _buildRequestFilterChip('REJECTED', 'Rejected (${compProvider.renewalRequestMetrics['rejected_count'] ?? 0})'),
-          ],
-        ),
-        const SizedBox(height: 14),
-
-        // List
-        Expanded(
-          child: filteredReqs.isEmpty
-              ? Center(
-                  child: GlassCard(
-                    padding: const EdgeInsets.all(36),
-                    opacity: 0.92,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.inbox_rounded, size: 44, color: Color(0xFF94A3B8)),
-                        const SizedBox(height: 12),
-                        Text(
-                          'No renewal requests in this category.',
-                          style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600, color: const Color(0xFF64748B)),
-                        ),
-                      ],
-                    ),
-                  ),
-                )
-              : ListView.separated(
-                  itemCount: filteredReqs.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 12),
-                  itemBuilder: (ctx, i) {
-                    final req = filteredReqs[i];
-                    return _buildRenewalRequestCard(req, isMobile);
-                  },
-                ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildRequestFilterChip(String key, String label, {bool alert = false}) {
-    final isSelected = _selectedRequestStatusFilter == key;
-    return InkWell(
-      onTap: () => setState(() => _selectedRequestStatusFilter = key),
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? const Color(0xFF0F172A)
-              : (alert ? const Color(0xFFFEF2F2) : Colors.white),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: isSelected
-                ? const Color(0xFF0F172A)
-                : (alert ? const Color(0xFFFCA5A5) : const Color(0xFFCBD5E1)),
-          ),
-        ),
-        child: Text(
-          label,
-          style: GoogleFonts.inter(
-            fontSize: 11.5,
-            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
-            color: isSelected
-                ? Colors.white
-                : (alert ? const Color(0xFFDC2626) : const Color(0xFF334155)),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildRenewalRequestCard(CompanyRenewalRequestModel req, bool isMobile) {
-    Color statusBg;
-    Color statusBorder;
-    Color statusColor;
-    IconData statusIcon;
-
-    if (req.isPending) {
-      statusBg = const Color(0xFFFEF3C7);
-      statusBorder = const Color(0xFFFCD34D);
-      statusColor = const Color(0xFF92400E);
-      statusIcon = Icons.pending_actions_rounded;
-    } else if (req.isApproved) {
-      statusBg = const Color(0xFFECFDF5);
-      statusBorder = const Color(0xFFA7F3D0);
-      statusColor = const Color(0xFF047857);
-      statusIcon = Icons.check_circle_rounded;
-    } else {
-      statusBg = const Color(0xFFFEF2F2);
-      statusBorder = const Color(0xFFFCA5A5);
-      statusColor = const Color(0xFFB91C1C);
-      statusIcon = Icons.cancel_rounded;
-    }
-
-    return GlassCard(
-      padding: EdgeInsets.symmetric(horizontal: isMobile ? 14 : 20, vertical: 16),
-      opacity: 0.96,
-      borderColor: req.isPending ? const Color(0xFFFCD34D) : const Color(0xFFE2E8F0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFEEF2FF),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: const Color(0xFFC7D2FE)),
-                ),
-                child: const Icon(Icons.autorenew_rounded, color: Color(0xFF4338CA), size: 22),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            req.companyName,
-                            style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFEFF6FF),
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(color: const Color(0xFFBFDBFE)),
-                          ),
-                          child: Text(
-                            req.cycleDisplay,
-                            style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w700, color: const Color(0xFF1D4ED8)),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Requested by: ${req.requestedByName} • ${req.requestedByEmail} • Super Admin: ${req.assignedSuperAdminName}',
-                      style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B)),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: statusBg,
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: statusBorder),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(statusIcon, size: 13, color: statusColor),
-                    const SizedBox(width: 4),
-                    Text(
-                      req.status,
-                      style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: statusColor),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          if (req.paymentReference.isNotEmpty || req.notes.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF8FAFC),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: const Color(0xFFE2E8F0)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (req.paymentReference.isNotEmpty)
-                    Text(
-                      'Payment Ref: ${req.paymentReference}',
-                      style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w700, color: const Color(0xFF0F766E)),
-                    ),
-                  if (req.notes.isNotEmpty)
-                    Text(
-                      'Customer Note: ${req.notes}',
-                      style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF475569)),
-                    ),
-                ],
-              ),
-            ),
-          ],
-          if (req.adminNotes.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Text(
-              'Admin Note: ${req.adminNotes}',
-              style: GoogleFonts.inter(fontSize: 11, fontStyle: FontStyle.italic, color: const Color(0xFF059669)),
-            ),
-          ],
-          const SizedBox(height: 10),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Submitted: ${req.formattedCreatedAt}',
-                style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF94A3B8)),
-              ),
-              if (req.isPending)
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    OutlinedButton(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: const Color(0xFFDC2626),
-                        side: const BorderSide(color: Color(0xFFFCA5A5)),
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      ),
-                      onPressed: () => _showRejectDialog(req),
-                      child: Text('Reject', style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w700)),
-                    ),
-                    const SizedBox(width: 8),
-                    ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF059669),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      ),
-                      icon: const Icon(Icons.check_circle_rounded, size: 14),
-                      label: Text('Approve (Zero-Day Calc)', style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w700)),
-                      onPressed: () => ApproveRenewalRequestDialog.show(context, request: req),
-                    ),
-                  ],
-                ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showRejectDialog(CompanyRenewalRequestModel req) {
-    final noteCtrl = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Reject Renewal Request', style: GoogleFonts.inter(fontWeight: FontWeight.w800, fontSize: 16)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Are you sure you want to reject the renewal request for ${req.companyName}?', style: GoogleFonts.inter(fontSize: 13)),
-            const SizedBox(height: 12),
-            TextField(
-              controller: noteCtrl,
-              decoration: const InputDecoration(
-                hintText: 'Reason for rejection (optional)',
-                border: OutlineInputBorder(),
-              ),
             ),
           ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFDC2626), foregroundColor: Colors.white),
-            onPressed: () async {
-              Navigator.pop(ctx);
-              await context.read<CompanyProvider>().rejectRenewalRequest(req.id, adminNotes: noteCtrl.text.trim());
-            },
-            child: const Text('Reject Request'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── Tab 2: Renewal History View ────────────────────────────────────────────
-
-  Widget _buildRenewalHistoryView(CompanyProvider compProvider, bool isMasterAdmin, bool isMobile) {
-    if (compProvider.isLoadingHistory) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    final metrics = compProvider.historyMetrics;
-    final allHistory = compProvider.subscriptionHistory;
-    final filteredHistory = _selectedHistoryCycleFilter == 'ALL'
-        ? allHistory
-        : allHistory.where((h) => h.billingCycle == _selectedHistoryCycleFilter).toList();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // Analytics Breakdown Row (Yearly, Monthly, Days, Custom Date)
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: [
-              _buildHistoryMetricCard('Total Renewals', metrics.totalRenewals.toString(), Icons.history_rounded, const Color(0xFF0F172A), const Color(0xFFF1F5F9)),
-              const SizedBox(width: 10),
-              _buildHistoryMetricCard('Yearly Paid', metrics.yearlyCount.toString(), Icons.verified_rounded, const Color(0xFF4338CA), const Color(0xFFEEF2FF)),
-              const SizedBox(width: 10),
-              _buildHistoryMetricCard('Monthly Paid', metrics.monthlyCount.toString(), Icons.calendar_view_month_rounded, const Color(0xFF047857), const Color(0xFFECFDF5)),
-              const SizedBox(width: 10),
-              _buildHistoryMetricCard('Custom Days', metrics.daysCount.toString(), Icons.timelapse_rounded, const Color(0xFFD97706), const Color(0xFFFFFBEB)),
-              const SizedBox(width: 10),
-              _buildHistoryMetricCard('Custom Date', metrics.customDateCount.toString(), Icons.event_available_rounded, const Color(0xFF0891B2), const Color(0xFFECFEFF)),
-            ],
-          ),
-        ),
-        const SizedBox(height: 14),
-
-        // History cycle filters
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            _buildHistoryFilterChip('ALL', 'All Cycles (${allHistory.length})'),
-            _buildHistoryFilterChip('YEARLY', 'Yearly (${metrics.yearlyCount})'),
-            _buildHistoryFilterChip('MONTHLY', 'Monthly (${metrics.monthlyCount})'),
-            _buildHistoryFilterChip('DAYS', 'Custom Days (${metrics.daysCount})'),
-            _buildHistoryFilterChip('CUSTOM_DATE', 'Custom Date (${metrics.customDateCount})'),
-          ],
-        ),
-        const SizedBox(height: 14),
-
-        // History list
-        Expanded(
-          child: filteredHistory.isEmpty
-              ? Center(
-                  child: GlassCard(
-                    padding: const EdgeInsets.all(36),
-                    opacity: 0.92,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.history_toggle_off_rounded, size: 44, color: Color(0xFF94A3B8)),
-                        const SizedBox(height: 12),
-                        Text(
-                          'No subscription renewal history recorded yet.',
-                          style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600, color: const Color(0xFF64748B)),
-                        ),
-                      ],
-                    ),
-                  ),
-                )
-              : ListView.separated(
-                  itemCount: filteredHistory.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 10),
-                  itemBuilder: (ctx, i) {
-                    final item = filteredHistory[i];
-                    return _buildHistoryCard(item, isMobile);
-                  },
-                ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildHistoryMetricCard(String title, String value, IconData icon, Color color, Color bgColor) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.2)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8)),
-            child: Icon(icon, color: color, size: 16),
-          ),
-          const SizedBox(width: 10),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(title, style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w600, color: const Color(0xFF64748B))),
-              Text(value, style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w800, color: color)),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHistoryFilterChip(String key, String label) {
-    final isSelected = _selectedHistoryCycleFilter == key;
-    return InkWell(
-      onTap: () => setState(() => _selectedHistoryCycleFilter = key),
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF0F172A) : Colors.white,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: isSelected ? const Color(0xFF0F172A) : const Color(0xFFCBD5E1)),
-        ),
-        child: Text(
-          label,
-          style: GoogleFonts.inter(
-            fontSize: 11,
-            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
-            color: isSelected ? Colors.white : const Color(0xFF334155),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHistoryCard(CompanySubscriptionHistoryModel item, bool isMobile) {
-    Color cycleColor;
-    Color cycleBg;
-
-    if (item.billingCycle == 'YEARLY') {
-      cycleColor = const Color(0xFF4338CA);
-      cycleBg = const Color(0xFFEEF2FF);
-    } else if (item.billingCycle == 'MONTHLY') {
-      cycleColor = const Color(0xFF047857);
-      cycleBg = const Color(0xFFECFDF5);
-    } else if (item.billingCycle == 'DAYS') {
-      cycleColor = const Color(0xFFD97706);
-      cycleBg = const Color(0xFFFFFBEB);
-    } else {
-      cycleColor = const Color(0xFF0891B2);
-      cycleBg = const Color(0xFFECFEFF);
-    }
-
-    return GlassCard(
-      padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 18, vertical: 14),
-      opacity: 0.96,
-      borderColor: const Color(0xFFE2E8F0),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(color: cycleBg, borderRadius: BorderRadius.circular(10)),
-            child: Icon(Icons.history_rounded, color: cycleColor, size: 20),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        item.companyName,
-                        style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: cycleBg,
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: cycleColor.withValues(alpha: 0.3)),
-                      ),
-                      child: Text(
-                        item.billingCycleDisplay,
-                        style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, color: cycleColor),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  'Valid until: ${item.formattedNewExpiry} (+${item.extensionDays} days) • Approved by ${item.approvedByName}',
-                  style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B)),
-                ),
-                if (item.notes.isNotEmpty) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    'Notes: ${item.notes}',
-                    style: GoogleFonts.inter(fontSize: 11, fontStyle: FontStyle.italic, color: const Color(0xFF94A3B8)),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          const SizedBox(width: 10),
-          Text(
-            item.formattedCreatedAt,
-            style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF94A3B8)),
-          ),
-        ],
       ),
     );
   }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../models/company_model.dart';
+import '../../models/plan_model.dart';
 import '../../models/company_renewal_request_model.dart';
 import '../../providers/company_provider.dart';
 
@@ -309,28 +310,41 @@ class _SubmitRenewalRequestDialogState extends State<SubmitRenewalRequestDialog>
                           style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF475569)),
                         ),
                         const SizedBox(height: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 14),
-                          decoration: BoxDecoration(
-                            border: Border.all(color: const Color(0xFFCBD5E1)),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: DropdownButtonHideUnderline(
-                            child: DropdownButton<String>(
-                              isExpanded: true,
-                              value: plans.any((p) => p.id.toString() == _selectedPlanId)
-                                  ? _selectedPlanId
-                                  : null,
-                              hint: Text('Select Plan (or keep current)', style: GoogleFonts.inter(fontSize: 13)),
-                              items: plans.map((p) {
-                                return DropdownMenuItem<String>(
-                                  value: p.id.toString(),
-                                  child: Text('${p.name} (${p.currencySymbol}${p.priceMonthly.toInt()}/mo • ${p.currencySymbol}${p.priceYearly.toInt()}/yr)'),
-                                );
-                              }).toList(),
-                              onChanged: (val) => setState(() => _selectedPlanId = val),
-                            ),
-                          ),
+                        Builder(
+                          builder: (context) {
+                            final Map<String, PlanModel> uniqueMap = {};
+                            for (final p in plans) {
+                              if (p.id.isNotEmpty && !uniqueMap.containsKey(p.id)) {
+                                uniqueMap[p.id] = p;
+                              }
+                            }
+                            final uniqueList = uniqueMap.values.toList();
+                            final effectiveValue = uniqueList.any((p) => p.id == _selectedPlanId)
+                                ? _selectedPlanId
+                                : null;
+
+                            return Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 14),
+                              decoration: BoxDecoration(
+                                border: Border.all(color: const Color(0xFFCBD5E1)),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: DropdownButtonHideUnderline(
+                                child: DropdownButton<String>(
+                                  isExpanded: true,
+                                  value: effectiveValue,
+                                  hint: Text('Select Plan (or keep current)', style: GoogleFonts.inter(fontSize: 13)),
+                                  items: uniqueList.map((p) {
+                                    return DropdownMenuItem<String>(
+                                      value: p.id,
+                                      child: Text('${p.name} (${p.currencySymbol}${p.priceMonthly.toInt()}/mo • ${p.currencySymbol}${p.priceYearly.toInt()}/yr)'),
+                                    );
+                                  }).toList(),
+                                  onChanged: (val) => setState(() => _selectedPlanId = val),
+                                ),
+                              ),
+                            );
+                          },
                         ),
                         const SizedBox(height: 14),
                       ],

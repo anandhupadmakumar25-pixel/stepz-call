@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/company_model.dart';
+import '../../models/plan_model.dart';
 import '../../providers/company_provider.dart';
 
 class RenewPlanDialog extends StatefulWidget {
@@ -440,39 +441,52 @@ class _RenewPlanDialogState extends State<RenewPlanDialog> {
                         ),
                       ),
                       const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF8FAFC),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: const Color(0xFFCBD5E1)),
-                        ),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<String>(
-                            value: plans.any((p) => p.id.toString() == _selectedPlanId)
-                                ? _selectedPlanId
-                                : (plans.isNotEmpty ? plans.first.id.toString() : null),
-                            isExpanded: true,
-                            items: plans.map((p) {
-                              return DropdownMenuItem<String>(
-                                value: p.id.toString(),
-                                child: Text(
-                                  '${p.name} (${p.currencySymbol}${p.priceMonthly.toStringAsFixed(0)}/mo)',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 13.5,
-                                    fontWeight: FontWeight.w500,
-                                    color: const Color(0xFF1E293B),
-                                  ),
-                                ),
-                              );
-                            }).toList(),
-                            onChanged: (val) {
-                              if (val != null) {
-                                setState(() => _selectedPlanId = val);
-                              }
-                            },
-                          ),
-                        ),
+                      Builder(
+                        builder: (context) {
+                          final Map<String, PlanModel> uniqueMap = {};
+                          for (final p in plans) {
+                            if (p.id.isNotEmpty && !uniqueMap.containsKey(p.id)) {
+                              uniqueMap[p.id] = p;
+                            }
+                          }
+                          final uniqueList = uniqueMap.values.toList();
+                          final effectiveValue = uniqueList.any((p) => p.id == _selectedPlanId)
+                              ? _selectedPlanId
+                              : (uniqueList.isNotEmpty ? uniqueList.first.id : null);
+
+                          return Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF8FAFC),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: const Color(0xFFCBD5E1)),
+                            ),
+                            child: DropdownButtonHideUnderline(
+                              child: DropdownButton<String>(
+                                value: effectiveValue,
+                                isExpanded: true,
+                                items: uniqueList.map((p) {
+                                  return DropdownMenuItem<String>(
+                                    value: p.id,
+                                    child: Text(
+                                      '${p.name} (${p.currencySymbol}${p.priceMonthly.toStringAsFixed(0)}/mo)',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 13.5,
+                                        fontWeight: FontWeight.w500,
+                                        color: const Color(0xFF1E293B),
+                                      ),
+                                    ),
+                                  );
+                                }).toList(),
+                                onChanged: (val) {
+                                  if (val != null) {
+                                    setState(() => _selectedPlanId = val);
+                                  }
+                                },
+                              ),
+                            ),
+                          );
+                        },
                       ),
                     ],
                   ],

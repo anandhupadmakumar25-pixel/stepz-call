@@ -21,6 +21,9 @@ class UserModel {
   final List<String> companyAllowedMenus;
   final bool canManageBranches;
   final String companyPlanName;
+  final String? companyPlanExpiresAt;
+  final int? companyDaysUntilExpiry;
+  final bool companyIsPlanExpired;
   final List<String> customRoleIds;
   final List<String> customRoleNames;
   final List<String> resolvedPermissions;
@@ -48,6 +51,9 @@ class UserModel {
     this.companyAllowedMenus = const [],
     this.canManageBranches = true,
     this.companyPlanName = 'Default',
+    this.companyPlanExpiresAt,
+    this.companyDaysUntilExpiry,
+    this.companyIsPlanExpired = false,
     this.customRoleIds = const [],
     this.customRoleNames = const [],
     this.resolvedPermissions = const [],
@@ -130,6 +136,11 @@ class UserModel {
       companyAllowedMenus: parsedMenus,
       canManageBranches: json['can_manage_branches'] ?? parsedMenus.contains('branches'),
       companyPlanName: json['company_plan_name'] ?? 'Default',
+      companyPlanExpiresAt: json['company_plan_expires_at']?.toString(),
+      companyDaysUntilExpiry: json['company_days_until_expiry'] is int
+          ? json['company_days_until_expiry']
+          : int.tryParse(json['company_days_until_expiry']?.toString() ?? ''),
+      companyIsPlanExpired: json['company_is_plan_expired'] == true,
       customRoleIds: parsedRoleIds,
       customRoleNames: parsedRoleNames,
       resolvedPermissions: parsedPerms,

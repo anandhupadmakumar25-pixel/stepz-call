@@ -607,14 +607,16 @@ Login URL: https://app.stepzcrm.com
                         ),
                         child: DropdownButtonHideUnderline(
                           child: DropdownButton<String>(
-                            value: selectedPlanId,
+                            value: compProv.plans.any((p) => p.code == selectedPlanId)
+                                ? selectedPlanId
+                                : (compProv.plans.isNotEmpty ? compProv.plans.first.code : null),
                             isExpanded: true,
                             dropdownColor: Colors.white,
                             style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF0F172A), fontWeight: FontWeight.w600),
                             items: compProv.plans.map((p) {
                               return DropdownMenuItem<String>(
                                 value: p.code,
-                                child: Text('${p.name} (\$${p.priceMonthly.toStringAsFixed(0)}/mo)', overflow: TextOverflow.ellipsis),
+                                child: Text('${p.name} (${p.currencySymbol}${p.priceMonthly.toStringAsFixed(0)}/mo)', overflow: TextOverflow.ellipsis),
                               );
                             }).toList(),
                             onChanged: (val) {

@@ -8,7 +8,7 @@ class CompanyRenewalRequestModel {
   final String requestedByEmail;
   final String? assignedSuperAdminId;
   final String assignedSuperAdminName;
-  final int? planId;
+  final String? planId;
   final String planName;
   final String billingCycle;
   final int requestedDays;
@@ -64,7 +64,7 @@ class CompanyRenewalRequestModel {
       requestedByEmail: json['requested_by_email'] ?? '',
       assignedSuperAdminId: json['assigned_super_admin']?.toString(),
       assignedSuperAdminName: json['assigned_super_admin_name'] ?? 'Unassigned',
-      planId: json['plan'] != null ? int.tryParse(json['plan'].toString()) : null,
+      planId: json['plan']?.toString(),
       planName: json['plan_name'] ?? '',
       billingCycle: json['billing_cycle'] ?? 'MONTHLY',
       requestedDays: json['requested_days'] ?? 30,
@@ -86,6 +86,8 @@ class CompanyRenewalRequestModel {
   bool get isPending => status == 'PENDING';
   bool get isApproved => status == 'APPROVED';
   bool get isRejected => status == 'REJECTED';
+
+  String get billingCycleDisplay => cycleDisplay;
 
   String get cycleDisplay {
     switch (billingCycle) {

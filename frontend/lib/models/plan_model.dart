@@ -1,5 +1,5 @@
 class PlanModel {
-  final int id;
+  final String id;
   final String name;
   final String code;
   final String currency;
@@ -53,7 +53,7 @@ class PlanModel {
         : getSymbolForCurrency(currency);
 
     return PlanModel(
-      id: json['id'] is int ? json['id'] : int.tryParse(json['id']?.toString() ?? '0') ?? 0,
+      id: json['id']?.toString() ?? '',
       name: json['name'] ?? '',
       code: json['code'] ?? '',
       currency: currency,

@@ -24,6 +24,7 @@ import '../companies/edit_company_dialog.dart';
 import '../../routes/app_routes.dart';
 import '../quotations/quotation_form_dialog.dart';
 import '../leads/bulk_assign_dialog.dart';
+import '../companies/renewal_request_dialog.dart';
 
 class CompanyAdminDashboardScreen extends StatefulWidget {
   const CompanyAdminDashboardScreen({super.key});
@@ -264,6 +265,19 @@ class _CompanyAdminDashboardScreenState extends State<CompanyAdminDashboardScree
               isMobile: isMobile,
               canManageBranches: canManageBranches,
             ),
+            const SizedBox(height: 16),
+
+            // 1.1 SUBSCRIPTION PLAN EXPIRY & RENEWAL BAR
+            _buildSubscriptionExpiryBanner(
+              context: context,
+              company: activeComp,
+              userPlanName: user?.companyPlanName ?? 'Standard',
+              userPlanExpiry: user?.companyPlanExpiresAt,
+              userDaysLeft: user?.companyDaysUntilExpiry,
+              userIsExpired: user?.companyIsPlanExpired ?? false,
+              isDesktop: isDesktop,
+              isMobile: isMobile,
+            ),
             const SizedBox(height: 20),
 
             // 2. UNIFIED OPERATIONAL KPI DECK
@@ -304,6 +318,275 @@ class _CompanyAdminDashboardScreenState extends State<CompanyAdminDashboardScree
         ),
       ),
     );
+  }
+
+  // ==========================================
+  // 1.1 SUBSCRIPTION PLAN EXPIRY & RENEWAL BAR
+  // ==========================================
+  Widget _buildSubscriptionExpiryBanner({
+    required BuildContext context,
+    required CompanyModel? company,
+    required String userPlanName,
+    String? userPlanExpiry,
+    int? userDaysLeft,
+    bool userIsExpired = false,
+    required bool isDesktop,
+    required bool isMobile,
+  }) {
+    final planName = (company != null && company.planName.isNotEmpty)
+        ? company.planName
+        : userPlanName;
+    final isOverdue = company != null ? company.isPlanOverdue : userIsExpired;
+    final daysLeft = company != null ? company.daysUntilExpiry : userDaysLeft;
+    final isExpiringSoon = !isOverdue && daysLeft != null && daysLeft <= 7;
+
+    String expiryFormatted = company?.expiryFormatted ?? '';
+    if (expiryFormatted.isEmpty || expiryFormatted == 'No expiry set') {
+      final rawExp = company?.planExpiresAt ?? userPlanExpiry;
+      if (rawExp != null && rawExp.isNotEmpty) {
+        try {
+          final dt = DateTime.parse(rawExp);
+          const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+          expiryFormatted = '${dt.day.toString().padLeft(2, '0')} ${months[dt.month - 1]} ${dt.year}';
+        } catch (_) {
+          expiryFormatted = rawExp.length >= 10 ? rawExp.substring(0, 10) : rawExp;
+        }
+      } else {
+        expiryFormatted = 'Active (No Expiry)';
+      }
+    }
+    final superAdminName = (company != null && company.assignedSuperAdminName.isNotEmpty)
+        ? company.assignedSuperAdminName
+        : 'Enterprise Super Admin';
+
+    // Urgency Styling
+    Color bannerBorder;
+    Color bannerBg;
+    Color statusBadgeBg;
+    Color statusBadgeText;
+    IconData statusIcon;
+    String statusTitle;
+    String statusSubtitle;
+
+    if (isOverdue) {
+      bannerBorder = const Color(0xFFFCA5A5);
+      bannerBg = const Color(0xFFFEF2F2);
+      statusBadgeBg = const Color(0xFFDC2626);
+      statusBadgeText = Colors.white;
+      statusIcon = Icons.error_rounded;
+      statusTitle = 'Subscription Expired';
+      statusSubtitle = 'Your plan expired on $expiryFormatted. Submit a renewal request to restore unrestricted operations.';
+    } else if (isExpiringSoon) {
+      bannerBorder = const Color(0xFFFCD34D);
+      bannerBg = const Color(0xFFFFFBEB);
+      statusBadgeBg = const Color(0xFFD97706);
+      statusBadgeText = Colors.white;
+      statusIcon = Icons.hourglass_top_rounded;
+      statusTitle = 'Expiring Soon';
+      statusSubtitle = '$daysLeft ${daysLeft == 1 ? 'day' : 'days'} left (Expires on $expiryFormatted). Request renewal now.';
+    } else {
+      bannerBorder = const Color(0xFFE2E8F0);
+      bannerBg = Colors.white;
+      statusBadgeBg = const Color(0xFF047857);
+      statusBadgeText = Colors.white;
+      statusIcon = Icons.verified_rounded;
+      statusTitle = 'Active Plan';
+      statusSubtitle = 'Valid until $expiryFormatted ${daysLeft != null ? '($daysLeft days remaining)' : ''}';
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: bannerBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: bannerBorder, width: isOverdue || isExpiringSoon ? 1.5 : 1.0),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      padding: EdgeInsets.all(isMobile ? 12 : 16),
+      child: isMobile
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: statusBadgeBg.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(statusIcon, color: statusBadgeBg, size: 20),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  planName,
+                                  style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: statusBadgeBg,
+                                  borderRadius: BorderRadius.circular(5),
+                                ),
+                                child: Text(
+                                  statusTitle,
+                                  style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w700, color: statusBadgeText),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            statusSubtitle,
+                            style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF475569)),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                const Divider(color: Color(0xFFE2E8F0), height: 1),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        'Super Admin: $superAdminName',
+                        style: GoogleFonts.inter(fontSize: 10.5, color: const Color(0xFF64748B), fontWeight: FontWeight.w500),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton.icon(
+                      onPressed: () => _openRenewalRequestDialog(context, company),
+                      icon: const Icon(Icons.autorenew_rounded, size: 14),
+                      label: Text('Request Renewal', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF0F766E),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        elevation: 0,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            )
+          : Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: statusBadgeBg.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(statusIcon, color: statusBadgeBg, size: 24),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            planName,
+                            style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+                          ),
+                          const SizedBox(width: 10),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
+                            decoration: BoxDecoration(
+                              color: statusBadgeBg,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              statusTitle,
+                              style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w700, color: statusBadgeText),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF1F5F9),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: const Color(0xFFE2E8F0)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.calendar_month_rounded, size: 13, color: Color(0xFF64748B)),
+                                const SizedBox(width: 5),
+                                Text(
+                                  'Expires: $expiryFormatted',
+                                  style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF334155)),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        statusSubtitle,
+                        style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF475569)),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      'Super Admin: $superAdminName',
+                      style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B), fontWeight: FontWeight.w500),
+                    ),
+                    const SizedBox(height: 6),
+                    ElevatedButton.icon(
+                      onPressed: () => _openRenewalRequestDialog(context, company),
+                      icon: const Icon(Icons.autorenew_rounded, size: 15),
+                      label: Text('Request Plan Renewal', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF0F766E),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        elevation: 0,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+    );
+  }
+
+  void _openRenewalRequestDialog(BuildContext context, CompanyModel? company) {
+    SubmitRenewalRequestDialog.show(context, company: company).then((val) {
+      if (val == true && mounted) {
+        context.read<CompanyProvider>().fetchMyCompany();
+      }
+    });
   }
 
   // ==========================================
