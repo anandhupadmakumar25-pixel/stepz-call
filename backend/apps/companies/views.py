@@ -30,7 +30,7 @@ from apps.companies.serializers import (
     CompanySubscriptionHistorySerializer,
 )
 from apps.core.permissions import IsSuperAdmin, IsCompanyAdmin, IsEmployee, IsMasterAdmin
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 
 User = get_user_model()
 
@@ -231,7 +231,10 @@ class CompanyDetailView(views.APIView):
         return Response(serializer.data)
 
 class MyCompanyView(views.APIView):
-    permission_classes = [IsCompanyAdmin]
+    def get_permissions(self):
+        if self.request.method == 'GET':
+            return [IsAuthenticated()]
+        return [IsCompanyAdmin()]
 
     def get(self, request):
         company = request.user.company
@@ -381,7 +384,7 @@ class PlanListCreateView(views.APIView):
     def get_permissions(self):
         if self.request.method == 'POST':
             return [IsSuperAdmin()]
-        return [IsCompanyAdmin()]
+        return [IsAuthenticated()]
 
     def get(self, request):
         plans = Plan.objects.all().order_by('price_monthly')
@@ -948,10 +951,7 @@ class CompanyPublicRenewalRequestView(views.APIView):
 
 
 class CompanyRenewalRequestListCreateView(views.APIView):
-    def get_permissions(self):
-        if self.request.method == 'POST':
-            return [IsEmployee()]
-        return [IsEmployee()]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         user = request.user
@@ -963,9 +963,10 @@ class CompanyRenewalRequestListCreateView(views.APIView):
             queryset = queryset.filter(
                 Q(assigned_super_admin=user) |
                 Q(company__assigned_super_admin=user) |
-                Q(company__created_by=user)
+                Q(company__created_by=user) |
+                Q(company__assigned_super_admin__isnull=True)
             )
-        elif user.role in ['COMPANY_ADMIN', 'MANAGER']:
+        elif user.role in ['COMPANY_ADMIN', 'MANAGER', 'EMPLOYEE']:
             if not user.company:
                 return Response({"requests": [], "metrics": {"pending_count": 0, "total_count": 0}})
             queryset = queryset.filter(company=user.company)
@@ -1004,18 +1005,17 @@ class CompanyRenewalRequestListCreateView(views.APIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        # Determine target company
-        if user.role in ['COMPANY_ADMIN', 'MANAGER', 'EMPLOYEE']:
-            company = user.company
-            if not company:
-                return Response({"error": "No company associated with user account."}, status=status.HTTP_400_BAD_REQUEST)
-        else:
-            company_id = request.data.get('company_id')
-            if not company_id:
-                return Response({"error": "company_id is required."}, status=status.HTTP_400_BAD_REQUEST)
+        # Determine target company:
+        company_id = request.data.get('company_id')
+        if company_id:
             company = Company.objects.filter(id=company_id).first()
-            if not company:
-                return Response({"error": "Company not found."}, status=status.HTTP_404_NOT_FOUND)
+        elif user.company:
+            company = user.company
+        else:
+            return Response({"error": "No company specified or associated with user account."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not company:
+            return Response({"error": "Company not found."}, status=status.HTTP_404_NOT_FOUND)
 
         plan_id = data.get('plan_id', '').strip()
         requested_plan = get_plan_by_id_or_code(plan_id) if plan_id else company.plan
@@ -1082,8 +1082,8 @@ class CompanyRenewalRequestApproveView(views.APIView):
         company = renewal_req.company
         user = request.user
 
-        # Authorization check: Master Admin OR Super Admin managing this company
-        if not user.is_master_admin and company.assigned_super_admin_id != user.id and company.created_by_id != user.id:
+        # Authorization check: Master Admin OR Super Admin managing this company (or if company is unassigned)
+        if not user.is_master_admin and company.assigned_super_admin_id and company.assigned_super_admin_id != user.id and company.created_by_id != user.id:
             return Response({"error": "You do not have permission to approve renewals for this company."}, status=status.HTTP_403_FORBIDDEN)
 
         serializer = CompanyRenewalRequestApproveSerializer(data=request.data)
@@ -1132,6 +1132,8 @@ class CompanyRenewalRequestApproveView(views.APIView):
 
         company.plan_expires_at = new_expiry
         company.plan_billing_cycle = billing_cycle
+        if not company.assigned_super_admin:
+            company.assigned_super_admin = user
         if company.status == 'SUSPENDED':
             company.status = 'ACTIVE'
         company.save()
@@ -1190,7 +1192,7 @@ class CompanyRenewalRequestRejectView(views.APIView):
         company = renewal_req.company
         user = request.user
 
-        if not user.is_master_admin and company.assigned_super_admin_id != user.id and company.created_by_id != user.id:
+        if not user.is_master_admin and company.assigned_super_admin_id and company.assigned_super_admin_id != user.id and company.created_by_id != user.id:
             return Response({"error": "You do not have permission to review renewals for this company."}, status=status.HTTP_403_FORBIDDEN)
 
         admin_notes = request.data.get('admin_notes', '').strip()
@@ -1221,8 +1223,7 @@ class CompanyRenewalRequestRejectView(views.APIView):
 
 
 class CompanySubscriptionHistoryListView(views.APIView):
-    def get_permissions(self):
-        return [IsEmployee()]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         user = request.user
@@ -1232,9 +1233,9 @@ class CompanySubscriptionHistoryListView(views.APIView):
             pass  # Master admin sees all
         elif user.role == 'SUPER_ADMIN':
             queryset = queryset.filter(
-                Q(company__assigned_super_admin=user) | Q(company__created_by=user)
+                Q(company__assigned_super_admin=user) | Q(company__created_by=user) | Q(company__assigned_super_admin__isnull=True)
             )
-        elif user.role in ['COMPANY_ADMIN', 'MANAGER']:
+        elif user.role in ['COMPANY_ADMIN', 'MANAGER', 'EMPLOYEE']:
             if not user.company:
                 return Response({"history": [], "metrics": {}})
             queryset = queryset.filter(company=user.company)
