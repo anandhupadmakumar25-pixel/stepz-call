@@ -5,10 +5,10 @@ from rest_framework import generics, status, views
 from rest_framework.response import Response
 from django.db import transaction
 from django.contrib.auth import get_user_model
-from django.db.models import Sum, Count
+from django.db.models import Sum, Count, Q
 from apps.companies.models import Company, Plan, ALL_MENU_KEYS, CompanyPayrollPolicy, CompanyCustomRule
 from apps.companies.serializers import CompanySerializer, CompanyCreateSerializer, PlanSerializer, CompanyPayrollPolicySerializer, CompanyCustomRuleSerializer
-from apps.core.permissions import IsSuperAdmin, IsCompanyAdmin, IsEmployee
+from apps.core.permissions import IsSuperAdmin, IsCompanyAdmin, IsEmployee, IsMasterAdmin
 
 User = get_user_model()
 
@@ -48,9 +48,17 @@ class CompanyListCreateView(views.APIView):
         return [IsCompanyAdmin()]
 
     def get(self, request):
-        if request.user.is_super_admin:
-            companies = Company.objects.all().select_related('plan').order_by('-created_at')
-            return Response(CompanySerializer(companies, many=True).data)
+        if request.user.is_master_admin:
+            super_admin_filter = request.query_params.get('super_admin_id')
+            qs = Company.objects.all().select_related('plan', 'created_by', 'assigned_super_admin')
+            if super_admin_filter:
+                qs = qs.filter(Q(created_by_id=super_admin_filter) | Q(assigned_super_admin_id=super_admin_filter))
+            return Response(CompanySerializer(qs.order_by('-created_at'), many=True).data)
+        elif request.user.role == 'SUPER_ADMIN':
+            qs = Company.objects.filter(
+                Q(created_by=request.user) | Q(assigned_super_admin=request.user)
+            ).select_related('plan', 'created_by', 'assigned_super_admin').order_by('-created_at')
+            return Response(CompanySerializer(qs, many=True).data)
         elif request.user.company:
             return Response([CompanySerializer(request.user.company).data])
         return Response([])
@@ -100,6 +108,8 @@ class CompanyListCreateView(views.APIView):
                 website=data.get('website', '').strip(),
                 plan=plan,
                 allowed_menus=allowed_menus,
+                created_by=request.user,
+                assigned_super_admin=request.user,
                 status='ACTIVE'
             )
             admin_user = User.objects.create_user(
@@ -139,8 +149,13 @@ class CompanyDetailView(views.APIView):
         return [IsCompanyAdmin()]
 
     def get(self, request, pk):
-        if request.user.is_super_admin:
-            company = Company.objects.filter(id=pk).select_related('plan').first()
+        if request.user.is_master_admin:
+            company = Company.objects.filter(id=pk).select_related('plan', 'created_by', 'assigned_super_admin').first()
+        elif request.user.role == 'SUPER_ADMIN':
+            company = Company.objects.filter(
+                Q(created_by=request.user) | Q(assigned_super_admin=request.user),
+                id=pk
+            ).select_related('plan', 'created_by', 'assigned_super_admin').first()
         elif request.user.company_id == pk:
             company = request.user.company
         else:
@@ -151,10 +166,18 @@ class CompanyDetailView(views.APIView):
         return Response(CompanySerializer(company).data)
 
     def patch(self, request, pk):
-        if not request.user.is_super_admin and request.user.company_id != pk:
+        if request.user.is_master_admin:
+            company = Company.objects.filter(id=pk).first()
+        elif request.user.role == 'SUPER_ADMIN':
+            company = Company.objects.filter(
+                Q(created_by=request.user) | Q(assigned_super_admin=request.user),
+                id=pk
+            ).first()
+        elif request.user.company_id == pk:
+            company = request.user.company
+        else:
             return Response({"error": "Unauthorized"}, status=status.HTTP_403_FORBIDDEN)
 
-        company = Company.objects.filter(id=pk).first()
         if not company:
             return Response({"error": "Company not found"}, status=status.HTTP_404_NOT_FOUND)
 
@@ -520,4 +543,123 @@ class CompanyRulePresetLoadView(views.APIView):
             "message": f"Preset '{preset_key}' applied successfully.",
             "policy": CompanyPayrollPolicySerializer(policy).data,
             "rules": CompanyCustomRuleSerializer(all_rules, many=True).data
+        })
+
+
+class SuperAdminManagementView(views.APIView):
+    permission_classes = [IsMasterAdmin]
+
+    def get(self, request):
+        super_admins = User.objects.filter(role__in=['SUPER_ADMIN', 'MASTER_ADMIN']).order_by('-created_at')
+        data = []
+        for sa in super_admins:
+            onboarded_qs = sa.onboarded_companies.all()
+            total_tenants = onboarded_qs.count()
+            active_tenants = onboarded_qs.filter(status='ACTIVE').count()
+            total_users = User.objects.filter(company__in=onboarded_qs).count()
+
+            data.append({
+                "id": str(sa.id),
+                "email": sa.email,
+                "first_name": sa.first_name,
+                "last_name": sa.last_name,
+                "full_name": sa.full_name,
+                "phone": sa.phone,
+                "role": sa.role,
+                "is_active": sa.is_active,
+                "is_master_admin": sa.is_master_admin,
+                "total_tenants": total_tenants,
+                "active_tenants": active_tenants,
+                "total_users": total_users,
+                "created_at": sa.created_at,
+            })
+        return Response({
+            "super_admins": data,
+            "total_super_admins": len(data),
+            "total_platform_tenants": Company.objects.count(),
+        })
+
+    def post(self, request):
+        email = request.data.get('email', '').strip().lower()
+        first_name = request.data.get('first_name', '').strip()
+        last_name = request.data.get('last_name', '').strip()
+        phone = request.data.get('phone', '').strip()
+        password = request.data.get('password', '').strip()
+        role = request.data.get('role', 'SUPER_ADMIN')
+
+        if not email:
+            return Response({"error": "Email is required."}, status=status.HTTP_400_BAD_REQUEST)
+        if not first_name:
+            return Response({"error": "First name is required."}, status=status.HTTP_400_BAD_REQUEST)
+        if User.objects.filter(email=email).exists():
+            return Response({"error": f"A user with email '{email}' already exists."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not password:
+            password = generate_temporary_password(10)
+
+        user = User.objects.create_user(
+            email=email,
+            password=password,
+            first_name=first_name,
+            last_name=last_name,
+            phone=phone,
+            role=role if role in ['SUPER_ADMIN', 'MASTER_ADMIN'] else 'SUPER_ADMIN',
+            is_active=True,
+            is_staff=True
+        )
+
+        return Response({
+            "id": str(user.id),
+            "email": user.email,
+            "full_name": user.full_name,
+            "role": user.role,
+            "temp_password": password,
+            "message": "Super Admin created successfully."
+        }, status=status.HTTP_201_CREATED)
+
+
+class SuperAdminToggleStatusView(views.APIView):
+    permission_classes = [IsMasterAdmin]
+
+    def patch(self, request, pk):
+        sa = User.objects.filter(id=pk, role__in=['SUPER_ADMIN', 'MASTER_ADMIN']).first()
+        if not sa:
+            return Response({"error": "Super Admin not found."}, status=status.HTTP_404_NOT_FOUND)
+        if sa.id == request.user.id:
+            return Response({"error": "You cannot deactivate your own account."}, status=status.HTTP_400_BAD_REQUEST)
+
+        sa.is_active = not sa.is_active
+        sa.save(update_fields=['is_active'])
+        return Response({
+            "id": str(sa.id),
+            "is_active": sa.is_active,
+            "message": f"Super Admin {'activated' if sa.is_active else 'deactivated'} successfully."
+        })
+
+
+class ReassignTenantsView(views.APIView):
+    permission_classes = [IsMasterAdmin]
+
+    def post(self, request):
+        from_id = request.data.get('from_super_admin_id')
+        to_id = request.data.get('to_super_admin_id')
+        company_ids = request.data.get('company_ids', [])
+
+        if not from_id or not to_id:
+            return Response({"error": "Both from_super_admin_id and to_super_admin_id are required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        to_sa = User.objects.filter(id=to_id, role__in=['SUPER_ADMIN', 'MASTER_ADMIN']).first()
+        if not to_sa:
+            return Response({"error": "Target Super Admin not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        qs = Company.objects.filter(Q(created_by_id=from_id) | Q(assigned_super_admin_id=from_id))
+        if company_ids and company_ids != 'all':
+            qs = qs.filter(id__in=company_ids)
+
+        count = qs.count()
+        qs.update(created_by=to_sa, assigned_super_admin=to_sa)
+
+        return Response({
+            "reassigned_count": count,
+            "message": f"Successfully reassigned {count} company tenants to {to_sa.full_name} ({to_sa.email})."
         })

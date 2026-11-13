@@ -69,6 +69,22 @@ class Company(TimeStampedModel):
     gstin = models.CharField(max_length=50, blank=True, default='')
     website = models.CharField(max_length=255, blank=True, default='')
     plan = models.ForeignKey(Plan, on_delete=models.SET_NULL, null=True, blank=True, related_name='companies')
+    created_by = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='onboarded_companies',
+        help_text="Super Admin who onboarded this company"
+    )
+    assigned_super_admin = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='managed_companies',
+        help_text="Super Admin actively managing this company"
+    )
     allowed_menus = models.JSONField(default=list, blank=True)
     settings = models.JSONField(default=dict, blank=True)
 

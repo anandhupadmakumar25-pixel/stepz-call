@@ -34,6 +34,11 @@ class CompanySerializer(serializers.ModelSerializer):
     plan_max_leads = serializers.IntegerField(source='plan.max_leads', read_only=True, default=5000)
     resolved_allowed_menus = serializers.SerializerMethodField()
     can_manage_branches = serializers.SerializerMethodField()
+    created_by_id = serializers.UUIDField(source='created_by.id', read_only=True, allow_null=True)
+    created_by_name = serializers.SerializerMethodField()
+    created_by_email = serializers.CharField(source='created_by.email', read_only=True, default='')
+    assigned_super_admin_id = serializers.UUIDField(source='assigned_super_admin.id', read_only=True, allow_null=True)
+    assigned_super_admin_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Company
@@ -45,10 +50,18 @@ class CompanySerializer(serializers.ModelSerializer):
             'plan_price_monthly', 'plan_price_yearly',
             'plan_max_users', 'plan_max_leads', 'allowed_menus',
             'resolved_allowed_menus', 'can_manage_branches',
+            'created_by_id', 'created_by_name', 'created_by_email',
+            'assigned_super_admin_id', 'assigned_super_admin_name',
             'settings', 'user_count', 'lead_count', 'branch_count', 'task_count',
             'admin_name', 'admin_email', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def get_created_by_name(self, obj):
+        return obj.created_by.full_name if obj.created_by else 'Platform Master'
+
+    def get_assigned_super_admin_name(self, obj):
+        return obj.assigned_super_admin.full_name if obj.assigned_super_admin else 'Platform Master'
 
     def get_user_count(self, obj):
         return obj.users.count()

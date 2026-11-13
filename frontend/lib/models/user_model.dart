@@ -17,6 +17,7 @@ class UserModel {
   final String? branchId;
   final String? branchName;
   final bool isStaff;
+  final bool isMasterAdmin;
   final List<String> companyAllowedMenus;
   final bool canManageBranches;
   final String companyPlanName;
@@ -43,6 +44,7 @@ class UserModel {
     this.branchId,
     this.branchName,
     this.isStaff = false,
+    this.isMasterAdmin = false,
     this.companyAllowedMenus = const [],
     this.canManageBranches = true,
     this.companyPlanName = 'Default',
@@ -51,11 +53,12 @@ class UserModel {
     this.resolvedPermissions = const [],
   });
 
-  bool get isSuperAdmin => role == 'SUPER_ADMIN';
+  bool get isRootMasterAdmin => isMasterAdmin || role == 'MASTER_ADMIN';
+  bool get isSuperAdmin => role == 'SUPER_ADMIN' || role == 'MASTER_ADMIN';
   bool get isCompanyAdmin => role == 'COMPANY_ADMIN';
   bool get isManager => role == 'MANAGER';
   bool get isEmployee => role == 'EMPLOYEE';
-  bool get canManageCompany => role == 'SUPER_ADMIN' || role == 'COMPANY_ADMIN' || role == 'MANAGER';
+  bool get canManageCompany => isSuperAdmin || role == 'COMPANY_ADMIN' || role == 'MANAGER';
 
   bool hasMenuPermission(String menuKey) {
     if (isSuperAdmin) return true;
@@ -123,6 +126,7 @@ class UserModel {
       branchId: json['branch_id']?.toString() ?? json['branch']?.toString(),
       branchName: json['branch_name'],
       isStaff: json['is_staff'] ?? false,
+      isMasterAdmin: json['is_master_admin'] ?? (json['role'] == 'MASTER_ADMIN'),
       companyAllowedMenus: parsedMenus,
       canManageBranches: json['can_manage_branches'] ?? parsedMenus.contains('branches'),
       companyPlanName: json['company_plan_name'] ?? 'Default',
@@ -151,6 +155,7 @@ class UserModel {
     'branch_id': branchId,
     'branch_name': branchName,
     'is_staff': isStaff,
+    'is_master_admin': isMasterAdmin,
     'company_allowed_menus': companyAllowedMenus,
     'can_manage_branches': canManageBranches,
     'company_plan_name': companyPlanName,

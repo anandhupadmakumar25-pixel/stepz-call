@@ -31,6 +31,7 @@ class UserManager(BaseUserManager):
 
 class User(AbstractBaseUser, PermissionsMixin, TimeStampedModel):
     ROLE_CHOICES = [
+        ('MASTER_ADMIN', 'Master Admin (Super-Super Admin)'),
         ('SUPER_ADMIN', 'Super Admin'),
         ('COMPANY_ADMIN', 'Company Admin'),
         ('MANAGER', 'Manager'),
@@ -82,16 +83,20 @@ class User(AbstractBaseUser, PermissionsMixin, TimeStampedModel):
         return f"{self.first_name} {self.last_name}".strip() or self.email
 
     @property
+    def is_master_admin(self):
+        return self.role == 'MASTER_ADMIN' or (self.role == 'SUPER_ADMIN' and self.is_superuser)
+
+    @property
     def is_super_admin(self):
-        return self.role == 'SUPER_ADMIN'
+        return self.role in ['MASTER_ADMIN', 'SUPER_ADMIN']
 
     @property
     def is_company_admin(self):
-        return self.role in ['SUPER_ADMIN', 'COMPANY_ADMIN']
+        return self.role in ['MASTER_ADMIN', 'SUPER_ADMIN', 'COMPANY_ADMIN']
 
     @property
     def is_manager(self):
-        return self.role in ['SUPER_ADMIN', 'COMPANY_ADMIN', 'MANAGER']
+        return self.role in ['MASTER_ADMIN', 'SUPER_ADMIN', 'COMPANY_ADMIN', 'MANAGER']
 
     def has_permission(self, perm_key: str) -> bool:
         """

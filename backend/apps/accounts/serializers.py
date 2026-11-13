@@ -47,6 +47,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             'branch_id': str(user.branch.id) if user.branch else None,
             'branch_name': user.branch.name if user.branch else None,
             'is_staff': user.is_staff,
+            'is_master_admin': user.is_master_admin,
             'company_allowed_menus': allowed_menus,
             'can_manage_branches': can_branches,
             'company_plan_name': plan_name,
@@ -69,12 +70,13 @@ class UserProfileSerializer(serializers.ModelSerializer):
     company_allowed_menus = serializers.SerializerMethodField()
     can_manage_branches = serializers.SerializerMethodField()
     company_plan_name = serializers.SerializerMethodField()
+    is_master_admin = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = User
         fields = [
             'id', 'email', 'first_name', 'last_name', 'full_name',
-            'phone', 'role', 'company', 'company_name',
+            'phone', 'role', 'is_master_admin', 'company', 'company_name',
             'company_logo', 'company_phone', 'company_email', 'company_address', 'company_gstin', 'company_website',
             'branch', 'branch_name',
             'company_allowed_menus', 'can_manage_branches', 'company_plan_name',

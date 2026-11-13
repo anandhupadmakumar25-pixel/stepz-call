@@ -29,6 +29,11 @@ class CompanyModel {
   final int taskCount;
   final String adminName;
   final String? explicitAdminEmail;
+  final String? createdById;
+  final String createdByName;
+  final String createdByEmail;
+  final String? assignedSuperAdminId;
+  final String assignedSuperAdminName;
   final String createdAt;
 
   CompanyModel({
@@ -60,6 +65,11 @@ class CompanyModel {
     this.taskCount = 0,
     this.adminName = '',
     this.explicitAdminEmail,
+    this.createdById,
+    this.createdByName = '',
+    this.createdByEmail = '',
+    this.assignedSuperAdminId,
+    this.assignedSuperAdminName = '',
     this.createdAt = '',
   });
 
@@ -123,6 +133,11 @@ class CompanyModel {
       taskCount: json['task_count'] ?? 0,
       adminName: json['admin_name'] ?? '',
       explicitAdminEmail: json['admin_email'],
+      createdById: json['created_by_id']?.toString(),
+      createdByName: json['created_by_name'] ?? '',
+      createdByEmail: json['created_by_email'] ?? '',
+      assignedSuperAdminId: json['assigned_super_admin_id']?.toString(),
+      assignedSuperAdminName: json['assigned_super_admin_name'] ?? '',
       createdAt: json['created_at'] ?? '',
     );
   }

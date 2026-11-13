@@ -17,6 +17,18 @@ class CompanyProvider extends ChangeNotifier {
   bool _isLoadingPolicy = false;
   bool _isLoadingRules = false;
 
+  List<Map<String, dynamic>> _superAdmins = [];
+  int _totalSuperAdmins = 0;
+  int _totalPlatformTenants = 0;
+  bool _isLoadingSuperAdmins = false;
+  String? _selectedSuperAdminFilter;
+
+  List<Map<String, dynamic>> get superAdmins => _superAdmins;
+  int get totalSuperAdmins => _totalSuperAdmins;
+  int get totalPlatformTenants => _totalPlatformTenants;
+  bool get isLoadingSuperAdmins => _isLoadingSuperAdmins;
+  String? get selectedSuperAdminFilter => _selectedSuperAdminFilter;
+
   CompanyPayrollPolicyModel? get payrollPolicy => _payrollPolicy;
   List<CompanyCustomRuleModel> get companyRules => _companyRules;
   bool get isLoadingPolicy => _isLoadingPolicy;
@@ -55,13 +67,22 @@ class CompanyProvider extends ChangeNotifier {
     return _activeCompanyDetail;
   }
 
-  Future<void> fetchCompanies() async {
+  void setSelectedSuperAdminFilter(String? superAdminId) {
+    _selectedSuperAdminFilter = superAdminId;
+    fetchCompanies(superAdminId: superAdminId);
+  }
+
+  Future<void> fetchCompanies({String? superAdminId}) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
 
     try {
-      final res = await ApiClient.get('/companies/');
+      final filterId = superAdminId ?? _selectedSuperAdminFilter;
+      final endpoint = (filterId != null && filterId.isNotEmpty)
+          ? '/companies/?super_admin_id=$filterId'
+          : '/companies/';
+      final res = await ApiClient.get(endpoint);
       if (res is List) {
         _companies = res.map((c) => CompanyModel.fromJson(c)).toList();
       }
@@ -72,6 +93,62 @@ class CompanyProvider extends ChangeNotifier {
     } finally {
       _isLoading = false;
       notifyListeners();
+    }
+  }
+
+  Future<void> fetchSuperAdmins() async {
+    _isLoadingSuperAdmins = true;
+    notifyListeners();
+    try {
+      final res = await ApiClient.get('/companies/super-admins/');
+      if (res is Map<String, dynamic>) {
+        _superAdmins = List<Map<String, dynamic>>.from(res['super_admins'] ?? []);
+        _totalSuperAdmins = res['total_super_admins'] ?? _superAdmins.length;
+        _totalPlatformTenants = res['total_platform_tenants'] ?? 0;
+      }
+    } catch (e) {
+      _errorMessage = e.toString();
+    } finally {
+      _isLoadingSuperAdmins = false;
+      notifyListeners();
+    }
+  }
+
+  Future<Map<String, dynamic>?> createSuperAdmin(Map<String, dynamic> data) async {
+    try {
+      final res = await ApiClient.post('/companies/super-admins/', data);
+      await fetchSuperAdmins();
+      return res is Map<String, dynamic> ? res : {};
+    } catch (e) {
+      _errorMessage = e.toString();
+      return null;
+    }
+  }
+
+  Future<bool> toggleSuperAdminStatus(String superAdminId) async {
+    try {
+      await ApiClient.patch('/companies/super-admins/$superAdminId/toggle-status/', {});
+      await fetchSuperAdmins();
+      return true;
+    } catch (e) {
+      _errorMessage = e.toString();
+      return false;
+    }
+  }
+
+  Future<bool> reassignTenants({required String fromSuperAdminId, required String toSuperAdminId, dynamic companyIds}) async {
+    try {
+      await ApiClient.post('/companies/super-admins/reassign-tenants/', {
+        'from_super_admin_id': fromSuperAdminId,
+        'to_super_admin_id': toSuperAdminId,
+        'company_ids': companyIds ?? 'all',
+      });
+      await fetchSuperAdmins();
+      await fetchCompanies();
+      return true;
+    } catch (e) {
+      _errorMessage = e.toString();
+      return false;
     }
   }
 

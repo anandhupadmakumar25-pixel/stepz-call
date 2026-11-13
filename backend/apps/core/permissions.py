@@ -1,14 +1,18 @@
 from rest_framework import permissions
 
+class IsMasterAdmin(permissions.BasePermission):
+    def has_permission(self, request, view):
+        return bool(request.user and request.user.is_authenticated and request.user.is_active and request.user.is_master_admin)
+
 class IsSuperAdmin(permissions.BasePermission):
     def has_permission(self, request, view):
-        return bool(request.user and request.user.is_authenticated and request.user.is_active and request.user.role == 'SUPER_ADMIN')
+        return bool(request.user and request.user.is_authenticated and request.user.is_active and request.user.is_super_admin)
 
 class IsCompanyAdmin(permissions.BasePermission):
     def has_permission(self, request, view):
         if not (request.user and request.user.is_authenticated and request.user.is_active):
             return False
-        if request.user.role == 'SUPER_ADMIN':
+        if request.user.is_super_admin:
             return True
         if request.user.role == 'COMPANY_ADMIN':
             return bool(request.user.company and request.user.company.status != 'SUSPENDED')
@@ -18,7 +22,7 @@ class IsManager(permissions.BasePermission):
     def has_permission(self, request, view):
         if not (request.user and request.user.is_authenticated and request.user.is_active):
             return False
-        if request.user.role == 'SUPER_ADMIN':
+        if request.user.is_super_admin:
             return True
         if request.user.role == 'COMPANY_ADMIN':
             return bool(request.user.company and request.user.company.status != 'SUSPENDED')
@@ -30,7 +34,7 @@ class IsEmployee(permissions.BasePermission):
     def has_permission(self, request, view):
         if not (request.user and request.user.is_authenticated and request.user.is_active):
             return False
-        if request.user.role == 'SUPER_ADMIN':
+        if request.user.is_super_admin:
             return True
         return bool(request.user.company and request.user.company.status != 'SUSPENDED')
 
@@ -42,7 +46,7 @@ class TenantObjectPermission(permissions.BasePermission):
     def has_object_permission(self, request, view, obj):
         if not request.user or not request.user.is_authenticated:
             return False
-        if request.user.role == 'SUPER_ADMIN':
+        if request.user.is_super_admin:
             return True
         
         obj_company = getattr(obj, 'company', None)

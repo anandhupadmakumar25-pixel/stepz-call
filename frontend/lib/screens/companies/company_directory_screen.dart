@@ -14,6 +14,8 @@ import '../../core/widgets/app_back_button.dart';
 import '../../routes/app_routes.dart';
 import '../../models/company_model.dart';
 import '../../providers/company_provider.dart';
+import '../../providers/auth_provider.dart';
+import '../admin/super_admin_management_dialog.dart';
 import '../../core/widgets/company_logo_view.dart';
 
 class CompanyDirectoryScreen extends StatefulWidget {
@@ -43,6 +45,10 @@ class _CompanyDirectoryScreenState extends State<CompanyDirectoryScreen> {
       final compProv = context.read<CompanyProvider>();
       compProv.fetchCompanies();
       compProv.fetchPlans();
+      final authUser = context.read<AuthProvider>().currentUser;
+      if (authUser?.isRootMasterAdmin == true) {
+        compProv.fetchSuperAdmins();
+      }
     });
   }
 
@@ -1133,6 +1139,8 @@ Login URL: https://app.stepzcrm.com
   @override
   Widget build(BuildContext context) {
     final compProvider = context.watch<CompanyProvider>();
+    final currentUser = context.watch<AuthProvider>().currentUser;
+    final isMasterAdmin = currentUser?.isRootMasterAdmin ?? false;
     final isMobile = ResponsiveLayout.isMobile(context);
 
     return SafeArea(
@@ -1207,14 +1215,77 @@ Login URL: https://app.stepzcrm.com
                     ),
                   ],
                 ),
-                GradientPrimaryButton(
-                  icon: Icons.add_rounded,
-                  text: 'Create Company',
-                  onPressed: _showCreateCompanyDialog,
-                  gradient: AppColors.primaryGradient,
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    if (isMasterAdmin)
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          padding: EdgeInsets.symmetric(horizontal: isMobile ? 10 : 14, vertical: isMobile ? 8 : 10),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          side: const BorderSide(color: Color(0xFF6366F1)),
+                          backgroundColor: const Color(0xFFEEF2FF),
+                        ),
+                        icon: const Icon(Icons.shield_outlined, size: 16, color: Color(0xFF4338CA)),
+                        label: Text(
+                          isMobile ? 'Super Admins' : 'Super Admins (${compProvider.totalSuperAdmins})',
+                          style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFF4338CA)),
+                        ),
+                        onPressed: () {
+                          SuperAdminManagementDialog.show(
+                            context,
+                            onSelectFilter: (selectedId) {
+                              compProvider.setSelectedSuperAdminFilter(selectedId);
+                            },
+                          );
+                        },
+                      ),
+                    GradientPrimaryButton(
+                      icon: Icons.add_rounded,
+                      text: 'Create Company',
+                      onPressed: _showCreateCompanyDialog,
+                      gradient: AppColors.primaryGradient,
+                    ),
+                  ],
                 ),
               ],
             ),
+            if (isMasterAdmin && compProvider.selectedSuperAdminFilter != null) ...[
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEEF2FF),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFC7D2FE)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.filter_alt_rounded, size: 14, color: Color(0xFF4338CA)),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Filtered by Super Admin: ${compProvider.superAdmins.firstWhere((a) => a['id'] == compProvider.selectedSuperAdminFilter, orElse: () => {'full_name': 'Selected Super Admin'})['full_name']}',
+                      style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w700, color: const Color(0xFF4338CA)),
+                    ),
+                    const SizedBox(width: 8),
+                    InkWell(
+                      onTap: () => compProvider.setSelectedSuperAdminFilter(null),
+                      child: Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFC7D2FE),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.close_rounded, size: 12, color: Color(0xFF312E81)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             SizedBox(height: isMobile ? 10 : 18),
 
             // Companies List
@@ -1282,6 +1353,26 @@ Login URL: https://app.stepzcrm.com
                                                         style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, color: const Color(0xFF92400E)),
                                                       ),
                                                     ),
+                                                    if (isMasterAdmin && comp.createdByName.isNotEmpty)
+                                                      Container(
+                                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                        decoration: BoxDecoration(
+                                                          color: const Color(0xFFEFF6FF),
+                                                          borderRadius: BorderRadius.circular(6),
+                                                          border: Border.all(color: const Color(0xFFBFDBFE)),
+                                                        ),
+                                                        child: Row(
+                                                          mainAxisSize: MainAxisSize.min,
+                                                          children: [
+                                                            const Icon(Icons.shield_outlined, size: 10, color: Color(0xFF1D4ED8)),
+                                                            const SizedBox(width: 3),
+                                                            Text(
+                                                              comp.createdByName,
+                                                              style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w700, color: const Color(0xFF1D4ED8)),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      ),
                                                   ],
                                                 ),
                                                 const SizedBox(height: 4),

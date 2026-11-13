@@ -12,9 +12,15 @@ from apps.companies.views import (
     CompanyCustomRuleListCreateView,
     CompanyCustomRuleDetailView,
     CompanyRulePresetLoadView,
+    SuperAdminManagementView,
+    SuperAdminToggleStatusView,
+    ReassignTenantsView,
 )
 
 urlpatterns = [
+    path('super-admins/', SuperAdminManagementView.as_view(), name='super_admin_management'),
+    path('super-admins/<uuid:pk>/toggle-status/', SuperAdminToggleStatusView.as_view(), name='super_admin_toggle_status'),
+    path('super-admins/reassign-tenants/', ReassignTenantsView.as_view(), name='reassign_tenants'),
     path('plans/', PlanListCreateView.as_view(), name='plan_list_create'),
     path('plans/<int:pk>/', PlanDetailView.as_view(), name='plan_detail'),
     path('billing/overview/', PlatformBillingOverviewView.as_view(), name='platform_billing_overview'),
