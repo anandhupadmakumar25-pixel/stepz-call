@@ -24,6 +24,7 @@ class _RenewPlanDialogState extends State<RenewPlanDialog> {
   DateTime? _customExpiryDate;
   String? _selectedPlanId;
   bool _isSubmitting = false;
+  String? _errorMessage;
 
   final List<Map<String, dynamic>> _presets = [
     {
@@ -101,7 +102,17 @@ class _RenewPlanDialogState extends State<RenewPlanDialog> {
   }
 
   Future<void> _submit() async {
-    setState(() => _isSubmitting = true);
+    if (_selectedPresetDays == 0 && _customExpiryDate == null) {
+      setState(() {
+        _errorMessage = 'Please select a custom expiry date from the calendar.';
+      });
+      return;
+    }
+
+    setState(() {
+      _isSubmitting = true;
+      _errorMessage = null;
+    });
     final companyProvider = context.read<CompanyProvider>();
 
     String? customIso;
@@ -118,9 +129,9 @@ class _RenewPlanDialogState extends State<RenewPlanDialog> {
     );
 
     if (!mounted) return;
-    setState(() => _isSubmitting = false);
 
     if (success) {
+      setState(() => _isSubmitting = false);
       Navigator.of(context).pop(true);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -140,25 +151,10 @@ class _RenewPlanDialogState extends State<RenewPlanDialog> {
         ),
       );
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(Icons.error_outline_rounded, color: Colors.white, size: 20),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  companyProvider.errorMessage ?? 'Failed to renew plan. Please try again.',
-                  style: GoogleFonts.inter(fontWeight: FontWeight.w500),
-                ),
-              ),
-            ],
-          ),
-          backgroundColor: AppColors.danger,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        ),
-      );
+      setState(() {
+        _isSubmitting = false;
+        _errorMessage = companyProvider.errorMessage ?? 'Failed to renew plan. Please check inputs and try again.';
+      });
     }
   }
 
@@ -253,6 +249,41 @@ class _RenewPlanDialogState extends State<RenewPlanDialog> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // Error Alert Banner
+                    if (_errorMessage != null) ...[
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 16),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFEF2F2),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFFCA5A5), width: 1.2),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(Icons.error_outline_rounded, color: Color(0xFFDC2626), size: 20),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                _errorMessage!,
+                                style: GoogleFonts.inter(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: const Color(0xFFB91C1C),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            GestureDetector(
+                              onTap: () => setState(() => _errorMessage = null),
+                              child: const Icon(Icons.close_rounded, size: 16, color: Color(0xFF991B1B)),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+
                     // Current Status Card
                     Container(
                       padding: const EdgeInsets.all(14),

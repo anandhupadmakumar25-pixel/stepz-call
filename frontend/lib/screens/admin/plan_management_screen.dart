@@ -9,6 +9,7 @@ import '../../core/widgets/glass/glass_text_field.dart';
 import '../../core/widgets/app_back_button.dart';
 import '../../routes/app_routes.dart';
 import '../../providers/company_provider.dart';
+import '../../models/plan_model.dart';
 
 class PlanManagementScreen extends StatefulWidget {
   const PlanManagementScreen({super.key});
@@ -43,11 +44,14 @@ class _PlanManagementScreenState extends State<PlanManagementScreen> {
     final codeCtrl = TextEditingController();
     String selectedCurrency = 'INR';
     final priceMonthlyCtrl = TextEditingController(text: '999.00');
-    final priceYearlyCtrl = TextEditingController(text: '9990.00');
+    final priceYearlyCtrl = TextEditingController(text: '11988.00');
     final maxUsersCtrl = TextEditingController(text: '10');
     final maxLeadsCtrl = TextEditingController(text: '15000');
     final descCtrl = TextEditingController();
     final Set<String> selectedMenus = {'leads', 'tasks', 'callbacks', 'call_history'};
+    bool isSyncingPrices = false;
+    final formKey = GlobalKey<FormState>();
+    String? localError;
 
     showDialog(
       context: context,
@@ -56,15 +60,7 @@ class _PlanManagementScreenState extends State<PlanManagementScreen> {
         final isMobile = ResponsiveLayout.isMobile(ctx);
         return StatefulBuilder(
           builder: (context, setDlgState) {
-            final currSymbol = selectedCurrency == 'INR'
-                ? '₹'
-                : (selectedCurrency == 'USD'
-                    ? '\$'
-                    : (selectedCurrency == 'EUR'
-                        ? '€'
-                        : (selectedCurrency == 'GBP'
-                            ? '£'
-                            : 'د.إ')));
+            final currSymbol = PlanModel.getSymbolForCurrency(selectedCurrency);
 
             return Dialog(
             backgroundColor: Colors.transparent,
@@ -76,7 +72,10 @@ class _PlanManagementScreenState extends State<PlanManagementScreen> {
                 opacity: 0.95,
                 borderRadius: BorderRadius.circular(24),
                 padding: EdgeInsets.all(isMobile ? 16 : 26),
-                child: SingleChildScrollView(
+                child: Form(
+                  key: formKey,
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
+                  child: SingleChildScrollView(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -113,26 +112,54 @@ class _PlanManagementScreenState extends State<PlanManagementScreen> {
                       ),
                       const SizedBox(height: 16),
 
+                      if (localError != null) ...[
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 14),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFEF2F2),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: const Color(0xFFFCA5A5)),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.error_outline_rounded, color: Color(0xFFDC2626), size: 18),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  localError!,
+                                  style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFFB91C1C)),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+
                       if (isMobile) ...[
                         GlassTextField(
                           label: 'Plan Name *',
                           hintText: 'e.g. Growth Pro',
                           controller: nameCtrl,
+                          validator: (v) => v == null || v.trim().isEmpty ? 'Plan Name is required' : null,
                         ),
                         const SizedBox(height: 12),
                         GlassTextField(
                           label: 'Plan Code / Slug *',
                           hintText: 'growth_pro',
                           controller: codeCtrl,
+                          validator: (v) => v == null || v.trim().isEmpty ? 'Plan Code is required' : null,
                         ),
                       ] else
                         Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Expanded(
                               child: GlassTextField(
                                 label: 'Plan Name *',
                                 hintText: 'e.g. Growth Pro',
                                 controller: nameCtrl,
+                                validator: (v) => v == null || v.trim().isEmpty ? 'Plan Name is required' : null,
                               ),
                             ),
                             const SizedBox(width: 12),
@@ -141,6 +168,7 @@ class _PlanManagementScreenState extends State<PlanManagementScreen> {
                                 label: 'Plan Code / Slug *',
                                 hintText: 'growth_pro',
                                 controller: codeCtrl,
+                                validator: (v) => v == null || v.trim().isEmpty ? 'Plan Code is required' : null,
                               ),
                             ),
                           ],
@@ -175,17 +203,21 @@ class _PlanManagementScreenState extends State<PlanManagementScreen> {
                                   DropdownMenuItem(value: 'EUR', child: Text('EUR (€) - Euro')),
                                   DropdownMenuItem(value: 'GBP', child: Text('GBP (£) - British Pound')),
                                   DropdownMenuItem(value: 'AED', child: Text('AED (د.إ) - UAE Dirham')),
+                                  DropdownMenuItem(value: 'QAR', child: Text('QAR (QR) - Qatari Riyal')),
                                 ],
                                 onChanged: (val) {
                                   if (val != null) {
                                     setDlgState(() {
                                       selectedCurrency = val;
-                                      if (val == 'INR' && (priceMonthlyCtrl.text == '49.00' || priceMonthlyCtrl.text.isEmpty)) {
+                                      if (val == 'INR' && (priceMonthlyCtrl.text == '49.00' || priceMonthlyCtrl.text == '199.00' || priceMonthlyCtrl.text.isEmpty)) {
                                         priceMonthlyCtrl.text = '999.00';
-                                        priceYearlyCtrl.text = '9990.00';
-                                      } else if (val == 'USD' && (priceMonthlyCtrl.text == '999.00' || priceMonthlyCtrl.text.isEmpty)) {
+                                        priceYearlyCtrl.text = '11988.00';
+                                      } else if (val == 'USD' && (priceMonthlyCtrl.text == '999.00' || priceMonthlyCtrl.text == '199.00' || priceMonthlyCtrl.text.isEmpty)) {
                                         priceMonthlyCtrl.text = '49.00';
-                                        priceYearlyCtrl.text = '490.00';
+                                        priceYearlyCtrl.text = '588.00';
+                                      } else if (val == 'QAR' && (priceMonthlyCtrl.text == '999.00' || priceMonthlyCtrl.text == '49.00' || priceMonthlyCtrl.text.isEmpty)) {
+                                        priceMonthlyCtrl.text = '199.00';
+                                        priceYearlyCtrl.text = '2388.00';
                                       }
                                     });
                                   }
@@ -202,18 +234,48 @@ class _PlanManagementScreenState extends State<PlanManagementScreen> {
                           Expanded(
                             child: GlassTextField(
                               label: 'Monthly ($currSymbol)*',
-                              hintText: selectedCurrency == 'INR' ? '999.00' : '49.00',
-                              keyboardType: TextInputType.number,
+                              hintText: selectedCurrency == 'INR' ? '999.00' : (selectedCurrency == 'QAR' ? '199.00' : '49.00'),
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
                               controller: priceMonthlyCtrl,
+                              onChanged: (val) {
+                                if (isSyncingPrices) return;
+                                isSyncingPrices = true;
+                                final trimmed = val.trim();
+                                if (trimmed.isEmpty) {
+                                  priceYearlyCtrl.text = '';
+                                } else {
+                                  final m = double.tryParse(trimmed);
+                                  if (m != null) {
+                                    final y = m * 12;
+                                    priceYearlyCtrl.text = y % 1 == 0 ? y.toInt().toString() : y.toStringAsFixed(2);
+                                  }
+                                }
+                                isSyncingPrices = false;
+                              },
                             ),
                           ),
                           const SizedBox(width: 10),
                           Expanded(
                             child: GlassTextField(
                               label: 'Yearly ($currSymbol)*',
-                              hintText: selectedCurrency == 'INR' ? '9990.00' : '490.00',
-                              keyboardType: TextInputType.number,
+                              hintText: selectedCurrency == 'INR' ? '11988.00' : (selectedCurrency == 'QAR' ? '2388.00' : '588.00'),
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
                               controller: priceYearlyCtrl,
+                              onChanged: (val) {
+                                if (isSyncingPrices) return;
+                                isSyncingPrices = true;
+                                final trimmed = val.trim();
+                                if (trimmed.isEmpty) {
+                                  priceMonthlyCtrl.text = '';
+                                } else {
+                                  final y = double.tryParse(trimmed);
+                                  if (y != null && y > 0) {
+                                    final m = y / 12;
+                                    priceMonthlyCtrl.text = m % 1 == 0 ? m.toInt().toString() : m.toStringAsFixed(2);
+                                  }
+                                }
+                                isSyncingPrices = false;
+                              },
                             ),
                           ),
                         ],
@@ -326,14 +388,15 @@ class _PlanManagementScreenState extends State<PlanManagementScreen> {
                               text: 'Create Plan',
                               icon: Icons.check_circle_rounded,
                               onPressed: () async {
-                                final name = nameCtrl.text.trim();
-                                final code = codeCtrl.text.trim().toLowerCase().replaceAll(' ', '_');
-                                if (name.isEmpty || code.isEmpty) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('Please enter Plan Name and Code.'), backgroundColor: AppColors.danger),
-                                  );
+                                if (!formKey.currentState!.validate()) {
+                                  setDlgState(() => localError = 'Please fix the highlighted errors before submitting.');
                                   return;
                                 }
+
+                                final name = nameCtrl.text.trim();
+                                final code = codeCtrl.text.trim().toLowerCase().replaceAll(' ', '_');
+
+                                setDlgState(() => localError = null);
                                 final messenger = ScaffoldMessenger.of(context);
                                 final nav = Navigator.of(ctx);
                                 final success = await context.read<CompanyProvider>().createPlan({
@@ -352,6 +415,10 @@ class _PlanManagementScreenState extends State<PlanManagementScreen> {
                                   messenger.showSnackBar(
                                     SnackBar(content: Text('Plan "$name" created successfully!'), backgroundColor: AppColors.success),
                                   );
+                                } else if (mounted) {
+                                  setDlgState(() {
+                                    localError = context.read<CompanyProvider>().errorMessage ?? 'Failed to create plan. Please try again.';
+                                  });
                                 }
                               },
                             ),
@@ -363,7 +430,8 @@ class _PlanManagementScreenState extends State<PlanManagementScreen> {
                 ),
               ),
             ),
-          );
+          ),
+        );
           },
         );
       },

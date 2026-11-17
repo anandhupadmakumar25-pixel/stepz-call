@@ -263,19 +263,19 @@ class LeadImportService:
         mapping = {}
         for h in headers:
             lh = h.lower().replace('_', '').replace(' ', '')
-            if 'phone' in lh or 'mobile' in lh or 'contact' in lh or 'cell' in lh:
+            if 'phone' in lh or 'mobile' in lh or 'contact' in lh or 'cell' in lh or 'tel' in lh or 'num' in lh:
                 if 'phone' not in mapping:
                     mapping['phone'] = h
-            elif 'name' in lh or 'customer' in lh or 'client' in lh:
+            elif 'name' in lh or 'customer' in lh or 'client' in lh or 'title' in lh or 'lead' in lh or 'person' in lh:
                 if 'name' not in mapping:
                     mapping['name'] = h
             elif 'email' in lh or 'mail' in lh:
                 if 'email' not in mapping:
                     mapping['email'] = h
-            elif 'city' in lh or 'town' in lh:
+            elif 'city' in lh or 'town' in lh or 'district' in lh or 'location' in lh:
                 if 'city' not in mapping:
                     mapping['city'] = h
-            elif 'state' in lh or 'province' in lh:
+            elif 'state' in lh or 'province' in lh or 'region' in lh:
                 if 'state' not in mapping:
                     mapping['state'] = h
 

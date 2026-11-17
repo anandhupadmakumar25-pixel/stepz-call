@@ -1,23 +1,31 @@
 class QuotationItemModel {
   final String rowType; // 'ITEM' or 'SECTION_TITLE'
   final String title; // Section Title header
+  final String itemCode; // Item Code (e.g. from PDF)
   final String description;
   final Map<String, String> customFields; // { columnTitle: value }
   final double quantity;
   final double unitPrice;
+  final double cst; // Cost price per unit (internal CST column)
   final double taxPercent;
   final double discountPercent;
-  final double total;
+  final double total; // Qty * UnitPrice
 
   bool get isSectionTitle => rowType == 'SECTION_TITLE';
+  double get costPrice => cst;
+  double get costSum => quantity * cst; // QT * CST
+  double get grossMargin => total - costSum;
+  double get marginPercent => total > 0 ? (grossMargin / total) * 100 : 0.0;
 
   QuotationItemModel({
     this.rowType = 'ITEM',
     this.title = '',
+    this.itemCode = '',
     required this.description,
     this.customFields = const {},
     this.quantity = 1,
     this.unitPrice = 0.0,
+    this.cst = 0.0,
     this.taxPercent = 0.0,
     this.discountPercent = 0.0,
     this.total = 0.0,
@@ -42,10 +50,12 @@ class QuotationItemModel {
     return QuotationItemModel(
       rowType: rawType,
       title: json['title']?.toString() ?? '',
-      description: json['description']?.toString() ?? '',
+      itemCode: json['item_code']?.toString() ?? json['itemCode']?.toString() ?? '',
+      description: json['description']?.toString() ?? json['name']?.toString() ?? '',
       customFields: parseCustomFields(json['custom_fields'] ?? json['customFields']),
-      quantity: parseNum(json['quantity']),
-      unitPrice: parseNum(json['unit_price'] ?? json['unitPrice']),
+      quantity: parseNum(json['quantity'] ?? json['qty']),
+      unitPrice: parseNum(json['unit_price'] ?? json['unitPrice'] ?? json['price']),
+      cst: parseNum(json['cst'] ?? json['cost_price'] ?? json['costPrice']),
       taxPercent: parseNum(json['tax_percent'] ?? json['taxPercent']),
       discountPercent: parseNum(json['discount_percent'] ?? json['discountPercent']),
       total: parseNum(json['total']),
@@ -56,10 +66,12 @@ class QuotationItemModel {
     return {
       'row_type': rowType,
       'title': title,
+      'item_code': itemCode,
       'description': description,
       'custom_fields': customFields,
       'quantity': quantity,
       'unit_price': unitPrice,
+      'cst': cst,
       'tax_percent': taxPercent,
       'discount_percent': discountPercent,
       'total': total,
@@ -76,6 +88,16 @@ class QuotationModel {
   final String customerPhone;
   final String customerEmail;
   final String customerAddress;
+
+  // Professional metadata from official PDF format
+  final String clientCode;
+  final String salesRepName;
+  final String incoterms;
+  final String location;
+  final String contactPerson;
+  final String crNumber;
+  final String currency;
+
   final String? createdBy;
   final String createdByName;
   final String date;
@@ -89,6 +111,12 @@ class QuotationModel {
   final double taxAmount;
   final double discountAmount;
   final double grandTotal;
+
+  // Cost and margin analysis
+  final double totalCost;
+  final double grossMargin;
+  final bool hideCostInPdf;
+
   final String notes;
   final String termsAndConditions;
   final String status;
@@ -104,6 +132,13 @@ class QuotationModel {
     required this.customerPhone,
     this.customerEmail = '',
     this.customerAddress = '',
+    this.clientCode = '',
+    this.salesRepName = '',
+    this.incoterms = 'EX WORKSHOP DOHA',
+    this.location = '',
+    this.contactPerson = '',
+    this.crNumber = '',
+    this.currency = 'INR',
     this.createdBy,
     this.createdByName = '',
     required this.date,
@@ -117,6 +152,9 @@ class QuotationModel {
     this.taxAmount = 0.0,
     this.discountAmount = 0.0,
     this.grandTotal = 0.0,
+    this.totalCost = 0.0,
+    this.grossMargin = 0.0,
+    this.hideCostInPdf = true,
     this.notes = '',
     this.termsAndConditions = '',
     this.status = 'DRAFT',
@@ -133,6 +171,13 @@ class QuotationModel {
     String? customerPhone,
     String? customerEmail,
     String? customerAddress,
+    String? clientCode,
+    String? salesRepName,
+    String? incoterms,
+    String? location,
+    String? contactPerson,
+    String? crNumber,
+    String? currency,
     String? createdBy,
     String? createdByName,
     String? date,
@@ -146,6 +191,9 @@ class QuotationModel {
     double? taxAmount,
     double? discountAmount,
     double? grandTotal,
+    double? totalCost,
+    double? grossMargin,
+    bool? hideCostInPdf,
     String? notes,
     String? termsAndConditions,
     String? status,
@@ -161,6 +209,13 @@ class QuotationModel {
       customerPhone: customerPhone ?? this.customerPhone,
       customerEmail: customerEmail ?? this.customerEmail,
       customerAddress: customerAddress ?? this.customerAddress,
+      clientCode: clientCode ?? this.clientCode,
+      salesRepName: salesRepName ?? this.salesRepName,
+      incoterms: incoterms ?? this.incoterms,
+      location: location ?? this.location,
+      contactPerson: contactPerson ?? this.contactPerson,
+      crNumber: crNumber ?? this.crNumber,
+      currency: currency ?? this.currency,
       createdBy: createdBy ?? this.createdBy,
       createdByName: createdByName ?? this.createdByName,
       date: date ?? this.date,
@@ -174,6 +229,9 @@ class QuotationModel {
       taxAmount: taxAmount ?? this.taxAmount,
       discountAmount: discountAmount ?? this.discountAmount,
       grandTotal: grandTotal ?? this.grandTotal,
+      totalCost: totalCost ?? this.totalCost,
+      grossMargin: grossMargin ?? this.grossMargin,
+      hideCostInPdf: hideCostInPdf ?? this.hideCostInPdf,
       notes: notes ?? this.notes,
       termsAndConditions: termsAndConditions ?? this.termsAndConditions,
       status: status ?? this.status,
@@ -222,31 +280,41 @@ class QuotationModel {
 
     return QuotationModel(
       id: json['id']?.toString() ?? '',
-      quotationNumber: json['quotation_number']?.toString() ?? '',
-      leadId: json['lead']?.toString(),
-      leadName: json['lead_name']?.toString() ?? '',
-      customerName: json['customer_name']?.toString() ?? '',
-      customerPhone: json['customer_phone']?.toString() ?? '',
-      customerEmail: json['customer_email']?.toString() ?? '',
-      customerAddress: json['customer_address']?.toString() ?? '',
-      createdBy: json['created_by']?.toString(),
-      createdByName: json['created_by_name']?.toString() ?? '',
+      quotationNumber: json['quotation_number']?.toString() ?? json['quotationNumber']?.toString() ?? '',
+      leadId: json['lead']?.toString() ?? json['leadId']?.toString(),
+      leadName: json['lead_name']?.toString() ?? json['leadName']?.toString() ?? '',
+      customerName: json['customer_name']?.toString() ?? json['customerName']?.toString() ?? '',
+      customerPhone: json['customer_phone']?.toString() ?? json['customerPhone']?.toString() ?? '',
+      customerEmail: json['customer_email']?.toString() ?? json['customerEmail']?.toString() ?? '',
+      customerAddress: json['customer_address']?.toString() ?? json['customerAddress']?.toString() ?? '',
+      clientCode: json['client_code']?.toString() ?? json['clientCode']?.toString() ?? '',
+      salesRepName: json['sales_rep_name']?.toString() ?? json['salesRepName']?.toString() ?? '',
+      incoterms: json['incoterms']?.toString() ?? 'EX WORKSHOP DOHA',
+      location: json['location']?.toString() ?? '',
+      contactPerson: json['contact_person']?.toString() ?? json['contactPerson']?.toString() ?? '',
+      crNumber: json['cr_number']?.toString() ?? json['crNumber']?.toString() ?? '',
+      currency: json['currency']?.toString() ?? 'INR',
+      createdBy: json['created_by']?.toString() ?? json['createdBy']?.toString(),
+      createdByName: json['created_by_name']?.toString() ?? json['createdByName']?.toString() ?? '',
       date: json['date']?.toString() ?? '',
-      validUntil: json['valid_until']?.toString(),
+      validUntil: json['valid_until']?.toString() ?? json['validUntil']?.toString(),
       customColumns: customCols,
       showQty: showQty,
       showPrice: showPrice,
       showTax: showTax,
       items: itemsList,
       subtotal: parseNum(json['subtotal']),
-      taxAmount: parseNum(json['tax_amount']),
-      discountAmount: parseNum(json['discount_amount']),
-      grandTotal: parseNum(json['grand_total']),
+      taxAmount: parseNum(json['tax_amount'] ?? json['taxAmount']),
+      discountAmount: parseNum(json['discount_amount'] ?? json['discountAmount']),
+      grandTotal: parseNum(json['grand_total'] ?? json['grandTotal']),
+      totalCost: parseNum(json['total_cost'] ?? json['totalCost']),
+      grossMargin: parseNum(json['gross_margin'] ?? json['grossMargin']),
+      hideCostInPdf: json['hide_cost_in_pdf'] == null ? true : (json['hide_cost_in_pdf'] == true),
       notes: json['notes']?.toString() ?? '',
-      termsAndConditions: json['terms_and_conditions']?.toString() ?? '',
+      termsAndConditions: json['terms_and_conditions']?.toString() ?? json['termsAndConditions']?.toString() ?? '',
       status: json['status']?.toString() ?? 'DRAFT',
-      createdAt: json['created_at']?.toString() ?? '',
-      updatedAt: json['updated_at']?.toString() ?? '',
+      createdAt: json['created_at']?.toString() ?? json['createdAt']?.toString() ?? '',
+      updatedAt: json['updated_at']?.toString() ?? json['updatedAt']?.toString() ?? '',
     );
   }
 
@@ -257,6 +325,13 @@ class QuotationModel {
       'customer_phone': customerPhone,
       'customer_email': customerEmail,
       'customer_address': customerAddress,
+      'client_code': clientCode,
+      'sales_rep_name': salesRepName,
+      'incoterms': incoterms,
+      'location': location,
+      'contact_person': contactPerson,
+      'cr_number': crNumber,
+      'currency': currency,
       if (validUntil != null) 'valid_until': validUntil,
       'custom_columns': {
         'columns': customColumns,
@@ -269,6 +344,9 @@ class QuotationModel {
       'tax_amount': taxAmount,
       'discount_amount': discountAmount,
       'grand_total': grandTotal,
+      'total_cost': totalCost,
+      'gross_margin': grossMargin,
+      'hide_cost_in_pdf': hideCostInPdf,
       'notes': notes,
       'terms_and_conditions': termsAndConditions,
       'status': status,

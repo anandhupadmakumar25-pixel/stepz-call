@@ -44,6 +44,7 @@ class _EditCompanyDialogState extends State<EditCompanyDialog> {
 
   String _logoData = '';
   bool _isSaving = false;
+  String? _errorMessage;
 
   @override
   void initState() {
@@ -92,9 +93,9 @@ class _EditCompanyDialogState extends State<EditCompanyDialog> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error picking logo: $e'), backgroundColor: const Color(0xFFEF4444)),
-        );
+        setState(() {
+          _errorMessage = 'Error picking logo: $e';
+        });
       }
     }
   }
@@ -149,9 +150,15 @@ class _EditCompanyDialogState extends State<EditCompanyDialog> {
   }
 
   Future<void> _handleSave() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) {
+      setState(() => _errorMessage = 'Please fix the highlighted errors before saving.');
+      return;
+    }
 
-    setState(() => _isSaving = true);
+    setState(() {
+      _isSaving = true;
+      _errorMessage = null;
+    });
     final compProv = context.read<CompanyProvider>();
     final authProv = context.read<AuthProvider>();
 
@@ -190,13 +197,10 @@ class _EditCompanyDialogState extends State<EditCompanyDialog> {
         );
       }
     } else {
-      setState(() => _isSaving = false);
-      if (mounted) {
-        final err = compProv.errorMessage ?? 'Failed to update company details.';
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(err), backgroundColor: const Color(0xFFEF4444)),
-        );
-      }
+      setState(() {
+        _isSaving = false;
+        _errorMessage = compProv.errorMessage ?? 'Failed to update company details. Please try again.';
+      });
     }
   }
 
@@ -218,6 +222,7 @@ class _EditCompanyDialogState extends State<EditCompanyDialog> {
           child: SingleChildScrollView(
             child: Form(
               key: _formKey,
+              autovalidateMode: AutovalidateMode.onUserInteraction,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -247,7 +252,7 @@ class _EditCompanyDialogState extends State<EditCompanyDialog> {
                               ),
                             ),
                             Text(
-                              'Set brand logo, address, and GSTIN for all official bills & quotations',
+                              'Set brand logo, address, and website for all official bills & quotations',
                               style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
                             ),
                           ],
@@ -261,7 +266,42 @@ class _EditCompanyDialogState extends State<EditCompanyDialog> {
                   ),
                   const SizedBox(height: 20),
                   const Divider(color: Color(0xFFE2E8F0), height: 1),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 16),
+
+                  // In-Dialog Error Alert Banner
+                  if (_errorMessage != null) ...[
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF2F2),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFFCA5A5), width: 1.2),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(Icons.error_outline_rounded, color: Color(0xFFDC2626), size: 20),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              _errorMessage!,
+                              style: GoogleFonts.inter(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w600,
+                                color: const Color(0xFFB91C1C),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          GestureDetector(
+                            onTap: () => setState(() => _errorMessage = null),
+                            child: const Icon(Icons.close_rounded, size: 16, color: Color(0xFF991B1B)),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
 
                   // Brand Logo Section
                   Container(
@@ -420,45 +460,19 @@ class _EditCompanyDialogState extends State<EditCompanyDialog> {
                   ),
                   const SizedBox(height: 14),
 
-                  Row(
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('GSTIN / Tax Identification No.', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A))),
-                            const SizedBox(height: 6),
-                            TextFormField(
-                              controller: _gstinController,
-                              style: GoogleFonts.robotoMono(fontSize: 13, fontWeight: FontWeight.w600),
-                              decoration: InputDecoration(
-                                hintText: 'e.g. 32AAAAA0000A1Z5',
-                                prefixIcon: const Icon(Icons.badge_outlined, size: 18),
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Official Website', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A))),
-                            const SizedBox(height: 6),
-                            TextFormField(
-                              controller: _websiteController,
-                              style: GoogleFonts.inter(fontSize: 13),
-                              decoration: InputDecoration(
-                                hintText: 'https://company.com',
-                                prefixIcon: const Icon(Icons.language_rounded, size: 18),
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                              ),
-                            ),
-                          ],
+                      Text('Official Website', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A))),
+                      const SizedBox(height: 6),
+                      TextFormField(
+                        controller: _websiteController,
+                        style: GoogleFonts.inter(fontSize: 13),
+                        decoration: InputDecoration(
+                          hintText: 'https://company.com',
+                          prefixIcon: const Icon(Icons.language_rounded, size: 18),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                         ),
                       ),
                     ],

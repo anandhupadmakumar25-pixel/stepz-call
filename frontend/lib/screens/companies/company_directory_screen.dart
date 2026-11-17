@@ -64,6 +64,7 @@ class _CompanyDirectoryScreenState extends State<CompanyDirectoryScreen> {
   void _showCredentialsModal({
     required String companyName,
     required String adminEmail,
+    String? adminUsername,
     required String tempPassword,
     required String planName,
     required List<String> allowedMenus,
@@ -167,6 +168,32 @@ class _CompanyDirectoryScreenState extends State<CompanyDirectoryScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            if (adminUsername != null && adminUsername.isNotEmpty) ...[
+                              Text('LOGIN USERNAME', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, color: const Color(0xFF94A3B8))),
+                              const SizedBox(height: 3),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      adminUsername,
+                                      style: GoogleFonts.inter(fontSize: 13.5, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.copy_rounded, size: 16, color: Color(0xFF2563EB)),
+                                    onPressed: () {
+                                      Clipboard.setData(ClipboardData(text: adminUsername));
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(content: Text('Admin username copied to clipboard!'), duration: Duration(seconds: 1)),
+                                      );
+                                    },
+                                  ),
+                                ],
+                              ),
+                              const Divider(color: Color(0xFFE2E8F0), height: 14),
+                            ],
+
                             Text('LOGIN EMAIL', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, color: const Color(0xFF94A3B8))),
                             const SizedBox(height: 3),
                             Row(
@@ -291,7 +318,7 @@ class _CompanyDirectoryScreenState extends State<CompanyDirectoryScreen> {
                               onPressed: () {
                                 final credentialsText = '''--- Stepz CRM Tenant Credentials ---
 Company: $companyName
-Admin Email: $adminEmail
+${adminUsername != null && adminUsername.isNotEmpty ? "Admin Username: $adminUsername\n" : ""}Admin Email: $adminEmail
 Temporary Password: $tempPassword
 Plan: $planName
 Permitted Modules: ${allowedMenus.join(', ')}
@@ -332,16 +359,18 @@ Login URL: https://app.stepzcrm.com
 
   void _showCreateCompanyDialog() {
     final compProv = context.read<CompanyProvider>();
+    final formKey = GlobalKey<FormState>();
     final compNameController = TextEditingController();
     final adminEmailController = TextEditingController();
     final phoneController = TextEditingController();
     final subdomainController = TextEditingController();
     final adminNameController = TextEditingController();
     final addressController = TextEditingController();
-    final gstinController = TextEditingController();
+    final adminUsernameController = TextEditingController();
     final websiteController = TextEditingController();
     final tempPasswordController = TextEditingController(text: _generateTempPassword());
     String logoData = '';
+    String? localError;
 
     String selectedPlanId = compProv.plans.isNotEmpty ? compProv.plans.first.code : 'starter';
     final Set<String> selectedMenus = {'branches', 'employees', 'leads', 'tasks', 'recordings', 'callbacks', 'call_history', 'analytics'};
@@ -363,7 +392,10 @@ Login URL: https://app.stepzcrm.com
                 opacity: 0.96,
                 borderRadius: BorderRadius.circular(24),
                 padding: EdgeInsets.all(isMobile ? 16 : 28),
-                child: SingleChildScrollView(
+                child: Form(
+                  key: formKey,
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
+                  child: SingleChildScrollView(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -397,35 +429,151 @@ Login URL: https://app.stepzcrm.com
                       ),
                       const SizedBox(height: 16),
 
+                      // In-Dialog Error Alert Banner
+                      if (localError != null) ...[
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 16),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFEF2F2),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFFFCA5A5), width: 1.2),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Icon(Icons.error_outline_rounded, color: Color(0xFFDC2626), size: 20),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  localError!,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: const Color(0xFFB91C1C),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              GestureDetector(
+                                onTap: () => setDlgState(() => localError = null),
+                                child: const Icon(Icons.close_rounded, size: 16, color: Color(0xFF991B1B)),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+
                       // Basic Info
                       if (isMobile) ...[
-                        GlassTextField(label: 'Company Name *', hintText: 'e.g. Apex Global', controller: compNameController),
+                        GlassTextField(
+                          label: 'Company Name *',
+                          hintText: 'e.g. Apex Global',
+                          controller: compNameController,
+                          validator: (val) => val == null || val.trim().isEmpty ? 'Company Name is required' : null,
+                        ),
                         const SizedBox(height: 12),
                         GlassTextField(label: 'Subdomain / Slug', hintText: 'apex', controller: subdomainController),
                       ] else
                         Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Expanded(child: GlassTextField(label: 'Company Name *', hintText: 'e.g. Apex Global', controller: compNameController)),
+                            Expanded(
+                              child: GlassTextField(
+                                label: 'Company Name *',
+                                hintText: 'e.g. Apex Global',
+                                controller: compNameController,
+                                validator: (val) => val == null || val.trim().isEmpty ? 'Company Name is required' : null,
+                              ),
+                            ),
                             const SizedBox(width: 12),
                             Expanded(child: GlassTextField(label: 'Subdomain / Slug', hintText: 'apex', controller: subdomainController)),
                           ],
                         ),
                       const SizedBox(height: 12),
 
+                      // Admin Username & Email
                       if (isMobile) ...[
-                        GlassTextField(label: 'Admin Email Address *', hintText: 'admin@company.com', controller: adminEmailController),
+                        GlassTextField(
+                          label: 'Admin Username',
+                          hintText: 'e.g. apex_admin',
+                          controller: adminUsernameController,
+                          validator: (val) {
+                            if (val != null && val.trim().isNotEmpty) {
+                              if (val.trim().length < 3) return 'Username must be at least 3 characters';
+                              if (!RegExp(r'^[a-zA-Z0-9_.-]+$').hasMatch(val.trim())) {
+                                return 'Letters, numbers, underscores only';
+                              }
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        GlassTextField(
+                          label: 'Admin Email Address *',
+                          hintText: 'admin@company.com',
+                          controller: adminEmailController,
+                          keyboardType: TextInputType.emailAddress,
+                          validator: (val) {
+                            if (val == null || val.trim().isEmpty) return 'Admin Email is required';
+                            if (!RegExp(r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$').hasMatch(val.trim())) {
+                              return 'Please enter a valid email address';
+                            }
+                            return null;
+                          },
+                        ),
                         const SizedBox(height: 12),
                         GlassTextField(label: 'Admin Full Name', hintText: 'John Doe', controller: adminNameController),
-                      ] else
+                        const SizedBox(height: 12),
+                        GlassTextField(label: 'Contact Phone', hintText: '+91 9876543210', controller: phoneController),
+                      ] else ...[
                         Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Expanded(child: GlassTextField(label: 'Admin Email Address *', hintText: 'admin@company.com', controller: adminEmailController)),
+                            Expanded(
+                              child: GlassTextField(
+                                label: 'Admin Username',
+                                hintText: 'e.g. apex_admin',
+                                controller: adminUsernameController,
+                                validator: (val) {
+                                  if (val != null && val.trim().isNotEmpty) {
+                                    if (val.trim().length < 3) return 'Username must be at least 3 characters';
+                                    if (!RegExp(r'^[a-zA-Z0-9_.-]+$').hasMatch(val.trim())) {
+                                      return 'Letters, numbers, underscores only';
+                                    }
+                                  }
+                                  return null;
+                                },
+                              ),
+                            ),
                             const SizedBox(width: 12),
-                            Expanded(child: GlassTextField(label: 'Admin Full Name', hintText: 'John Doe', controller: adminNameController)),
+                            Expanded(
+                              child: GlassTextField(
+                                label: 'Admin Email Address *',
+                                hintText: 'admin@company.com',
+                                controller: adminEmailController,
+                                keyboardType: TextInputType.emailAddress,
+                                validator: (val) {
+                                  if (val == null || val.trim().isEmpty) return 'Admin Email is required';
+                                  if (!RegExp(r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$').hasMatch(val.trim())) {
+                                    return 'Please enter a valid email address';
+                                  }
+                                  return null;
+                                },
+                              ),
+                            ),
                           ],
                         ),
-                      const SizedBox(height: 12),
-                      GlassTextField(label: 'Contact Phone', hintText: '+91 9876543210', controller: phoneController),
+                        const SizedBox(height: 12),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(child: GlassTextField(label: 'Admin Full Name', hintText: 'John Doe', controller: adminNameController)),
+                            const SizedBox(width: 12),
+                            Expanded(child: GlassTextField(label: 'Contact Phone', hintText: '+91 9876543210', controller: phoneController)),
+                          ],
+                        ),
+                      ],
                       const SizedBox(height: 14),
 
                       // Company Logo Image Picker
@@ -492,18 +640,7 @@ Login URL: https://app.stepzcrm.com
                       ),
                       const SizedBox(height: 12),
 
-                      if (isMobile) ...[
-                        GlassTextField(label: 'GSTIN / Tax ID', hintText: '32AAAAA0000A1Z5', controller: gstinController),
-                        const SizedBox(height: 12),
-                        GlassTextField(label: 'Website', hintText: 'https://company.com', controller: websiteController),
-                      ] else
-                        Row(
-                          children: [
-                            Expanded(child: GlassTextField(label: 'GSTIN / Tax ID', hintText: '32AAAAA0000A1Z5', controller: gstinController)),
-                            const SizedBox(width: 12),
-                            Expanded(child: GlassTextField(label: 'Website', hintText: 'https://company.com', controller: websiteController)),
-                          ],
-                        ),
+                      GlassTextField(label: 'Official Website', hintText: 'https://company.com', controller: websiteController),
                       const SizedBox(height: 12),
                       GlassTextField(label: 'Registered Office Address', hintText: 'Full business address for invoice header...', controller: addressController, maxLines: 2),
                       const SizedBox(height: 14),
@@ -517,6 +654,7 @@ Login URL: https://app.stepzcrm.com
                               label: 'Temporary Password (Auto-Generated) *',
                               hintText: '••••••••',
                               controller: tempPasswordController,
+                              validator: (val) => val == null || val.trim().length < 6 ? 'Password must be at least 6 characters' : null,
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -674,32 +812,33 @@ Login URL: https://app.stepzcrm.com
                               onPressed: isSubmitting
                                   ? null
                                   : () async {
-                                      final compName = compNameController.text.trim();
-                                      final adminEmail = adminEmailController.text.trim();
-                                      final adminPass = tempPasswordController.text.trim();
-
-                                      final messenger = ScaffoldMessenger.of(context);
-                                      if (compName.isEmpty || adminEmail.isEmpty || adminPass.isEmpty) {
-                                        messenger.showSnackBar(
-                                          const SnackBar(content: Text('Please fill Company Name, Admin Email, and Temporary Password.'), backgroundColor: AppColors.danger),
-                                        );
+                                      if (!formKey.currentState!.validate()) {
+                                        setDlgState(() => localError = 'Please fix the highlighted errors before submitting.');
                                         return;
                                       }
 
-                                      setDlgState(() => isSubmitting = true);
+                                      final compName = compNameController.text.trim();
+                                      final adminEmail = adminEmailController.text.trim();
+                                      final adminUsername = adminUsernameController.text.trim();
+                                      final adminPass = tempPasswordController.text.trim();
+
+                                      setDlgState(() {
+                                        isSubmitting = true;
+                                        localError = null;
+                                      });
                                       final nav = Navigator.of(ctx);
                                       final companyProvider = context.read<CompanyProvider>();
 
                                       final result = await companyProvider.createCompanyWithCredentials({
                                         'name': compName,
                                         'admin_email': adminEmail,
+                                        if (adminUsername.isNotEmpty) 'admin_username': adminUsername,
                                         'admin_password': adminPass,
                                         'admin_first_name': adminNameController.text.trim().isNotEmpty ? adminNameController.text.trim() : 'Admin',
                                         if (phoneController.text.trim().isNotEmpty) 'contact_phone': phoneController.text.trim(),
                                         if (subdomainController.text.trim().isNotEmpty) 'subdomain': subdomainController.text.trim(),
                                         if (logoData.trim().isNotEmpty) 'logo': logoData.trim(),
                                         if (addressController.text.trim().isNotEmpty) 'address': addressController.text.trim(),
-                                        if (gstinController.text.trim().isNotEmpty) 'gstin': gstinController.text.trim(),
                                         if (websiteController.text.trim().isNotEmpty) 'website': websiteController.text.trim(),
                                         'plan_id': selectedPlanId,
                                         'allowed_menus': selectedMenus.toList(),
@@ -712,20 +851,16 @@ Login URL: https://app.stepzcrm.com
                                         _showCredentialsModal(
                                           companyName: company.name,
                                           adminEmail: result['admin_email'] ?? adminEmail,
+                                          adminUsername: result['admin_username'] ?? (adminUsername.isNotEmpty ? adminUsername : null),
                                           tempPassword: result['temp_password'] ?? adminPass,
                                           planName: plan.name,
                                           allowedMenus: selectedMenus.toList(),
                                         );
                                       } else if (mounted) {
-                                        setDlgState(() => isSubmitting = false);
-                                        final err = companyProvider.errorMessage ?? 'Failed to provision company. Please check input values.';
-                                        messenger.showSnackBar(
-                                          SnackBar(
-                                            content: Text(err),
-                                            backgroundColor: AppColors.danger,
-                                            duration: const Duration(seconds: 4),
-                                          ),
-                                        );
+                                        setDlgState(() {
+                                          isSubmitting = false;
+                                          localError = companyProvider.errorMessage ?? 'Failed to provision company. Please check input values.';
+                                        });
                                       }
                                     },
                             ),
@@ -738,9 +873,10 @@ Login URL: https://app.stepzcrm.com
               ),
             ),
           ),
-        );
-      },
-    );
+        ),
+      );
+    },
+  );
   }
 
   void _showPermissionsDialog(CompanyModel company) {
@@ -915,86 +1051,127 @@ Login URL: https://app.stepzcrm.com
   }
 
   void _showResetPasswordDialog(CompanyModel company) {
+    String? localError;
+    bool isSubmitting = false;
+
     showDialog(
       context: context,
       barrierColor: Colors.black.withValues(alpha: 0.7),
       builder: (ctx) {
         final isMobile = ResponsiveLayout.isMobile(ctx);
-        return Dialog(
-          backgroundColor: Colors.transparent,
-          insetPadding: EdgeInsets.symmetric(horizontal: isMobile ? 14 : 20, vertical: 20),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 440),
-            child: GlassCard(
-              blur: 24,
-              opacity: 0.96,
-              borderRadius: BorderRadius.circular(20),
-              padding: EdgeInsets.all(isMobile ? 18 : 24),
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFFEF3C7),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: const Color(0xFFD4AF37)),
-                          ),
-                          child: const Icon(Icons.lock_reset_rounded, color: Color(0xFF92400E), size: 22),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            'Generate New Temp Password',
-                            style: GoogleFonts.inter(fontSize: isMobile ? 15 : 16, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
-                          ),
-                        ),
-                        DialogCloseButton(onPressed: () => Navigator.pop(ctx)),
-                      ],
-                    ),
-                    const SizedBox(height: 14),
-                    Text(
-                      'This will generate a fresh secure temporary password for the admin of "${company.name}" (${company.adminEmail}).',
-                      style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF64748B)),
-                    ),
-                    Container(
-                      margin: const EdgeInsets.only(top: 20),
-                      padding: const EdgeInsets.only(top: 14),
-                      decoration: const BoxDecoration(
-                        border: Border(top: BorderSide(color: Color(0x33D4AF37), width: 1.0)),
-                      ),
-                      child: Wrap(
-                        alignment: WrapAlignment.end,
-                        spacing: 10,
-                        runSpacing: 8,
+        return StatefulBuilder(
+          builder: (context, setDlgState) => Dialog(
+            backgroundColor: Colors.transparent,
+            insetPadding: EdgeInsets.symmetric(horizontal: isMobile ? 14 : 20, vertical: 20),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 440),
+              child: GlassCard(
+                blur: 24,
+                opacity: 0.96,
+                borderRadius: BorderRadius.circular(20),
+                padding: EdgeInsets.all(isMobile ? 18 : 24),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
                         children: [
-                          GlassSecondaryButton(text: 'Cancel', onPressed: () => Navigator.pop(ctx)),
-                          GradientPrimaryButton(
-                            text: 'Generate Password',
-                            icon: Icons.key_rounded,
-                            onPressed: () async {
-                              final nav = Navigator.of(ctx);
-                              final res = await context.read<CompanyProvider>().resetCompanyAdminPassword(company.id);
-                              if (res != null && mounted) {
-                                nav.pop();
-                                _showCredentialsModal(
-                                  companyName: company.name,
-                                  adminEmail: res['admin_email'] ?? company.adminEmail,
-                                  tempPassword: res['temp_password'] ?? '',
-                                  planName: company.planName,
-                                  allowedMenus: company.allowedMenus,
-                                );
-                              }
-                            },
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFEF3C7),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: const Color(0xFFD4AF37)),
+                            ),
+                            child: const Icon(Icons.lock_reset_rounded, color: Color(0xFF92400E), size: 22),
                           ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'Generate New Temp Password',
+                              style: GoogleFonts.inter(fontSize: isMobile ? 15 : 16, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+                            ),
+                          ),
+                          DialogCloseButton(onPressed: () => Navigator.pop(ctx)),
                         ],
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 14),
+                      if (localError != null) ...[
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 14),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFEF2F2),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: const Color(0xFFFCA5A5)),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.error_outline_rounded, color: Color(0xFFDC2626), size: 18),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  localError!,
+                                  style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFFB91C1C)),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                      Text(
+                        'This will generate a fresh secure temporary password for the admin of "${company.name}" (${company.adminEmail}).',
+                        style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF64748B)),
+                      ),
+                      Container(
+                        margin: const EdgeInsets.only(top: 20),
+                        padding: const EdgeInsets.only(top: 14),
+                        decoration: const BoxDecoration(
+                          border: Border(top: BorderSide(color: Color(0x33D4AF37), width: 1.0)),
+                        ),
+                        child: Wrap(
+                          alignment: WrapAlignment.end,
+                          spacing: 10,
+                          runSpacing: 8,
+                          children: [
+                            GlassSecondaryButton(text: 'Cancel', onPressed: isSubmitting ? null : () => Navigator.pop(ctx)),
+                            GradientPrimaryButton(
+                              text: isSubmitting ? 'Generating...' : 'Generate Password',
+                              icon: Icons.key_rounded,
+                              onPressed: isSubmitting
+                                  ? null
+                                  : () async {
+                                      setDlgState(() {
+                                        isSubmitting = true;
+                                        localError = null;
+                                      });
+                                      final nav = Navigator.of(ctx);
+                                      final compProv = context.read<CompanyProvider>();
+                                      final res = await compProv.resetCompanyAdminPassword(company.id);
+                                      if (res != null && mounted) {
+                                        nav.pop();
+                                        _showCredentialsModal(
+                                          companyName: company.name,
+                                          adminEmail: res['admin_email'] ?? company.adminEmail,
+                                          adminUsername: res['admin_username'] ?? (company.adminUsername.isNotEmpty ? company.adminUsername : null),
+                                          tempPassword: res['temp_password'] ?? '',
+                                          planName: company.planName,
+                                          allowedMenus: company.allowedMenus,
+                                        );
+                                      } else if (mounted) {
+                                        setDlgState(() {
+                                          isSubmitting = false;
+                                          localError = compProv.errorMessage ?? 'Failed to generate temporary password. Please try again.';
+                                        });
+                                      }
+                                    },
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -1172,6 +1349,7 @@ Login URL: https://app.stepzcrm.com
       {'key': 'QUOTA_UPGRADE', 'title': 'Quota & User Upgrade', 'desc': 'Request higher telecaller or lead storage capacity'},
       {'key': 'SUPPORT', 'title': 'Support & General Inquiry', 'desc': 'Send note or question directly to Master Admin'},
     ];
+    String? modalError;
 
     showDialog(
       context: context,
@@ -1232,6 +1410,30 @@ Login URL: https://app.stepzcrm.com
                         ],
                       ),
                       const SizedBox(height: 16),
+
+                      if (modalError != null) ...[
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 14),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFEF2F2),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: const Color(0xFFFCA5A5)),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.error_outline_rounded, color: Color(0xFFDC2626), size: 18),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  modalError!,
+                                  style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFFB91C1C)),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
 
                       // Current Attribution Card
                       Container(
@@ -1388,7 +1590,10 @@ Login URL: https://app.stepzcrm.com
                             onPressed: isSubmitting
                                 ? null
                                 : () async {
-                                    setModalState(() => isSubmitting = true);
+                                    setModalState(() {
+                                      isSubmitting = true;
+                                      modalError = null;
+                                    });
                                     final messenger = ScaffoldMessenger.of(context);
                                     final ok = await compProv.sendSuperAdminRequest(
                                       comp.id,
@@ -1396,7 +1601,8 @@ Login URL: https://app.stepzcrm.com
                                       notes: notesController.text.trim(),
                                       targetSuperAdminId: isMasterAdmin ? selectedTargetAdminId : null,
                                     );
-                                    if (mounted) {
+                                    if (!mounted) return;
+                                    if (ok) {
                                       Navigator.pop(ctx);
                                       messenger.showSnackBar(
                                         SnackBar(
@@ -1405,9 +1611,14 @@ Login URL: https://app.stepzcrm.com
                                                 ? 'Tenant reassigned successfully!'
                                                 : 'Request submitted to Master Admin!',
                                           ),
-                                          backgroundColor: ok ? AppColors.success : AppColors.danger,
+                                          backgroundColor: AppColors.success,
                                         ),
                                       );
+                                    } else {
+                                      setModalState(() {
+                                        isSubmitting = false;
+                                        modalError = compProv.errorMessage ?? 'Request failed. Please try again.';
+                                      });
                                     }
                                   },
                             icon: const Icon(Icons.send_rounded, size: 16),

@@ -20,6 +20,7 @@ class Plan(TimeStampedModel):
         ('EUR', 'EUR (€)'),
         ('GBP', 'GBP (£)'),
         ('AED', 'AED (د.إ)'),
+        ('QAR', 'QAR (QR)'),
     ]
 
     name = models.CharField(max_length=100)
@@ -44,6 +45,7 @@ class Plan(TimeStampedModel):
             'EUR': '€',
             'GBP': '£',
             'AED': 'د.إ',
+            'QAR': 'QR',
         }
         return symbols.get(self.currency, '₹')
 
@@ -109,6 +111,52 @@ class Company(TimeStampedModel):
     @property
     def logo_url(self):
         return self.logo
+
+    @property
+    def currency(self):
+        """
+        Auto-resolves the primary operational currency based on country code/ISO,
+        plan currency, or falls back to INR (India default).
+        """
+        iso = (self.default_country_iso or '').upper().strip()
+        code = (self.default_country_code or '').strip()
+        if iso == 'IN' or code == '+91' or code == '91':
+            return 'INR'
+        if iso == 'QA' or code == '+974' or code == '974':
+            return 'QAR'
+        if iso == 'AE' or code == '+971' or code == '971':
+            return 'AED'
+        if iso == 'SA' or code == '+966' or code == '966':
+            return 'SAR'
+        if iso == 'OM' or code == '+968' or code == '968':
+            return 'OMR'
+        if iso == 'KW' or code == '+965' or code == '965':
+            return 'KWD'
+        if iso == 'BH' or code == '+973' or code == '973':
+            return 'BHD'
+        if iso in ('US', 'USA') or code == '+1' or code == '1':
+            return 'USD'
+        if iso in ('GB', 'UK') or code == '+44' or code == '44':
+            return 'GBP'
+        if self.plan and self.plan.currency:
+            return self.plan.currency
+        return 'INR'
+
+    @property
+    def currency_symbol(self):
+        symbols = {
+            'INR': '₹',
+            'QAR': 'QAR',
+            'AED': 'AED',
+            'SAR': 'SAR',
+            'OMR': 'OMR',
+            'KWD': 'KWD',
+            'BHD': 'BHD',
+            'USD': '$',
+            'EUR': '€',
+            'GBP': '£',
+        }
+        return symbols.get(self.currency, '₹')
 
     @property
     def is_plan_expired(self):

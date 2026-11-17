@@ -6,9 +6,11 @@ import '../../core/widgets/glass/gradient_button.dart';
 import '../../core/widgets/company_logo_view.dart';
 import '../../core/services/pdf_invoice_service.dart';
 import '../../models/invoice_model.dart';
+import '../../models/receipt_voucher_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/company_provider.dart';
 import 'record_payment_dialog.dart';
+import 'receipt_voucher_dialog.dart';
 
 class InvoiceDetailDialog extends StatefulWidget {
   final InvoiceModel invoice;
@@ -426,6 +428,34 @@ class _InvoiceDetailDialogState extends State<InvoiceDetailDialog> {
                           companyLogo: compLogo,
                         ),
                       ),
+                      if (inv.amountPaid > 0)
+                        GlassSecondaryButton(
+                          text: 'Receipt Voucher',
+                          icon: Icons.receipt_outlined,
+                          onPressed: () {
+                            final voucher = ReceiptVoucherModel(
+                              id: inv.id,
+                              voucherNumber: 'RV-${inv.invoiceNumber.replaceAll("INV-", "")}',
+                              date: inv.date,
+                              customerName: inv.customerName,
+                              customerPhone: inv.customerPhone,
+                              customerEmail: inv.customerEmail,
+                              amount: inv.amountPaid,
+                              currency: inv.currency.isNotEmpty ? inv.currency : 'INR',
+                              amountInWordsEn: inv.amountInWordsEn,
+                              amountInWordsAr: inv.amountInWordsAr,
+                              paymentMethod: inv.paymentMode.isNotEmpty ? inv.paymentMode : 'CASH',
+                              being: 'Payment against Invoice ${inv.invoiceNumber}',
+                              hasWatermarkStamp: true,
+                              invoiceNumber: inv.invoiceNumber,
+                              createdAt: inv.createdAt,
+                            );
+                            showDialog(
+                              context: context,
+                              builder: (ctx) => ReceiptVoucherDialog(voucher: voucher),
+                            );
+                          },
+                        ),
                       if (!isPaid)
                         GradientPrimaryButton(
                           text: 'Record Payment',

@@ -23,6 +23,7 @@ class _AddLeadDialogState extends State<AddLeadDialog> {
   final _cityController = TextEditingController();
 
   bool _isSubmitting = false;
+  String? _errorMessage;
 
   @override
   void dispose() {
@@ -35,8 +36,15 @@ class _AddLeadDialogState extends State<AddLeadDialog> {
   }
 
   Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
-    setState(() => _isSubmitting = true);
+    if (!_formKey.currentState!.validate()) {
+      setState(() => _errorMessage = 'Please fix the highlighted errors before saving.');
+      return;
+    }
+
+    setState(() {
+      _isSubmitting = true;
+      _errorMessage = null;
+    });
 
     final leadProvider = context.read<LeadProvider>();
     final success = await leadProvider.createLead({
@@ -67,14 +75,9 @@ class _AddLeadDialogState extends State<AddLeadDialog> {
         ),
       );
     } else if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(leadProvider.errorMessage ?? 'Failed to create lead.'),
-          backgroundColor: AppColors.danger,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        ),
-      );
+      setState(() {
+        _errorMessage = leadProvider.errorMessage ?? 'Failed to create lead. Please check input details.';
+      });
     }
   }
 
@@ -150,6 +153,7 @@ class _AddLeadDialogState extends State<AddLeadDialog> {
           padding: EdgeInsets.all(isMobile ? 20 : 28),
           child: Form(
             key: _formKey,
+            autovalidateMode: AutovalidateMode.onUserInteraction,
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -202,7 +206,41 @@ class _AddLeadDialogState extends State<AddLeadDialog> {
                       const DialogCloseButton(),
                     ],
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 16),
+
+                  if (_errorMessage != null) ...[
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF2F2),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFFCA5A5), width: 1.2),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(Icons.error_outline_rounded, color: Color(0xFFDC2626), size: 20),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              _errorMessage!,
+                              style: GoogleFonts.inter(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w600,
+                                color: const Color(0xFFB91C1C),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          GestureDetector(
+                            onTap: () => setState(() => _errorMessage = null),
+                            child: const Icon(Icons.close_rounded, size: 16, color: Color(0xFF991B1B)),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
 
                   // Phone Number Field (ONLY Mandatory Field)
                   _buildGlassInput(

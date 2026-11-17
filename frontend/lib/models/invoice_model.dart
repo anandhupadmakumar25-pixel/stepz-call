@@ -10,6 +10,16 @@ class InvoiceModel {
   final String customerPhone;
   final String customerEmail;
   final String customerAddress;
+
+  // Professional metadata from official PDF / invoice format
+  final String clientCode;
+  final String salesRepName;
+  final String incoterms;
+  final String location;
+  final String contactPerson;
+  final String crNumber;
+  final String currency;
+
   final String? createdBy;
   final String createdByName;
   final String date;
@@ -23,6 +33,16 @@ class InvoiceModel {
   final double taxAmount;
   final double discountAmount;
   final double grandTotal;
+
+  // Cost and margin analysis
+  final double totalCost;
+  final double grossMargin;
+  final bool hideCostInPdf;
+
+  // Bilingual amount in words
+  final String amountInWordsEn;
+  final String amountInWordsAr;
+
   final double amountPaid;
   final double balanceDue;
   final String paymentStatus;
@@ -44,6 +64,13 @@ class InvoiceModel {
     required this.customerPhone,
     this.customerEmail = '',
     this.customerAddress = '',
+    this.clientCode = '',
+    this.salesRepName = '',
+    this.incoterms = 'EX WORKSHOP DOHA',
+    this.location = '',
+    this.contactPerson = '',
+    this.crNumber = '',
+    this.currency = 'INR',
     this.createdBy,
     this.createdByName = '',
     required this.date,
@@ -57,6 +84,11 @@ class InvoiceModel {
     this.taxAmount = 0.0,
     this.discountAmount = 0.0,
     this.grandTotal = 0.0,
+    this.totalCost = 0.0,
+    this.grossMargin = 0.0,
+    this.hideCostInPdf = true,
+    this.amountInWordsEn = '',
+    this.amountInWordsAr = '',
     this.amountPaid = 0.0,
     this.balanceDue = 0.0,
     this.paymentStatus = 'PENDING',
@@ -109,37 +141,49 @@ class InvoiceModel {
 
     return InvoiceModel(
       id: json['id']?.toString() ?? '',
-      invoiceNumber: json['invoice_number']?.toString() ?? '',
-      quotationId: json['quotation']?.toString(),
-      quotationNumber: json['quotation_number']?.toString() ?? '',
-      leadId: json['lead']?.toString(),
-      customerName: json['customer_name']?.toString() ?? '',
-      customerPhone: json['customer_phone']?.toString() ?? '',
-      customerEmail: json['customer_email']?.toString() ?? '',
-      customerAddress: json['customer_address']?.toString() ?? '',
-      createdBy: json['created_by']?.toString(),
-      createdByName: json['created_by_name']?.toString() ?? '',
+      invoiceNumber: json['invoice_number']?.toString() ?? json['invoiceNumber']?.toString() ?? '',
+      quotationId: json['quotation']?.toString() ?? json['quotationId']?.toString(),
+      quotationNumber: json['quotation_number']?.toString() ?? json['quotationNumber']?.toString() ?? '',
+      leadId: json['lead']?.toString() ?? json['leadId']?.toString(),
+      customerName: json['customer_name']?.toString() ?? json['customerName']?.toString() ?? '',
+      customerPhone: json['customer_phone']?.toString() ?? json['customerPhone']?.toString() ?? '',
+      customerEmail: json['customer_email']?.toString() ?? json['customerEmail']?.toString() ?? '',
+      customerAddress: json['customer_address']?.toString() ?? json['customerAddress']?.toString() ?? '',
+      clientCode: json['client_code']?.toString() ?? json['clientCode']?.toString() ?? '',
+      salesRepName: json['sales_rep_name']?.toString() ?? json['salesRepName']?.toString() ?? '',
+      incoterms: json['incoterms']?.toString() ?? 'EX WORKSHOP DOHA',
+      location: json['location']?.toString() ?? '',
+      contactPerson: json['contact_person']?.toString() ?? json['contactPerson']?.toString() ?? '',
+      crNumber: json['cr_number']?.toString() ?? json['crNumber']?.toString() ?? '',
+      currency: json['currency']?.toString() ?? 'INR',
+      createdBy: json['created_by']?.toString() ?? json['createdBy']?.toString(),
+      createdByName: json['created_by_name']?.toString() ?? json['createdByName']?.toString() ?? '',
       date: json['date']?.toString() ?? '',
-      dueDate: json['due_date']?.toString(),
+      dueDate: json['due_date']?.toString() ?? json['dueDate']?.toString(),
       customColumns: customCols,
       showQty: showQty,
       showPrice: showPrice,
       showTax: showTax,
       items: itemsList,
       subtotal: parseNum(json['subtotal']),
-      taxAmount: parseNum(json['tax_amount']),
-      discountAmount: parseNum(json['discount_amount']),
-      grandTotal: parseNum(json['grand_total']),
-      amountPaid: parseNum(json['amount_paid']),
-      balanceDue: parseNum(json['balance_due']),
-      paymentStatus: json['payment_status']?.toString() ?? 'PENDING',
-      paymentMode: json['payment_mode']?.toString() ?? '',
-      paymentReference: json['payment_reference']?.toString() ?? '',
-      paymentNotes: json['payment_notes']?.toString() ?? '',
+      taxAmount: parseNum(json['tax_amount'] ?? json['taxAmount']),
+      discountAmount: parseNum(json['discount_amount'] ?? json['discountAmount']),
+      grandTotal: parseNum(json['grand_total'] ?? json['grandTotal']),
+      totalCost: parseNum(json['total_cost'] ?? json['totalCost']),
+      grossMargin: parseNum(json['gross_margin'] ?? json['grossMargin']),
+      hideCostInPdf: json['hide_cost_in_pdf'] == null ? true : (json['hide_cost_in_pdf'] == true),
+      amountInWordsEn: json['amount_in_words_en']?.toString() ?? json['amountInWordsEn']?.toString() ?? '',
+      amountInWordsAr: json['amount_in_words_ar']?.toString() ?? json['amountInWordsAr']?.toString() ?? '',
+      amountPaid: parseNum(json['amount_paid'] ?? json['amountPaid']),
+      balanceDue: parseNum(json['balance_due'] ?? json['balanceDue']),
+      paymentStatus: json['payment_status']?.toString() ?? json['paymentStatus']?.toString() ?? 'PENDING',
+      paymentMode: json['payment_mode']?.toString() ?? json['paymentMode']?.toString() ?? '',
+      paymentReference: json['payment_reference']?.toString() ?? json['paymentReference']?.toString() ?? '',
+      paymentNotes: json['payment_notes']?.toString() ?? json['paymentNotes']?.toString() ?? '',
       notes: json['notes']?.toString() ?? '',
-      termsAndConditions: json['terms_and_conditions']?.toString() ?? '',
-      createdAt: json['created_at']?.toString() ?? '',
-      updatedAt: json['updated_at']?.toString() ?? '',
+      termsAndConditions: json['terms_and_conditions']?.toString() ?? json['termsAndConditions']?.toString() ?? '',
+      createdAt: json['created_at']?.toString() ?? json['createdAt']?.toString() ?? '',
+      updatedAt: json['updated_at']?.toString() ?? json['updatedAt']?.toString() ?? '',
     );
   }
 
@@ -151,6 +195,13 @@ class InvoiceModel {
       'customer_phone': customerPhone,
       'customer_email': customerEmail,
       'customer_address': customerAddress,
+      'client_code': clientCode,
+      'sales_rep_name': salesRepName,
+      'incoterms': incoterms,
+      'location': location,
+      'contact_person': contactPerson,
+      'cr_number': crNumber,
+      'currency': currency,
       if (dueDate != null) 'due_date': dueDate,
       'custom_columns': {
         'columns': customColumns,
@@ -163,6 +214,11 @@ class InvoiceModel {
       'tax_amount': taxAmount,
       'discount_amount': discountAmount,
       'grand_total': grandTotal,
+      'total_cost': totalCost,
+      'gross_margin': grossMargin,
+      'hide_cost_in_pdf': hideCostInPdf,
+      'amount_in_words_en': amountInWordsEn,
+      'amount_in_words_ar': amountInWordsAr,
       'amount_paid': amountPaid,
       'payment_status': paymentStatus,
       'payment_mode': paymentMode,
@@ -220,4 +276,3 @@ class BillingOverviewModel {
     );
   }
 }
-

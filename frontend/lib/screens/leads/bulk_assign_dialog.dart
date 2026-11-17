@@ -22,6 +22,7 @@ class _BulkAssignDialogState extends State<BulkAssignDialog> {
   final Set<String> _selectedEmployeeIds = {};
   final String _method = 'EQUAL';
   bool _isSubmitting = false;
+  String? _errorMessage;
 
   @override
   void initState() {
@@ -33,16 +34,14 @@ class _BulkAssignDialogState extends State<BulkAssignDialog> {
 
   Future<void> _commitAssignment() async {
     if (_selectedEmployeeIds.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please select at least one active employee.'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      setState(() => _errorMessage = 'Please select at least one active employee for lead distribution.');
       return;
     }
 
-    setState(() => _isSubmitting = true);
+    setState(() {
+      _isSubmitting = true;
+      _errorMessage = null;
+    });
     final leadProvider = context.read<LeadProvider>();
 
     final allocations = _selectedEmployeeIds.map((empId) {
@@ -78,14 +77,9 @@ class _BulkAssignDialogState extends State<BulkAssignDialog> {
         ),
       );
     } else if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(leadProvider.errorMessage ?? 'Bulk assignment failed.'),
-          backgroundColor: AppColors.danger,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        ),
-      );
+      setState(() {
+        _errorMessage = leadProvider.errorMessage ?? 'Bulk assignment failed. Please check network or permissions.';
+      });
     }
   }
 
@@ -160,7 +154,41 @@ class _BulkAssignDialogState extends State<BulkAssignDialog> {
                   ),
                 ],
               ),
-              const SizedBox(height: 18),
+              const SizedBox(height: 14),
+
+              if (_errorMessage != null) ...[
+                Container(
+                  margin: const EdgeInsets.only(bottom: 14),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEF2F2),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFFCA5A5), width: 1.2),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.error_outline_rounded, color: Color(0xFFDC2626), size: 18),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          _errorMessage!,
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFFB91C1C),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      GestureDetector(
+                        onTap: () => setState(() => _errorMessage = null),
+                        child: const Icon(Icons.close_rounded, size: 16, color: Color(0xFF991B1B)),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
 
               // Strategy Indicator
               Container(

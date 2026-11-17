@@ -4,10 +4,12 @@ from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin, BaseU
 from apps.core.models import TimeStampedModel, TenantModel
 
 class UserManager(BaseUserManager):
-    def create_user(self, email, password=None, **extra_fields):
+    def create_user(self, email, password=None, username=None, **extra_fields):
         if not email:
             raise ValueError('Email address is mandatory')
         email = self.normalize_email(email)
+        if username and str(username).strip():
+            extra_fields['username'] = str(username).strip()
         user = self.model(email=email, **extra_fields)
         if password:
             user.set_password(password)
@@ -39,6 +41,7 @@ class User(AbstractBaseUser, PermissionsMixin, TimeStampedModel):
     ]
 
     email = models.EmailField(unique=True, db_index=True)
+    username = models.CharField(max_length=150, unique=True, null=True, blank=True, db_index=True)
     first_name = models.CharField(max_length=150)
     last_name = models.CharField(max_length=150, blank=True)
     phone = models.CharField(max_length=32, blank=True)
@@ -75,12 +78,24 @@ class User(AbstractBaseUser, PermissionsMixin, TimeStampedModel):
     class Meta:
         ordering = ['-created_at']
 
+    def save(self, *args, **kwargs):
+        if self.username:
+            self.username = self.username.strip()
+            if not self.username:
+                self.username = None
+        else:
+            self.username = None
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return f"{self.email} ({self.get_role_display()})"
 
     @property
     def full_name(self):
         return f"{self.first_name} {self.last_name}".strip() or self.email
+
+    def get_full_name(self):
+        return self.full_name
 
     @property
     def is_master_admin(self):

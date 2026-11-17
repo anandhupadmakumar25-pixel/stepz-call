@@ -17,9 +17,11 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
+  String? _errorMessage;
 
   @override
   void dispose() {
@@ -32,6 +34,7 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() {
       _emailController.text = email;
       _passwordController.text = password;
+      _errorMessage = null;
     });
   }
 
@@ -253,6 +256,9 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _submit() async {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+    setState(() => _errorMessage = null);
+
     final auth = context.read<AuthProvider>();
     final success = await auth.login(
       _emailController.text.trim(),
@@ -285,25 +291,9 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.error_outline_rounded, color: Colors.white, size: 20),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                auth.errorMessage ?? 'Authentication failed',
-                style: GoogleFonts.inter(fontWeight: FontWeight.w500),
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: AppColors.danger,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-    );
+    setState(() {
+      _errorMessage = auth.errorMessage ?? 'Authentication failed. Please check your credentials and try again.';
+    });
   }
 
   @override
@@ -589,57 +579,111 @@ class _LoginScreenState extends State<LoginScreen> {
               color: const Color(0xFF64748B),
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 20),
 
-          // Email Field
-          _buildInputLabel('Email Address'),
-          const SizedBox(height: 6),
-          _buildInput(
-            controller: _emailController,
-            hint: 'user@company.com',
-            icon: Icons.alternate_email_rounded,
-            keyboardType: TextInputType.emailAddress,
-          ),
-          const SizedBox(height: 18),
-
-          // Password Field
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _buildInputLabel('Password'),
-              InkWell(
-                onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Please contact your tenant administrator for credential recovery.'),
-                      behavior: SnackBarBehavior.floating,
+          // In-card Error alert banner
+          if (_errorMessage != null) ...[
+            Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEF2F2),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFFCA5A5)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.error_outline_rounded, size: 18, color: Color(0xFFDC2626)),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      _errorMessage!,
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFFB91C1C),
+                      ),
                     ),
-                  );
-                },
-                child: Text(
-                  'Forgot password?',
-                  style: GoogleFonts.inter(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w600,
-                    color: const Color(0xFFB45309),
+                  ),
+                  InkWell(
+                    onTap: () => setState(() => _errorMessage = null),
+                    child: const Icon(Icons.close_rounded, size: 16, color: Color(0xFFDC2626)),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
+          Form(
+            key: _formKey,
+            autovalidateMode: AutovalidateMode.onUserInteraction,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Username or Email Field
+                _buildInputLabel('Username or Email'),
+                const SizedBox(height: 6),
+                _buildInput(
+                  controller: _emailController,
+                  hint: 'username or user@company.com',
+                  icon: Icons.person_outline_rounded,
+                  keyboardType: TextInputType.text,
+                  validator: (val) {
+                    if (val == null || val.trim().isEmpty) {
+                      return 'Please enter your username or email address';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 18),
+
+                // Password Field
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    _buildInputLabel('Password'),
+                    InkWell(
+                      onTap: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Please contact your tenant administrator for credential recovery.'),
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      },
+                      child: Text(
+                        'Forgot password?',
+                        style: GoogleFonts.inter(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFFB45309),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                _buildInput(
+                  controller: _passwordController,
+                  hint: 'Enter your password',
+                  icon: Icons.lock_outline_rounded,
+                  obscure: _obscurePassword,
+                  validator: (val) {
+                    if (val == null || val.isEmpty) {
+                      return 'Please enter your password';
+                    }
+                    return null;
+                  },
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                      size: 18,
+                      color: const Color(0xFF64748B),
+                    ),
+                    onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
                   ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          _buildInput(
-            controller: _passwordController,
-            hint: 'Enter your password',
-            icon: Icons.lock_outline_rounded,
-            obscure: _obscurePassword,
-            suffixIcon: IconButton(
-              icon: Icon(
-                _obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-                size: 18,
-                color: const Color(0xFF64748B),
-              ),
-              onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+              ],
             ),
           ),
           const SizedBox(height: 24),
@@ -748,49 +792,61 @@ class _LoginScreenState extends State<LoginScreen> {
     bool obscure = false,
     Widget? suffixIcon,
     TextInputType? keyboardType,
+    String? Function(String?)? validator,
   }) {
-    return Container(
-      height: 48,
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: const Color(0xFFE2E8F0),
-          width: 1.0,
-        ),
+    return TextFormField(
+      controller: controller,
+      obscureText: obscure,
+      keyboardType: keyboardType,
+      validator: validator,
+      style: GoogleFonts.inter(
+        fontSize: 13.5,
+        color: const Color(0xFF0F172A),
+        fontWeight: FontWeight.w600,
       ),
-      child: Center(
-        child: TextField(
-          controller: controller,
-          obscureText: obscure,
-          keyboardType: keyboardType,
-          style: GoogleFonts.inter(
-            fontSize: 13.5,
-            color: const Color(0xFF0F172A),
-            fontWeight: FontWeight.w600,
-          ),
-          cursorColor: const Color(0xFF047857),
-          decoration: InputDecoration(
-            isDense: true,
-            filled: false,
-            hintText: hint,
-            hintStyle: GoogleFonts.inter(
-              fontSize: 12.5,
-              color: const Color(0xFF94A3B8),
-              fontWeight: FontWeight.w400,
-            ),
-            prefixIcon: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Icon(icon, size: 18, color: const Color(0xFF047857)),
-            ),
-            prefixIconConstraints: const BoxConstraints(minWidth: 42, minHeight: 18),
-            suffixIcon: suffixIcon,
-            border: InputBorder.none,
-            enabledBorder: InputBorder.none,
-            focusedBorder: InputBorder.none,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-          ),
+      cursorColor: const Color(0xFF047857),
+      decoration: InputDecoration(
+        isDense: true,
+        filled: true,
+        fillColor: const Color(0xFFF8FAFC),
+        hintText: hint,
+        hintStyle: GoogleFonts.inter(
+          fontSize: 12.5,
+          color: const Color(0xFF94A3B8),
+          fontWeight: FontWeight.w400,
         ),
+        prefixIcon: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Icon(icon, size: 18, color: const Color(0xFF047857)),
+        ),
+        prefixIconConstraints: const BoxConstraints(minWidth: 42, minHeight: 18),
+        suffixIcon: suffixIcon,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFF047857), width: 1.5),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFFDC2626), width: 1.2),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFFDC2626), width: 1.5),
+        ),
+        errorStyle: GoogleFonts.inter(
+          fontSize: 11.5,
+          fontWeight: FontWeight.w500,
+          color: const Color(0xFFDC2626),
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
       ),
     );
   }

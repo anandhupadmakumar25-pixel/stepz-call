@@ -29,6 +29,7 @@ class CompanyModel {
   final int taskCount;
   final String adminName;
   final String? explicitAdminEmail;
+  final String adminUsername;
   final String? createdById;
   final String createdByName;
   final String createdByEmail;
@@ -77,6 +78,7 @@ class CompanyModel {
     this.taskCount = 0,
     this.adminName = '',
     this.explicitAdminEmail,
+    this.adminUsername = '',
     this.createdById,
     this.createdByName = '',
     this.createdByEmail = '',
@@ -115,6 +117,36 @@ class CompanyModel {
   }
 
   bool hasMenuPermission(String menuKey) => allowedMenus.contains(menuKey);
+
+  String get currency {
+    if (planCurrency.isNotEmpty && planCurrency != 'INR') return planCurrency;
+    final code = defaultCountryCode.trim();
+    if (code == '+91' || code == '91' || code == 'IN' || code == 'IND') return 'INR';
+    if (code == '+974' || code == '974' || code == 'QA' || code == 'QATAR') return 'QAR';
+    if (code == '+971' || code == '971' || code == 'AE' || code == 'UAE') return 'AED';
+    if (code == '+966' || code == '966' || code == 'SA') return 'SAR';
+    if (code == '+968' || code == '968' || code == 'OM') return 'OMR';
+    if (code == '+965' || code == '965' || code == 'KW') return 'KWD';
+    if (code == '+973' || code == '973' || code == 'BH') return 'BHD';
+    if (code == '+1' || code == '1' || code == 'US' || code == 'USA') return 'USD';
+    if (code == '+44' || code == '44' || code == 'GB' || code == 'UK') return 'GBP';
+    return planCurrency.isNotEmpty ? planCurrency : 'INR';
+  }
+
+  String get currencySymbol {
+    switch (currency) {
+      case 'INR':
+        return '₹';
+      case 'USD':
+        return '\$';
+      case 'EUR':
+        return '€';
+      case 'GBP':
+        return '£';
+      default:
+        return currency;
+    }
+  }
 
   factory CompanyModel.fromJson(Map<String, dynamic> json) {
     final rawMenus = (json['resolved_allowed_menus'] ?? json['allowed_menus']) as List<dynamic>?;
@@ -175,6 +207,7 @@ class CompanyModel {
       taskCount: json['task_count'] ?? 0,
       adminName: json['admin_name'] ?? '',
       explicitAdminEmail: json['admin_email'],
+      adminUsername: json['admin_username']?.toString() ?? '',
       createdById: json['created_by_id']?.toString(),
       createdByName: json['created_by_name'] ?? '',
       createdByEmail: json['created_by_email'] ?? '',

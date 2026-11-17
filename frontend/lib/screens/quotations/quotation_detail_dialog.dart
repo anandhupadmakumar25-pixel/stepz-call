@@ -286,7 +286,7 @@ class _QuotationDetailDialogState extends State<QuotationDetailDialog> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text('Quotation Items', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, color: const Color(0xFF1E293B))),
-                          Text('Rates are approximate', style: GoogleFonts.inter(fontSize: 11, fontStyle: FontStyle.italic, color: const Color(0xFF64748B))),
+                          Text('Commercial Offer', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF64748B))),
                         ],
                       ),
                       const SizedBox(height: 8),
@@ -419,15 +419,23 @@ class _QuotationDetailDialogState extends State<QuotationDetailDialog> {
                         ),
                         child: Column(
                           children: [
-                            _buildAmountRow('Approximate Subtotal', '₹${q.subtotal.toStringAsFixed(2)}'),
+                            _buildAmountRow('Subtotal', '${q.currency.isNotEmpty ? q.currency : "₹"} ${q.subtotal.toStringAsFixed(2)}'),
+                            if (q.totalCost > 0) ...[
+                              _buildAmountRow('Total Cost (CST)', '${q.currency.isNotEmpty ? q.currency : "₹"} ${q.totalCost.toStringAsFixed(2)}', textColor: const Color(0xFFD97706)),
+                              _buildAmountRow(
+                                'Gross Margin',
+                                '${q.currency.isNotEmpty ? q.currency : "₹"} ${q.grossMargin.toStringAsFixed(2)} (${q.subtotal > 0 ? ((q.grossMargin / q.subtotal) * 100).toStringAsFixed(1) : 0}%)',
+                                textColor: const Color(0xFF059669),
+                              ),
+                            ],
                             if (q.discountAmount > 0)
-                              _buildAmountRow('Discount', '-₹${q.discountAmount.toStringAsFixed(2)}', textColor: const Color(0xFFDC2626)),
+                              _buildAmountRow('Discount', '-${q.currency.isNotEmpty ? q.currency : "₹"} ${q.discountAmount.toStringAsFixed(2)}', textColor: const Color(0xFFDC2626)),
                             if (q.taxAmount > 0)
-                              _buildAmountRow('Tax / GST', '₹${q.taxAmount.toStringAsFixed(2)}'),
+                              _buildAmountRow('Tax / GST', '${q.currency.isNotEmpty ? q.currency : "₹"} ${q.taxAmount.toStringAsFixed(2)}'),
                             const Divider(color: Color(0xFFCBD5E1), height: 16),
                             _buildAmountRow(
-                              'Approximate Grand Total',
-                              '₹${q.grandTotal.toStringAsFixed(2)}',
+                              'Grand Total',
+                              '${q.currency.isNotEmpty ? q.currency : "₹"} ${q.grandTotal.toStringAsFixed(2)}',
                               isBold: true,
                               fontSize: 16,
                               textColor: const Color(0xFF1E3A8A),
@@ -480,15 +488,16 @@ class _QuotationDetailDialogState extends State<QuotationDetailDialog> {
                       GlassSecondaryButton(
                         text: 'Print / PDF',
                         icon: Icons.print_outlined,
-                        onPressed: () => PdfInvoiceService.printQuotation(
+                        onPressed: () => _showPrintOptionsDialog(
+                          context,
                           q,
-                          companyName: compName,
-                          companyPhone: compPhone,
-                          companyEmail: compEmail,
-                          companyAddress: compAddress,
-                          companyGstin: compGstin,
-                          companyWebsite: compWebsite,
-                          companyLogo: compLogo,
+                          compName,
+                          compPhone,
+                          compEmail,
+                          compAddress,
+                          compGstin,
+                          compWebsite,
+                          compLogo,
                         ),
                       ),
                       if (q.status != 'CONVERTED') ...[
@@ -519,6 +528,188 @@ class _QuotationDetailDialogState extends State<QuotationDetailDialog> {
                 ],
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showPrintOptionsDialog(
+    BuildContext context,
+    QuotationModel q,
+    String compName,
+    String? compPhone,
+    String? compEmail,
+    String? compAddress,
+    String? compGstin,
+    String? compWebsite,
+    String? compLogo,
+  ) {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 480),
+          child: GlassCard(
+            blur: 24,
+            opacity: 0.98,
+            borderRadius: BorderRadius.circular(20),
+            borderColor: const Color(0xFFCBD5E1),
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF6366F1).withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.print_rounded, color: Color(0xFF6366F1), size: 22),
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          'Print Quotation PDF',
+                          style: GoogleFonts.inter(fontSize: 17, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+                        ),
+                      ],
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded, color: Color(0xFF64748B)),
+                      onPressed: () => Navigator.pop(ctx),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Choose how you want to export or print this quotation:',
+                  style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
+                ),
+                const SizedBox(height: 16),
+
+                // Option 1: Standard Client PDF
+                InkWell(
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    PdfInvoiceService.printQuotation(
+                      q,
+                      companyName: compName,
+                      companyPhone: compPhone,
+                      companyEmail: compEmail,
+                      companyAddress: compAddress,
+                      companyGstin: compGstin,
+                      companyWebsite: compWebsite,
+                      companyLogo: compLogo,
+                      includeCst: false,
+                    );
+                  },
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFCBD5E1)),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFDBEAFE),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.person_outline_rounded, color: Color(0xFF1D4ED8), size: 24),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Client Quotation (Standard)',
+                                style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                'Customer-facing quote. Hides internal unit cost (CST) and profit margin.',
+                                style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Color(0xFF94A3B8)),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // Option 2: Commercial Quotation with CST
+                InkWell(
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    PdfInvoiceService.printQuotation(
+                      q,
+                      companyName: compName,
+                      companyPhone: compPhone,
+                      companyEmail: compEmail,
+                      companyAddress: compAddress,
+                      companyGstin: compGstin,
+                      companyWebsite: compWebsite,
+                      companyLogo: compLogo,
+                      includeCst: true,
+                    );
+                  },
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFFBEB),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFFDE68A)),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFEF3C7),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.analytics_rounded, color: Color(0xFFB45309), size: 24),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Commercial Quotation with CST',
+                                style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700, color: const Color(0xFF92400E)),
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                'Shows Unit Cost (CST), Cost SUM, and Gross Margin analysis.',
+                                style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF78350F)),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Color(0xFFB45309)),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

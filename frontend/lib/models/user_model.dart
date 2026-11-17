@@ -1,6 +1,7 @@
 class UserModel {
   final String id;
   final String email;
+  final String? username;
   final String firstName;
   final String lastName;
   final String fullName;
@@ -14,6 +15,10 @@ class UserModel {
   final String? companyAddress;
   final String? companyGstin;
   final String? companyWebsite;
+  final String companyCountryCode;
+  final String companyCountryIso;
+  final String companyCurrency;
+  final String companyCurrencySymbol;
   final String? branchId;
   final String? branchName;
   final bool isStaff;
@@ -31,6 +36,7 @@ class UserModel {
   UserModel({
     required this.id,
     required this.email,
+    this.username,
     required this.firstName,
     required this.lastName,
     required this.fullName,
@@ -44,6 +50,10 @@ class UserModel {
     this.companyAddress,
     this.companyGstin,
     this.companyWebsite,
+    this.companyCountryCode = '+91',
+    this.companyCountryIso = 'IN',
+    this.companyCurrency = 'INR',
+    this.companyCurrencySymbol = '₹',
     this.branchId,
     this.branchName,
     this.isStaff = false,
@@ -116,6 +126,7 @@ class UserModel {
     return UserModel(
       id: json['id']?.toString() ?? '',
       email: json['email'] ?? '',
+      username: json['username']?.toString(),
       firstName: json['first_name'] ?? '',
       lastName: json['last_name'] ?? '',
       fullName: json['full_name'] ?? '${json['first_name'] ?? ''} ${json['last_name'] ?? ''}'.trim(),
@@ -129,6 +140,10 @@ class UserModel {
       companyAddress: json['company_address'],
       companyGstin: json['company_gstin'],
       companyWebsite: json['company_website'],
+      companyCountryCode: json['company_country_code'] ?? '+91',
+      companyCountryIso: json['company_country_iso'] ?? 'IN',
+      companyCurrency: json['company_currency'] ?? 'INR',
+      companyCurrencySymbol: json['company_currency_symbol'] ?? '₹',
       branchId: json['branch_id']?.toString() ?? json['branch']?.toString(),
       branchName: json['branch_name'],
       isStaff: json['is_staff'] ?? false,
@@ -163,6 +178,10 @@ class UserModel {
     'company_address': companyAddress,
     'company_gstin': companyGstin,
     'company_website': companyWebsite,
+    'company_country_code': companyCountryCode,
+    'company_country_iso': companyCountryIso,
+    'company_currency': companyCurrency,
+    'company_currency_symbol': companyCurrencySymbol,
     'branch_id': branchId,
     'branch_name': branchName,
     'is_staff': isStaff,

@@ -8,6 +8,8 @@ from apps.billing.views import (
     InvoiceListCreateView,
     InvoiceDetailView,
     InvoiceRecordPaymentView,
+    ReceiptVoucherListCreateView,
+    ReceiptVoucherDetailView,
     BillingOverviewKPIView,
 )
 
@@ -22,4 +24,6 @@ urlpatterns = [
     path('invoices/', InvoiceListCreateView.as_view(), name='invoice_list_create'),
     path('invoices/<uuid:pk>/', InvoiceDetailView.as_view(), name='invoice_detail'),
     path('invoices/<uuid:pk>/record-payment/', InvoiceRecordPaymentView.as_view(), name='invoice_record_payment'),
+    path('receipt-vouchers/', ReceiptVoucherListCreateView.as_view(), name='receipt_voucher_list_create'),
+    path('receipt-vouchers/<uuid:pk>/', ReceiptVoucherDetailView.as_view(), name='receipt_voucher_detail'),
 ]

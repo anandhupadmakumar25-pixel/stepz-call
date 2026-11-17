@@ -42,9 +42,10 @@ class _SuperAdminManagementDialogState extends State<SuperAdminManagementDialog>
     final phoneCtrl = TextEditingController();
     final passwordCtrl = TextEditingController();
     final compProv = context.read<CompanyProvider>();
-    final messenger = ScaffoldMessenger.of(context);
     bool isSaving = false;
     String role = 'SUPER_ADMIN';
+    final formKey = GlobalKey<FormState>();
+    String? localError;
 
     showDialog(
       context: context,
@@ -63,70 +64,107 @@ class _SuperAdminManagementDialogState extends State<SuperAdminManagementDialog>
                 borderRadius: BorderRadius.circular(20),
                 borderColor: const Color(0xFF6366F1),
                 padding: EdgeInsets.all(isMobile ? 18 : 28),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFEEF2FF),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: const Color(0xFFC7D2FE)),
+                child: Form(
+                  key: formKey,
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEEF2FF),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: const Color(0xFFC7D2FE)),
+                            ),
+                            child: const Icon(Icons.person_add_alt_1_rounded, color: Color(0xFF4F46E5), size: 22),
                           ),
-                          child: const Icon(Icons.person_add_alt_1_rounded, color: Color(0xFF4F46E5), size: 22),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Add New Super Admin',
+                                  style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+                                ),
+                                Text(
+                                  'Provision a partner or regional administrator',
+                                  style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
+                                ),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close_rounded, size: 20),
+                            onPressed: () => Navigator.pop(dialogCtx),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+
+                      if (localError != null) ...[
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 14),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFEF2F2),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: const Color(0xFFFCA5A5)),
+                          ),
+                          child: Row(
                             children: [
-                              Text(
-                                'Add New Super Admin',
-                                style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
-                              ),
-                              Text(
-                                'Provision a partner or regional administrator',
-                                style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
+                              const Icon(Icons.error_outline_rounded, color: Color(0xFFDC2626), size: 18),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  localError!,
+                                  style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFFB91C1C)),
+                                ),
                               ),
                             ],
                           ),
                         ),
-                        IconButton(
-                          icon: const Icon(Icons.close_rounded, size: 20),
-                          onPressed: () => Navigator.pop(dialogCtx),
-                        ),
                       ],
-                    ),
-                    const SizedBox(height: 20),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: GlassTextField(
-                            label: 'First Name *',
-                            hintText: 'e.g. Anandhu',
-                            controller: firstNameCtrl,
+
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: GlassTextField(
+                              label: 'First Name *',
+                              hintText: 'e.g. Anandhu',
+                              controller: firstNameCtrl,
+                              validator: (v) => v == null || v.trim().isEmpty ? 'First name is required' : null,
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: GlassTextField(
-                            label: 'Last Name',
-                            hintText: 'e.g. Kumar',
-                            controller: lastNameCtrl,
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: GlassTextField(
+                              label: 'Last Name',
+                              hintText: 'e.g. Kumar',
+                              controller: lastNameCtrl,
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    GlassTextField(
-                      label: 'Email Address *',
-                      hintText: 'partner@example.com',
-                      controller: emailCtrl,
-                      keyboardType: TextInputType.emailAddress,
-                    ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      GlassTextField(
+                        label: 'Email Address *',
+                        hintText: 'partner@example.com',
+                        controller: emailCtrl,
+                        keyboardType: TextInputType.emailAddress,
+                        validator: (v) {
+                          if (v == null || v.trim().isEmpty) return 'Email is required';
+                          if (!RegExp(r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$').hasMatch(v.trim())) {
+                            return 'Enter a valid email address';
+                          }
+                          return null;
+                        },
+                      ),
                     const SizedBox(height: 12),
                     GlassTextField(
                       label: 'Phone Number',
@@ -177,15 +215,18 @@ class _SuperAdminManagementDialogState extends State<SuperAdminManagementDialog>
                       onPressed: isSaving
                           ? null
                           : () async {
-                              final email = emailCtrl.text.trim();
-                              final firstName = firstNameCtrl.text.trim();
-                              if (email.isEmpty || firstName.isEmpty) {
-                                messenger.showSnackBar(
-                                  const SnackBar(content: Text('First name and email are required.')),
-                                );
+                              if (!formKey.currentState!.validate()) {
+                                setModalState(() => localError = 'Please fix the highlighted errors before submitting.');
                                 return;
                               }
-                              setModalState(() => isSaving = true);
+
+                              final email = emailCtrl.text.trim();
+                              final firstName = firstNameCtrl.text.trim();
+
+                              setModalState(() {
+                                isSaving = true;
+                                localError = null;
+                              });
                               final res = await compProv.createSuperAdmin({
                                 'email': email,
                                 'first_name': firstName,
@@ -203,12 +244,9 @@ class _SuperAdminManagementDialogState extends State<SuperAdminManagementDialog>
                                   tempPassword: res['temp_password'] ?? 'Generated',
                                 );
                               } else if (mounted) {
-                                messenger.showSnackBar(
-                                  SnackBar(
-                                    content: Text(compProv.errorMessage ?? 'Failed to create Super Admin'),
-                                    backgroundColor: const Color(0xFFDC2626),
-                                  ),
-                                );
+                                setModalState(() {
+                                  localError = compProv.errorMessage ?? 'Failed to create Super Admin. Please check inputs.';
+                                });
                               }
                             },
                     ),
@@ -216,7 +254,8 @@ class _SuperAdminManagementDialogState extends State<SuperAdminManagementDialog>
                 ),
               ),
             ),
-          );
+          ),
+        );
         },
       ),
     );

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
@@ -24,6 +25,7 @@ class _ImportWizardDialogState extends State<ImportWizardDialog> {
   String? _importSuccessMessage;
   String? _selectedBranchId;
   String? _selectedCategoryId;
+  String? _errorMessage;
 
   @override
   void initState() {
@@ -52,6 +54,7 @@ class _ImportWizardDialogState extends State<ImportWizardDialog> {
 
   Future<void> _uploadAndPreview() async {
     if (_selectedFile == null || _selectedFile!.bytes == null) return;
+    setState(() => _errorMessage = null);
 
     final provider = context.read<LeadProvider>();
     final batch = await provider.uploadImportFile(
@@ -63,20 +66,19 @@ class _ImportWizardDialogState extends State<ImportWizardDialog> {
       setState(() {
         _batchPreview = batch;
         _currentStep = 1;
+        _errorMessage = null;
       });
     } else if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(provider.errorMessage ?? 'Import preview failed.'),
-          backgroundColor: AppColors.danger,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      setState(() {
+        _errorMessage = provider.errorMessage ?? 'Import preview failed. Please check that the file is a valid .xlsx or .csv format with required columns.';
+      });
     }
   }
 
   Future<void> _confirmImport() async {
     if (_batchPreview == null) return;
+    setState(() => _errorMessage = null);
+
     final provider = context.read<LeadProvider>();
     final success = await provider.confirmImport(
       _batchPreview!.id,
@@ -87,16 +89,13 @@ class _ImportWizardDialogState extends State<ImportWizardDialog> {
     if (success && mounted) {
       setState(() {
         _currentStep = 2;
+        _errorMessage = null;
         _importSuccessMessage = 'Import completed! Leads are securely added and available in your company lead pool.';
       });
     } else if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(provider.errorMessage ?? 'Import confirmation failed.'),
-          backgroundColor: AppColors.danger,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      setState(() {
+        _errorMessage = provider.errorMessage ?? 'Import confirmation failed. Please try again.';
+      });
     }
   }
 
@@ -176,6 +175,39 @@ class _ImportWizardDialogState extends State<ImportWizardDialog> {
               // Step Progress Bar
               _buildStepIndicator(isMobile),
               const SizedBox(height: 16),
+
+              // In-Dialog Error Banner
+              if (_errorMessage != null) ...[
+                Container(
+                  margin: const EdgeInsets.only(bottom: 14),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEF2F2),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFFCA5A5)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.error_outline_rounded, size: 18, color: Color(0xFFDC2626)),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          _errorMessage!,
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFFB91C1C),
+                          ),
+                        ),
+                      ),
+                      InkWell(
+                        onTap: () => setState(() => _errorMessage = null),
+                        child: const Icon(Icons.close_rounded, size: 16, color: Color(0xFFDC2626)),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
 
               // Step Body
               Expanded(
@@ -322,15 +354,20 @@ class _ImportWizardDialogState extends State<ImportWizardDialog> {
   }
 
   Widget _buildFileSelectStep(LeadProvider leadProvider, bool isMobile) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // Upload Dropzone
-        Expanded(
-          child: InkWell(
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Format & Column Guidelines Card
+          _buildFormatGuidelinesCard(isMobile),
+          const SizedBox(height: 14),
+
+          // Upload Dropzone
+          InkWell(
             onTap: _pickFile,
             borderRadius: BorderRadius.circular(18),
             child: Container(
+              padding: EdgeInsets.symmetric(vertical: isMobile ? 20 : 28, horizontal: 16),
               decoration: BoxDecoration(
                 color: const Color(0xFFF8FAFC),
                 borderRadius: BorderRadius.circular(18),
@@ -340,91 +377,253 @@ class _ImportWizardDialogState extends State<ImportWizardDialog> {
                 ),
               ),
               child: Center(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(18),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF2563EB).withValues(alpha: 0.1),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(Icons.cloud_upload_rounded, size: 42, color: Color(0xFF2563EB)),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2563EB).withValues(alpha: 0.1),
+                        shape: BoxShape.circle,
                       ),
-                      const SizedBox(height: 16),
-                      Text(
-                        _selectedFile != null ? _selectedFile!.name : 'Click to Browse .CSV or .XLSX Spreadsheet',
-                        style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
-                        textAlign: TextAlign.center,
+                      child: const Icon(Icons.cloud_upload_rounded, size: 36, color: Color(0xFF2563EB)),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      _selectedFile != null ? _selectedFile!.name : 'Click to Browse .CSV or .XLSX Spreadsheet',
+                      style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Supports Microsoft Excel (.xlsx) & CSV (.csv) formats with Name & Phone columns',
+                      style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B)),
+                      textAlign: TextAlign.center,
+                    ),
+                    if (_selectedFile != null) ...[
+                      const SizedBox(height: 10),
+                      AnimatedStatusBadge(
+                        label: '${(_selectedFile!.size / 1024).toStringAsFixed(1)} KB Ready to Preview',
+                        statusColor: const Color(0xFF10B981),
                       ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Supports name, phone, city, branch, and category columns',
-                        style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
-                        textAlign: TextAlign.center,
-                      ),
-                      if (_selectedFile != null) ...[
-                        const SizedBox(height: 12),
-                        AnimatedStatusBadge(
-                          label: '${(_selectedFile!.size / 1024).toStringAsFixed(1)} KB Ready',
-                          statusColor: const Color(0xFF10B981),
-                        ),
-                      ],
                     ],
-                  ),
+                  ],
                 ),
               ),
             ),
           ),
-        ),
-        const SizedBox(height: 16),
+          const SizedBox(height: 14),
 
-        // Default Branch & Category assignment for batch
-        Text(
-          'Batch Auto-Tagging (Optional)',
-          style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
-        ),
-        const SizedBox(height: 8),
-        if (isMobile) ...[
-          _buildDropdownTile(
-            title: 'Default Branch',
-            value: _selectedBranchId,
-            items: leadProvider.branches.map((b) => DropdownMenuItem(value: b.id, child: Text(b.name))).toList(),
-            onChanged: (val) => setState(() => _selectedBranchId = val),
+          // Default Branch & Category assignment for batch
+          Text(
+            'Batch Auto-Tagging (Optional)',
+            style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
           ),
-          const SizedBox(height: 10),
-          _buildDropdownTile(
-            title: 'Default Category',
-            value: _selectedCategoryId,
-            items: leadProvider.categories.map((c) => DropdownMenuItem(value: c.id, child: Text(c.name))).toList(),
-            onChanged: (val) => setState(() => _selectedCategoryId = val),
-          ),
-        ] else
+          const SizedBox(height: 8),
+          if (isMobile) ...[
+            _buildDropdownTile(
+              title: 'Default Branch',
+              value: _selectedBranchId,
+              items: leadProvider.branches.map((b) => DropdownMenuItem(value: b.id, child: Text(b.name))).toList(),
+              onChanged: (val) => setState(() => _selectedBranchId = val),
+            ),
+            const SizedBox(height: 10),
+            _buildDropdownTile(
+              title: 'Default Category',
+              value: _selectedCategoryId,
+              items: leadProvider.categories.map((c) => DropdownMenuItem(value: c.id, child: Text(c.name))).toList(),
+              onChanged: (val) => setState(() => _selectedCategoryId = val),
+            ),
+          ] else
+            Row(
+              children: [
+                Expanded(
+                  child: _buildDropdownTile(
+                    title: 'Default Branch',
+                    value: _selectedBranchId,
+                    items: leadProvider.branches.map((b) => DropdownMenuItem(value: b.id, child: Text(b.name))).toList(),
+                    onChanged: (val) => setState(() => _selectedBranchId = val),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: _buildDropdownTile(
+                    title: 'Default Category',
+                    value: _selectedCategoryId,
+                    items: leadProvider.categories.map((c) => DropdownMenuItem(value: c.id, child: Text(c.name))).toList(),
+                    onChanged: (val) => setState(() => _selectedCategoryId = val),
+                  ),
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFormatGuidelinesCard(bool isMobile) {
+    return Container(
+      padding: EdgeInsets.all(isMobile ? 12 : 14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0FDF4),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFF86EFAC)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
           Row(
             children: [
+              const Icon(Icons.table_chart_rounded, size: 18, color: Color(0xFF16A34A)),
+              const SizedBox(width: 8),
               Expanded(
-                child: _buildDropdownTile(
-                  title: 'Default Branch',
-                  value: _selectedBranchId,
-                  items: leadProvider.branches.map((b) => DropdownMenuItem(value: b.id, child: Text(b.name))).toList(),
-                  onChanged: (val) => setState(() => _selectedBranchId = val),
+                child: Text(
+                  'Supported File Formats & Column Guidelines',
+                  style: GoogleFonts.inter(fontSize: isMobile ? 12 : 13, fontWeight: FontWeight.w800, color: const Color(0xFF14532D)),
                 ),
               ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: _buildDropdownTile(
-                  title: 'Default Category',
-                  value: _selectedCategoryId,
-                  items: leadProvider.categories.map((c) => DropdownMenuItem(value: c.id, child: Text(c.name))).toList(),
-                  onChanged: (val) => setState(() => _selectedCategoryId = val),
+              OutlinedButton.icon(
+                onPressed: () {
+                  const sampleCsv = 'Name,Phone,Email,City,State\nJohn Doe,+919876543210,john@example.com,Mumbai,Maharashtra\nPriya Sharma,+919123456780,priya@example.com,Bangalore,Karnataka';
+                  Clipboard.setData(const ClipboardData(text: sampleCsv));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Sample CSV template copied to clipboard! Paste it into Excel or Notepad.'), backgroundColor: AppColors.success),
+                  );
+                },
+                icon: const Icon(Icons.copy_rounded, size: 13, color: Color(0xFF15803D)),
+                label: Text('Copy Sample CSV', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF15803D))),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Color(0xFF86EFAC)),
+                  backgroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 ),
               ),
             ],
           ),
-      ],
+          const SizedBox(height: 8),
+          Text(
+            'Upload your leads as an Excel (.xlsx) or CSV (.csv) file. The first row must contain the column header names.',
+            style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF166534)),
+          ),
+          const SizedBox(height: 10),
+
+          // Column Badges Wrap
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              _buildColumnBadge('Name *', 'Title / Lead Name', isRequired: true),
+              _buildColumnBadge('Phone *', 'Mobile / Contact No.', isRequired: true),
+              _buildColumnBadge('Email', 'Email Address (Optional)', isRequired: false),
+              _buildColumnBadge('City', 'City / Location (Optional)', isRequired: false),
+              _buildColumnBadge('State', 'State / Province (Optional)', isRequired: false),
+            ],
+          ),
+          const SizedBox(height: 10),
+
+          // Sample Table Preview
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFFDCFCE7)),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: DataTable(
+                  headingRowHeight: 30,
+                  dataRowMinHeight: 28,
+                  dataRowMaxHeight: 30,
+                  horizontalMargin: 12,
+                  columnSpacing: 18,
+                  headingRowColor: WidgetStateProperty.all(const Color(0xFFDCFCE7)),
+                  columns: [
+                    DataColumn(label: Text('Name *', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w800, color: const Color(0xFF14532D)))),
+                    DataColumn(label: Text('Phone *', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w800, color: const Color(0xFF14532D)))),
+                    DataColumn(label: Text('Email', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF14532D)))),
+                    DataColumn(label: Text('City', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF14532D)))),
+                    DataColumn(label: Text('State', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF14532D)))),
+                  ],
+                  rows: [
+                    DataRow(cells: [
+                      DataCell(Text('John Doe', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600))),
+                      DataCell(Text('+91 9876543210', style: GoogleFonts.robotoMono(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF047857)))),
+                      DataCell(Text('john@example.com', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)))),
+                      DataCell(Text('Mumbai', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)))),
+                      DataCell(Text('Maharashtra', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)))),
+                    ]),
+                    DataRow(cells: [
+                      DataCell(Text('Priya Sharma', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600))),
+                      DataCell(Text('9123456780', style: GoogleFonts.robotoMono(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF047857)))),
+                      DataCell(Text('priya@gmail.com', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)))),
+                      DataCell(Text('Bangalore', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)))),
+                      DataCell(Text('Karnataka', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)))),
+                    ]),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              const Icon(Icons.verified_user_rounded, size: 13, color: Color(0xFF15803D)),
+              const SizedBox(width: 5),
+              Expanded(
+                child: Text(
+                  'Duplicate numbers in the file or existing company leads will be automatically identified and safely skipped.',
+                  style: GoogleFonts.inter(fontSize: 10.5, color: const Color(0xFF15803D), fontWeight: FontWeight.w500),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildColumnBadge(String title, String subtitle, {required bool isRequired}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
+      decoration: BoxDecoration(
+        color: isRequired ? const Color(0xFFDCFCE7) : Colors.white,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: isRequired ? const Color(0xFF86EFAC) : const Color(0xFFCBD5E1)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: isRequired ? const Color(0xFF16A34A) : const Color(0xFF94A3B8),
+            ),
+          ),
+          const SizedBox(width: 5),
+          Text(
+            title,
+            style: GoogleFonts.inter(
+              fontSize: 10.5,
+              fontWeight: FontWeight.w700,
+              color: isRequired ? const Color(0xFF14532D) : const Color(0xFF475569),
+            ),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            '($subtitle)',
+            style: GoogleFonts.inter(
+              fontSize: 9.5,
+              color: isRequired ? const Color(0xFF15803D) : const Color(0xFF64748B),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

@@ -34,7 +34,7 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> login(String email, String password) async {
+  Future<bool> login(String usernameOrEmail, String password) async {
     _isLoading = true;
     _errorMessage = null;
     _errorCode = null;
@@ -42,8 +42,10 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
+      final cleanInput = usernameOrEmail.trim();
       final res = await ApiClient.post('/accounts/login/', {
-        'email': email.trim().toLowerCase(),
+        'email': cleanInput,
+        'username': cleanInput,
         'password': password.trim(),
       });
 
@@ -70,6 +72,36 @@ class AuthProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
       return false;
+    }
+  }
+
+  Future<Map<String, dynamic>> changePassword({
+    required String oldPassword,
+    required String newPassword,
+  }) async {
+    try {
+      final res = await ApiClient.post('/accounts/change-password/', {
+        'old_password': oldPassword,
+        'new_password': newPassword,
+      });
+      return {
+        'success': true,
+        'message': res['message'] ?? 'Password updated successfully.',
+      };
+    } on ApiException catch (e) {
+      final detail = e.data?['error'] ??
+          e.data?['detail'] ??
+          (e.data?['old_password'] is List ? (e.data!['old_password'] as List).first : null) ??
+          e.message;
+      return {
+        'success': false,
+        'error': detail.toString(),
+      };
+    } catch (e) {
+      return {
+        'success': false,
+        'error': e.toString(),
+      };
     }
   }
 

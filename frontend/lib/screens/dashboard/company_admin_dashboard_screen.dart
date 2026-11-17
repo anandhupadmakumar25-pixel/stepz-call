@@ -12,7 +12,6 @@ import '../../providers/employee_provider.dart';
 import '../../models/lead_model.dart';
 import '../../models/dashboard_model.dart';
 import '../leads/import_wizard_dialog.dart';
-import '../leads/add_lead_dialog.dart';
 import '../branches/branch_management_screen.dart';
 import '../employees/employee_management_screen.dart';
 import '../employees/employee_activity_detail_dialog.dart';
@@ -23,7 +22,6 @@ import '../../core/widgets/company_logo_view.dart';
 import '../companies/edit_company_dialog.dart';
 import '../../routes/app_routes.dart';
 import '../quotations/quotation_form_dialog.dart';
-import '../leads/bulk_assign_dialog.dart';
 import '../companies/renewal_request_dialog.dart';
 
 class CompanyAdminDashboardScreen extends StatefulWidget {
@@ -199,6 +197,264 @@ class _CompanyAdminDashboardScreenState extends State<CompanyAdminDashboardScree
                     ),
                   ],
                 ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showChangePasswordDialog() {
+    final formKey = GlobalKey<FormState>();
+    final oldPasswordCtrl = TextEditingController();
+    final newPasswordCtrl = TextEditingController();
+    final confirmPasswordCtrl = TextEditingController();
+
+    bool obscureOld = true;
+    bool obscureNew = true;
+    bool obscureConfirm = true;
+    bool isSubmitting = false;
+    String? localError;
+
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.7),
+      builder: (ctx) {
+        final isMobile = ResponsiveLayout.isMobile(ctx);
+        return StatefulBuilder(
+          builder: (context, setDlgState) => Dialog(
+            backgroundColor: Colors.transparent,
+            insetPadding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 20, vertical: isMobile ? 16 : 24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 460),
+              child: GlassCard(
+                blur: 24,
+                opacity: 0.98,
+                borderRadius: BorderRadius.circular(20),
+                padding: EdgeInsets.all(isMobile ? 18 : 28),
+                child: Form(
+                  key: formKey,
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
+                  child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFEF3C7),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: const Color(0xFFFDE68A)),
+                            ),
+                            child: const Icon(Icons.lock_reset_rounded, color: Color(0xFFD97706), size: 22),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Change / Reset Password',
+                                  style: GoogleFonts.inter(
+                                    fontSize: isMobile ? 16 : 18,
+                                    fontWeight: FontWeight.w700,
+                                    color: const Color(0xFF0F172A),
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Enter temporary or current password to set a new password',
+                                  style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B)),
+                                ),
+                              ],
+                            ),
+                          ),
+                          DialogCloseButton(onPressed: () => Navigator.pop(ctx)),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+
+                      if (localError != null) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFEF2F2),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: const Color(0xFFFCA5A5)),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.error_outline_rounded, color: Color(0xFFDC2626), size: 16),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  localError!,
+                                  style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFFB91C1C)),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+
+                      // Current / Temporary Password
+                      TextFormField(
+                        controller: oldPasswordCtrl,
+                        obscureText: obscureOld,
+                        style: GoogleFonts.inter(color: const Color(0xFF0F172A), fontSize: 13),
+                        validator: (v) => v == null || v.trim().isEmpty ? 'Please enter current or temporary password' : null,
+                        decoration: InputDecoration(
+                          labelText: 'Current / Temporary Password *',
+                          labelStyle: GoogleFonts.inter(color: const Color(0xFF64748B), fontSize: 12.5),
+                          hintText: 'Enter temporary or current password',
+                          hintStyle: GoogleFonts.inter(color: const Color(0xFF94A3B8), fontSize: 12),
+                          filled: true,
+                          fillColor: const Color(0xFFF8FAFC),
+                          prefixIcon: const Icon(Icons.key_rounded, size: 18, color: Color(0xFF64748B)),
+                          suffixIcon: IconButton(
+                            icon: Icon(obscureOld ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 18, color: const Color(0xFF64748B)),
+                            onPressed: () => setDlgState(() => obscureOld = !obscureOld),
+                          ),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+                          errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFDC2626), width: 1.5)),
+                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF047857), width: 1.5)),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+
+                      // New Password
+                      TextFormField(
+                        controller: newPasswordCtrl,
+                        obscureText: obscureNew,
+                        style: GoogleFonts.inter(color: const Color(0xFF0F172A), fontSize: 13),
+                        validator: (v) {
+                          if (v == null || v.trim().isEmpty) return 'New password is required';
+                          if (v.trim().length < 6) return 'Password must be at least 6 characters';
+                          return null;
+                        },
+                        decoration: InputDecoration(
+                          labelText: 'New Password *',
+                          labelStyle: GoogleFonts.inter(color: const Color(0xFF64748B), fontSize: 12.5),
+                          hintText: 'Minimum 6 characters',
+                          hintStyle: GoogleFonts.inter(color: const Color(0xFF94A3B8), fontSize: 12),
+                          filled: true,
+                          fillColor: const Color(0xFFF8FAFC),
+                          prefixIcon: const Icon(Icons.lock_outline_rounded, size: 18, color: Color(0xFF64748B)),
+                          suffixIcon: IconButton(
+                            icon: Icon(obscureNew ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 18, color: const Color(0xFF64748B)),
+                            onPressed: () => setDlgState(() => obscureNew = !obscureNew),
+                          ),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+                          errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFDC2626), width: 1.5)),
+                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF047857), width: 1.5)),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Confirm New Password
+                      TextFormField(
+                        controller: confirmPasswordCtrl,
+                        obscureText: obscureConfirm,
+                        style: GoogleFonts.inter(color: const Color(0xFF0F172A), fontSize: 13),
+                        validator: (v) {
+                          if (v == null || v.trim().isEmpty) return 'Please confirm your new password';
+                          if (v.trim() != newPasswordCtrl.text.trim()) return 'Confirm password does not match';
+                          return null;
+                        },
+                        decoration: InputDecoration(
+                          labelText: 'Confirm New Password *',
+                          labelStyle: GoogleFonts.inter(color: const Color(0xFF64748B), fontSize: 12.5),
+                          hintText: 'Re-enter new password',
+                          hintStyle: GoogleFonts.inter(color: const Color(0xFF94A3B8), fontSize: 12),
+                          filled: true,
+                          fillColor: const Color(0xFFF8FAFC),
+                          prefixIcon: const Icon(Icons.lock_rounded, size: 18, color: Color(0xFF64748B)),
+                          suffixIcon: IconButton(
+                            icon: Icon(obscureConfirm ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 18, color: const Color(0xFF64748B)),
+                            onPressed: () => setDlgState(() => obscureConfirm = !obscureConfirm),
+                          ),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+                          errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFDC2626), width: 1.5)),
+                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF047857), width: 1.5)),
+                        ),
+                      ),
+                      const SizedBox(height: 22),
+
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          TextButton(
+                            onPressed: isSubmitting ? null : () => Navigator.pop(ctx),
+                            child: Text('Cancel', style: GoogleFonts.inter(color: const Color(0xFF64748B), fontWeight: FontWeight.w600)),
+                          ),
+                          const SizedBox(width: 10),
+                          ElevatedButton.icon(
+                            onPressed: isSubmitting
+                                ? null
+                                : () async {
+                                    if (!formKey.currentState!.validate()) {
+                                      setDlgState(() => localError = 'Please fix the highlighted errors before submitting.');
+                                      return;
+                                    }
+
+                                    final oldPass = oldPasswordCtrl.text.trim();
+                                    final newPass = newPasswordCtrl.text.trim();
+
+                                    setDlgState(() {
+                                      isSubmitting = true;
+                                      localError = null;
+                                    });
+
+                                    final authProv = context.read<AuthProvider>();
+                                    final res = await authProv.changePassword(oldPassword: oldPass, newPassword: newPass);
+
+                                    if (!mounted) return;
+
+                                    if (res['success'] == true) {
+                                      Navigator.pop(ctx);
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(
+                                          content: Text('Password changed successfully! Please use your new password next time you sign in.'),
+                                          backgroundColor: AppColors.success,
+                                          duration: Duration(seconds: 4),
+                                        ),
+                                      );
+                                    } else {
+                                      setDlgState(() {
+                                        isSubmitting = false;
+                                        localError = res['error']?.toString() ?? 'Failed to change password.';
+                                      });
+                                    }
+                                  },
+                            icon: isSubmitting
+                                ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                : const Icon(Icons.check_rounded, size: 16),
+                            label: Text(
+                              isSubmitting ? 'Updating...' : 'Update Password',
+                              style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF047857),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              elevation: 0,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
               ),
             ),
           ),
@@ -726,43 +982,6 @@ class _CompanyAdminDashboardScreenState extends State<CompanyAdminDashboardScree
                   ),
                 ),
 
-              // Button: + Add Lead (Prominent)
-              ElevatedButton.icon(
-                onPressed: () {
-                  showDialog(
-                    context: context,
-                    builder: (ctx) => const AddLeadDialog(),
-                  );
-                },
-                icon: const Icon(Icons.person_add_rounded, size: 16),
-                label: Text('Add Lead', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF047857),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  elevation: 0,
-                ),
-              ),
-
-              // Button: ⚡ Bulk Assign
-              OutlinedButton.icon(
-                onPressed: () {
-                  showDialog(
-                    context: context,
-                    builder: (ctx) => const BulkAssignDialog(selectedLeadIds: []),
-                  );
-                },
-                icon: const Icon(Icons.bolt_rounded, size: 16, color: Color(0xFF7C3AED)),
-                label: Text('Bulk Assign', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF6D28D9))),
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: Color(0xFFDDD6FE), width: 1.0),
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  backgroundColor: const Color(0xFFF5F3FF),
-                ),
-              ),
-
               // Button: 📥 Import Leads CSV
               OutlinedButton.icon(
                 onPressed: () {
@@ -846,6 +1065,19 @@ class _CompanyAdminDashboardScreenState extends State<CompanyAdminDashboardScree
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   backgroundColor: const Color(0xFFEEF2FF),
+                ),
+              ),
+
+              // Button: Reset / Change Password
+              OutlinedButton.icon(
+                onPressed: _showChangePasswordDialog,
+                icon: const Icon(Icons.lock_reset_rounded, size: 16, color: Color(0xFFD97706)),
+                label: Text('Change Password', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFFB45309))),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Color(0xFFFDE68A), width: 1.0),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  backgroundColor: const Color(0xFFFFFBEB),
                 ),
               ),
 

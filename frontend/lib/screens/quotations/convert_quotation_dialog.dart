@@ -693,7 +693,7 @@ class _ConvertQuotationDialogState extends State<ConvertQuotationDialog> {
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          'Client negotiated or accepted below the approximate quotation? Edit rates, quantities, or enter a negotiated discount below to lock the exact agreed bill amount.',
+                          'Client negotiated or accepted final terms? Edit rates, quantities, or enter a negotiated discount below to lock the exact agreed bill amount.',
                           style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF1E40AF), fontWeight: FontWeight.w500),
                         ),
                       ),

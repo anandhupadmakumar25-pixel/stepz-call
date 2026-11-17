@@ -91,6 +91,7 @@ class CompanyListCreateView(views.APIView):
         data = serializer.validated_data
 
         admin_email = data['admin_email'].strip()
+        admin_username = data.get('admin_username', '').strip() or None
         admin_password = data.get('admin_password', '').strip()
         if not admin_password:
             admin_password = generate_temporary_password(10)
@@ -105,6 +106,9 @@ class CompanyListCreateView(views.APIView):
 
         if User.objects.filter(email=admin_email).exists():
             return Response({"error": f"A user with email '{admin_email}' already exists. Please use a different admin email address."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if admin_username and User.objects.filter(username__iexact=admin_username).exists():
+            return Response({"error": f"A user with username '{admin_username}' already exists. Please choose a different username."}, status=status.HTTP_400_BAD_REQUEST)
 
         plan = get_plan_by_id_or_code(plan_id)
         if not plan:
@@ -152,6 +156,7 @@ class CompanyListCreateView(views.APIView):
             )
             admin_user = User.objects.create_user(
                 email=admin_email,
+                username=admin_username,
                 password=admin_password,
                 first_name=admin_first_name,
                 last_name=admin_last_name,
@@ -178,6 +183,7 @@ class CompanyListCreateView(views.APIView):
         return Response({
             "company": CompanySerializer(company).data,
             "admin_email": admin_email,
+            "admin_username": admin_username or '',
             "temp_password": admin_password,
             "message": "Company tenant provisioned successfully with generated admin credentials."
         }, status=status.HTTP_201_CREATED)

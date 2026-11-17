@@ -31,6 +31,7 @@ class CompanySerializer(serializers.ModelSerializer):
     task_count = serializers.SerializerMethodField()
     admin_name = serializers.SerializerMethodField()
     admin_email = serializers.SerializerMethodField()
+    admin_username = serializers.SerializerMethodField()
     plan_name = serializers.CharField(source='plan.name', read_only=True, default='Starter Lite')
     plan_code = serializers.CharField(source='plan.code', read_only=True, default='starter')
     plan_currency = serializers.CharField(source='plan.currency', read_only=True, default='INR')
@@ -48,12 +49,15 @@ class CompanySerializer(serializers.ModelSerializer):
     assigned_super_admin_name = serializers.SerializerMethodField()
     is_plan_expired = serializers.BooleanField(read_only=True)
     days_until_expiry = serializers.IntegerField(read_only=True, allow_null=True)
+    currency = serializers.CharField(read_only=True)
+    currency_symbol = serializers.CharField(read_only=True)
 
     class Meta:
         model = Company
         fields = [
             'id', 'name', 'subdomain', 'contact_email', 'contact_phone',
             'status', 'default_country_code', 'default_country_iso',
+            'currency', 'currency_symbol',
             'logo', 'address', 'gstin', 'website',
             'plan', 'plan_name', 'plan_code', 'plan_currency', 'plan_currency_symbol',
             'plan_price_monthly', 'plan_price_yearly',
@@ -64,7 +68,7 @@ class CompanySerializer(serializers.ModelSerializer):
             'created_by_id', 'created_by_name', 'created_by_email',
             'assigned_super_admin_id', 'assigned_super_admin_name',
             'settings', 'user_count', 'lead_count', 'branch_count', 'task_count',
-            'admin_name', 'admin_email', 'created_at', 'updated_at'
+            'admin_name', 'admin_email', 'admin_username', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'is_plan_expired', 'days_until_expiry', 'created_at', 'updated_at']
 
@@ -97,6 +101,10 @@ class CompanySerializer(serializers.ModelSerializer):
         admin = obj.users.filter(role='COMPANY_ADMIN').first()
         return admin.email if admin else obj.contact_email
 
+    def get_admin_username(self, obj):
+        admin = obj.users.filter(role='COMPANY_ADMIN').first()
+        return admin.username if (admin and admin.username) else ''
+
     def get_resolved_allowed_menus(self, obj):
         return obj.get_allowed_menus()
 
@@ -106,6 +114,7 @@ class CompanySerializer(serializers.ModelSerializer):
 class CompanyCreateSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=255)
     admin_email = serializers.EmailField()
+    admin_username = serializers.CharField(max_length=150, required=False, allow_blank=True, default='')
     admin_password = serializers.CharField(min_length=6, required=False, allow_blank=True, default='')
     admin_first_name = serializers.CharField(max_length=150, required=False, allow_blank=True, default='')
     admin_last_name = serializers.CharField(max_length=150, required=False, allow_blank=True, default='')

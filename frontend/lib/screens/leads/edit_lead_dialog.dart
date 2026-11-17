@@ -29,6 +29,7 @@ class _EditLeadDialogState extends State<EditLeadDialog> {
   late String _selectedStatus;
   String? _selectedCategory;
   bool _isSaving = false;
+  String? _errorMessage;
 
   final List<Map<String, String>> _statusOptions = [
     {'value': 'UNASSIGNED', 'label': 'Unassigned'},
@@ -91,6 +92,7 @@ class _EditLeadDialogState extends State<EditLeadDialog> {
       payload['category'] = _selectedCategory;
     }
 
+    setState(() => _errorMessage = null);
     final updated = await provider.updateLead(widget.lead.id, payload);
     setState(() => _isSaving = false);
 
@@ -104,12 +106,9 @@ class _EditLeadDialogState extends State<EditLeadDialog> {
           ),
         );
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(provider.errorMessage ?? 'Failed to update lead'),
-            backgroundColor: const Color(0xFFEF4444),
-          ),
-        );
+        setState(() {
+          _errorMessage = provider.errorMessage ?? 'Failed to update lead. Please verify all fields and try again.';
+        });
       }
     }
   }
@@ -131,6 +130,7 @@ class _EditLeadDialogState extends State<EditLeadDialog> {
           padding: const EdgeInsets.all(24),
           child: Form(
             key: _formKey,
+            autovalidateMode: AutovalidateMode.onUserInteraction,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -164,6 +164,39 @@ class _EditLeadDialogState extends State<EditLeadDialog> {
                 const SizedBox(height: 16),
                 const Divider(color: Color(0xFFE2E8F0), height: 1),
                 const SizedBox(height: 16),
+
+                // In-Dialog Error Alert Banner
+                if (_errorMessage != null) ...[
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 14),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEF2F2),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFFCA5A5)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.error_outline_rounded, size: 18, color: Color(0xFFDC2626)),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            _errorMessage!,
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: const Color(0xFFB91C1C),
+                            ),
+                          ),
+                        ),
+                        InkWell(
+                          onTap: () => setState(() => _errorMessage = null),
+                          child: const Icon(Icons.close_rounded, size: 16, color: Color(0xFFDC2626)),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
 
                 // Form Scrollable Body
                 Expanded(

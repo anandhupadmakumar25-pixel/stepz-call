@@ -19,12 +19,14 @@ class QuotationFormDialog extends StatefulWidget {
   final LeadModel? lead;
   final bool isBill;
   final QuotationModel? quotationToEdit;
+  final InvoiceModel? invoiceToEdit;
 
   const QuotationFormDialog({
     super.key,
     this.lead,
     this.isBill = false,
     this.quotationToEdit,
+    this.invoiceToEdit,
   });
 
   @override
@@ -34,10 +36,12 @@ class QuotationFormDialog extends StatefulWidget {
 class _LineItemEntry {
   String rowType; // 'ITEM' or 'SECTION_TITLE'
   final TextEditingController titleController = TextEditingController();
+  final TextEditingController itemCodeController = TextEditingController();
   final TextEditingController descriptionController = TextEditingController();
   final TextEditingController qtyController = TextEditingController(text: '1');
   final TextEditingController rateController = TextEditingController(text: '0.00');
-  final TextEditingController taxController = TextEditingController(text: '18');
+  final TextEditingController cstController = TextEditingController(text: '0.00'); // Cost Price (CST)
+  final TextEditingController taxController = TextEditingController(text: '0');
   final TextEditingController discountController = TextEditingController(text: '0');
   final TextEditingController totalController = TextEditingController(text: '0.00');
   final Map<String, TextEditingController> customControllers = {};
@@ -48,9 +52,11 @@ class _LineItemEntry {
 
   void dispose() {
     titleController.dispose();
+    itemCodeController.dispose();
     descriptionController.dispose();
     qtyController.dispose();
     rateController.dispose();
+    cstController.dispose();
     taxController.dispose();
     discountController.dispose();
     totalController.dispose();
@@ -70,6 +76,8 @@ class _LineItemEntry {
 
   double get quantity => isSectionTitle ? 0.0 : (double.tryParse(qtyController.text) ?? 1.0);
   double get rate => isSectionTitle ? 0.0 : (double.tryParse(rateController.text) ?? 0.0);
+  double get cst => isSectionTitle ? 0.0 : (double.tryParse(cstController.text) ?? 0.0);
+  double get costSum => isSectionTitle ? 0.0 : (quantity * cst);
   double get taxPercent => isSectionTitle ? 0.0 : (double.tryParse(taxController.text) ?? 0.0);
   double get discountPercent => isSectionTitle ? 0.0 : (double.tryParse(discountController.text) ?? 0.0);
 
@@ -88,6 +96,12 @@ class _LineItemEntry {
     return taxable + (taxable * (effTax / 100.0));
   }
 
+  double get grossMargin => computeLineTotal(showPrice: true, showQty: true, showTax: false) - costSum;
+  double get marginPercent {
+    final t = computeLineTotal(showPrice: true, showQty: true, showTax: false);
+    return t > 0 ? (grossMargin / t) * 100 : 0.0;
+  }
+
   bool get isValid => isSectionTitle ? titleController.text.trim().isNotEmpty : descriptionController.text.trim().isNotEmpty;
 
   QuotationItemModel toModel({required bool showPrice, required bool showQty, required bool showTax}) {
@@ -104,10 +118,12 @@ class _LineItemEntry {
     return QuotationItemModel(
       rowType: rowType,
       title: titleController.text.trim(),
+      itemCode: itemCodeController.text.trim(),
       description: descriptionController.text.trim(),
       customFields: customFields,
       quantity: effQty,
       unitPrice: effRate,
+      cst: cst,
       taxPercent: effTax,
       discountPercent: discountPercent,
       total: effTotal,
@@ -128,6 +144,18 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
   late TextEditingController _termsController;
   DateTime? _validUntil;
 
+  // Professional Endless Perfume format metadata
+  late TextEditingController _clientCodeController;
+  late TextEditingController _salesRepController;
+  late TextEditingController _incotermsController;
+  late TextEditingController _locationController;
+  late TextEditingController _contactPersonController;
+  late TextEditingController _crNumberController;
+  String _currency = 'INR';
+  bool _showMarginAnalysis = true; // Toggle for CST & margin columns in table
+  bool _hideCostInPdf = true; // Checkbox toggle for customer PDF export
+  String? _errorMessage;
+
   final List<String> _customColumns = [];
   bool _showQty = true;
   bool _showPrice = true;
@@ -143,6 +171,42 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
     final editQ = widget.quotationToEdit;
     final lead = widget.lead;
     _selectedLead = lead;
+
+    final user = context.read<AuthProvider>().currentUser;
+    final comp = context.read<CompanyProvider>().activeCompanyDetail;
+
+    if (editQ != null && editQ.currency.isNotEmpty) {
+      _currency = editQ.currency;
+    } else if (comp != null) {
+      _currency = comp.currency;
+    } else if (user != null && user.companyCurrency.isNotEmpty) {
+      _currency = user.companyCurrency;
+    } else {
+      _currency = 'INR';
+    }
+
+    _clientCodeController = TextEditingController(
+      text: editQ?.clientCode.isNotEmpty == true
+          ? editQ!.clientCode
+          : (lead != null ? 'SP-${lead.phoneNumber.replaceAll(RegExp(r'[^0-9]'), '').padLeft(4).substring(0, 4)}' : ''),
+    );
+    _salesRepController = TextEditingController(
+      text: editQ?.salesRepName.isNotEmpty == true
+          ? editQ!.salesRepName
+          : (user?.fullName.isNotEmpty == true ? user!.fullName : (user?.username ?? '')),
+    );
+    _incotermsController = TextEditingController(
+      text: editQ?.incoterms.isNotEmpty == true ? editQ!.incoterms : 'EX WORKSHOP DOHA',
+    );
+    _locationController = TextEditingController(
+      text: editQ?.location.isNotEmpty == true ? editQ!.location : (lead?.city.isNotEmpty == true ? lead!.city : 'DOHA'),
+    );
+    _contactPersonController = TextEditingController(
+      text: editQ?.contactPerson.isNotEmpty == true ? editQ!.contactPerson : (lead?.fullName ?? ''),
+    );
+    _crNumberController = TextEditingController(text: editQ?.crNumber ?? '');
+    _hideCostInPdf = editQ?.hideCostInPdf ?? true;
+
     _nameController = TextEditingController(text: editQ?.customerName ?? lead?.fullName ?? '');
     _phoneController = TextEditingController(text: editQ?.customerPhone ?? lead?.phoneNumber ?? '');
     _emailController = TextEditingController(text: editQ?.customerEmail ?? lead?.email ?? '');
@@ -159,9 +223,7 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
     _termsController = TextEditingController(
       text: editQ?.termsAndConditions.isNotEmpty == true
           ? editQ!.termsAndConditions
-          : (_createAsInvoice
-              ? '1. Payment due within 15 days of invoice date.\n2. Applicable GST and duties included.\n3. Goods/Services once rendered are governed by standard service agreements.'
-              : '1. Quotation is an approximate estimate valid for 15 days.\n2. Final billing price is locked upon Tax Invoice generation.\n3. Applicable GST and duties included.'),
+          : 'JO Value below 5000: Should be fully paid in advance upon opening JO for all clients.\nJO Value above 5000: 50% advance payment & 50% postdated cheques in delivery timeline.\nOil maceration (minimum 1 week) | Bulk Maceration: 21 Days before filtering. Goods will be delivered in original packing. Approved orders will not be cancelled.',
     );
     _validUntil = DateTime.now().add(const Duration(days: 15));
 
@@ -182,8 +244,10 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
           row.titleController.addListener(() => setState(() {}));
         } else {
           row.descriptionController.text = it.description;
+          row.itemCodeController.text = it.itemCode;
           row.qtyController.text = it.quantity == it.quantity.roundToDouble() ? it.quantity.toInt().toString() : it.quantity.toString();
           row.rateController.text = it.unitPrice.toStringAsFixed(2);
+          row.cstController.text = it.cst.toStringAsFixed(2);
           row.taxController.text = it.taxPercent.toStringAsFixed(0);
           row.discountController.text = it.discountPercent.toStringAsFixed(0);
           row.totalController.text = it.total > 0 ? it.total.toStringAsFixed(2) : (it.unitPrice > 0 ? it.unitPrice.toStringAsFixed(2) : '0.00');
@@ -191,6 +255,8 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
             row.getCustomController(col, () => setState(() {})).text = val;
           });
           row.descriptionController.addListener(() => setState(() {}));
+          row.itemCodeController.addListener(() => setState(() {}));
+          row.cstController.addListener(() => _onItemValuesChanged(row));
           row.qtyController.addListener(() => _onItemValuesChanged(row));
           row.rateController.addListener(() => _onItemValuesChanged(row));
           row.taxController.addListener(() => _onItemValuesChanged(row));
@@ -228,6 +294,19 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
       if (lead.email.isNotEmpty) _emailController.text = lead.email;
       final addr = [lead.city, lead.state].where((s) => s.isNotEmpty).join(', ');
       if (addr.isNotEmpty) _addressController.text = addr;
+
+      if (_locationController.text.isEmpty && lead.city.isNotEmpty) {
+        _locationController.text = lead.city;
+      }
+      if (_contactPersonController.text.isEmpty) {
+        _contactPersonController.text = lead.fullName;
+      }
+      if (_clientCodeController.text.isEmpty) {
+        final digits = lead.phoneNumber.replaceAll(RegExp(r'[^0-9]'), '');
+        final suffix = digits.length >= 4 ? digits.substring(digits.length - 4) : '1106';
+        _clientCodeController.text = 'SP-$suffix';
+      }
+
       if (lead.notes.isNotEmpty && (_notesController.text.isEmpty || _notesController.text.startsWith('Regarding:'))) {
         _notesController.text = 'Regarding: ${lead.notes}';
       }
@@ -240,10 +319,30 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
     });
   }
 
-  void _addItemRow({String? name, double? price, double? tax}) {
+  void _applyDynamicTerms() {
+    final total = _calculatedGrandTotal;
+    final buf = StringBuffer();
+    if (total < 5000) {
+      buf.writeln('JO Value below 5000:');
+      buf.writeln('Should be fully paid in advance upon opening JO for all clients including new and old.');
+    } else {
+      buf.writeln('JO Value above 5000:');
+      buf.writeln('Should be fully paid in advance Or 50% advance payment and remaining balance 50% as postdated cheques with dates in the delivery timeline.');
+    }
+    buf.writeln('');
+    buf.writeln('Oil maceration (minimum 1 week) | Bulk Maceration: 21 Days before filtering. Goods will be delivered in original packing | Approved orders will not be cancelled and advances will not be refunded.');
+    buf.writeln('All above listed references have been sampled and approved by the customer before order. Therefore, goods will not be taken back | Grievances regarding technicalities must be reported within a week of receiving goods thereafter they shall not be entertained | Price on proforma invoice will be valid for a month unless agreed in written.');
+    setState(() {
+      _termsController.text = buf.toString().trim();
+    });
+  }
+
+  void _addItemRow({String? name, String? itemCode, double? price, double? cst, double? tax}) {
     final item = _LineItemEntry();
     if (name != null) item.descriptionController.text = name;
+    if (itemCode != null) item.itemCodeController.text = itemCode;
     if (price != null) item.rateController.text = price.toStringAsFixed(2);
+    if (cst != null) item.cstController.text = cst.toStringAsFixed(2);
     if (tax != null) item.taxController.text = tax.toStringAsFixed(0);
 
     for (final col in _customColumns) {
@@ -253,6 +352,8 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
     item.totalController.text = item.computeLineTotal(showPrice: _showPrice, showQty: _showQty, showTax: _showTax).toStringAsFixed(2);
 
     item.descriptionController.addListener(() => setState(() {}));
+    item.itemCodeController.addListener(() => setState(() {}));
+    item.cstController.addListener(() => _onItemValuesChanged(item));
     item.qtyController.addListener(() => _onItemValuesChanged(item));
     item.rateController.addListener(() => _onItemValuesChanged(item));
     item.taxController.addListener(() => _onItemValuesChanged(item));
@@ -519,6 +620,12 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
   @override
   void dispose() {
     _horizontalScrollController.dispose();
+    _clientCodeController.dispose();
+    _salesRepController.dispose();
+    _incotermsController.dispose();
+    _locationController.dispose();
+    _contactPersonController.dispose();
+    _crNumberController.dispose();
     _nameController.dispose();
     _phoneController.dispose();
     _emailController.dispose();
@@ -566,14 +673,172 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
     });
   }
 
+  double get _calculatedTotalCost {
+    return _items.where((i) => !i.isSectionTitle).fold(0.0, (acc, item) {
+      final effQty = _showQty ? item.quantity : 1.0;
+      return acc + (effQty * item.cst);
+    });
+  }
+
+  double get _calculatedGrossMargin => _calculatedGrandTotal - _calculatedTotalCost;
+  double get _calculatedMarginPercent => _calculatedGrandTotal > 0 ? (_calculatedGrossMargin / _calculatedGrandTotal) * 100 : 0.0;
+
+  Future<bool?> _promptPrintFormat(BuildContext context) async {
+    return showDialog<bool>(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 480),
+          child: GlassCard(
+            blur: 24,
+            opacity: 0.98,
+            borderRadius: BorderRadius.circular(20),
+            borderColor: const Color(0xFFCBD5E1),
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF6366F1).withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.picture_as_pdf_rounded, color: Color(0xFF6366F1), size: 22),
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          'Quotation PDF Format',
+                          style: GoogleFonts.inter(fontSize: 17, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+                        ),
+                      ],
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded, color: Color(0xFF64748B)),
+                      onPressed: () => Navigator.pop(ctx, null),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Select the PDF presentation format to generate:',
+                  style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
+                ),
+                const SizedBox(height: 16),
+
+                // Option 1: Standard Client PDF
+                InkWell(
+                  onTap: () => Navigator.pop(ctx, false),
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFCBD5E1)),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFDBEAFE),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.person_outline_rounded, color: Color(0xFF1D4ED8), size: 24),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Client Quotation (Standard)',
+                                style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                'Clean customer-facing quote. Hides internal unit cost (CST) & profit margin.',
+                                style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Color(0xFF94A3B8)),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // Option 2: Commercial Quotation with CST
+                InkWell(
+                  onTap: () => Navigator.pop(ctx, true),
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFFBEB),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFFDE68A)),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFEF3C7),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.analytics_rounded, color: Color(0xFFB45309), size: 24),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Commercial Quotation with CST',
+                                style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700, color: const Color(0xFF92400E)),
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                'Shows Unit Cost (CST), Cost SUM, and Gross Margin analysis.',
+                                style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF78350F)),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Color(0xFFB45309)),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<QuotationModel?> _saveQuotation() async {
-    if (!_formKey.currentState!.validate()) return null;
+    setState(() => _errorMessage = null);
+    if (!_formKey.currentState!.validate()) {
+      setState(() => _errorMessage = 'Please fix the highlighted fields in the form.');
+      return null;
+    }
 
     final validItems = _items.where((i) => i.isValid).toList();
     if (validItems.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please add at least one line item or section title.')),
-      );
+      setState(() => _errorMessage = 'Please add at least one line item or section title.');
       return null;
     }
 
@@ -586,6 +851,13 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
       'customer_phone': _phoneController.text.trim(),
       'customer_email': _emailController.text.trim(),
       'customer_address': _addressController.text.trim(),
+      'client_code': _clientCodeController.text.trim(),
+      'sales_rep_name': _salesRepController.text.trim(),
+      'incoterms': _incotermsController.text.trim(),
+      'location': _locationController.text.trim(),
+      'contact_person': _contactPersonController.text.trim(),
+      'cr_number': _crNumberController.text.trim(),
+      'currency': _currency,
       if (_validUntil != null) 'valid_until': _validUntil!.toIso8601String().split('T').first,
       'custom_columns': {
         'columns': _customColumns,
@@ -598,6 +870,9 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
       'discount_amount': _calculatedDiscount,
       'tax_amount': _calculatedTax,
       'grand_total': _calculatedGrandTotal,
+      'total_cost': _calculatedTotalCost,
+      'gross_margin': _calculatedGrossMargin,
+      'hide_cost_in_pdf': _hideCostInPdf,
       'notes': _notesController.text.trim(),
       'terms_and_conditions': _termsController.text.trim(),
       'status': 'SENT',
@@ -607,17 +882,22 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
         ? await provider.updateQuotation(widget.quotationToEdit!.id, payload)
         : await provider.createQuotation(payload);
     setState(() => _isSaving = false);
+    if (result == null && provider.errorMessage != null) {
+      setState(() => _errorMessage = provider.errorMessage);
+    }
     return result;
   }
 
   Future<InvoiceModel?> _saveInvoice() async {
-    if (!_formKey.currentState!.validate()) return null;
+    setState(() => _errorMessage = null);
+    if (!_formKey.currentState!.validate()) {
+      setState(() => _errorMessage = 'Please fix the highlighted fields in the form.');
+      return null;
+    }
 
     final validItems = _items.where((i) => i.isValid).toList();
     if (validItems.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please add at least one line item or section title.')),
-      );
+      setState(() => _errorMessage = 'Please add at least one line item or section title.');
       return null;
     }
 
@@ -630,6 +910,13 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
       'customer_phone': _phoneController.text.trim(),
       'customer_email': _emailController.text.trim(),
       'customer_address': _addressController.text.trim(),
+      'client_code': _clientCodeController.text.trim(),
+      'sales_rep_name': _salesRepController.text.trim(),
+      'incoterms': _incotermsController.text.trim(),
+      'location': _locationController.text.trim(),
+      'contact_person': _contactPersonController.text.trim(),
+      'cr_number': _crNumberController.text.trim(),
+      'currency': _currency,
       if (_validUntil != null) 'due_date': _validUntil!.toIso8601String().split('T').first,
       'custom_columns': {
         'columns': _customColumns,
@@ -642,13 +929,24 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
       'discount_amount': _calculatedDiscount,
       'tax_amount': _calculatedTax,
       'grand_total': _calculatedGrandTotal,
+      'total_cost': _calculatedTotalCost,
+      'gross_margin': _calculatedGrossMargin,
+      'hide_cost_in_pdf': _hideCostInPdf,
       'notes': _notesController.text.trim(),
       'terms_and_conditions': _termsController.text.trim(),
-      'payment_status': 'PENDING',
+      'payment_status': widget.invoiceToEdit?.paymentStatus ?? 'PENDING',
     };
 
-    final result = await provider.createInvoice(payload);
+    final InvoiceModel? result;
+    if (widget.invoiceToEdit != null) {
+      result = await provider.updateInvoice(widget.invoiceToEdit!.id, payload);
+    } else {
+      result = await provider.createInvoice(payload);
+    }
     setState(() => _isSaving = false);
+    if (result == null && provider.errorMessage != null) {
+      setState(() => _errorMessage = provider.errorMessage);
+    }
     return result;
   }
 
@@ -771,7 +1069,7 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                             setState(() {
                               _createAsInvoice = false;
                               _termsController.text =
-                                  '1. Quotation is an approximate estimate valid for 15 days.\n2. Final billing price is locked upon Tax Invoice generation.\n3. Applicable GST and duties included.';
+                                  '1. Quotation is valid for 15 days from issue date.\n2. Payment terms as agreed.\n3. All prices include applicable taxes.';
                             });
                           },
                           borderRadius: BorderRadius.circular(8),
@@ -839,7 +1137,7 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                 ),
                 const SizedBox(height: 10),
 
-                // Note banner explaining Approximate vs Fixed Price
+                // Note banner explaining Quotation vs Fixed Price Bill
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
@@ -859,7 +1157,7 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                         child: Text(
                           _createAsInvoice
                               ? 'Official Tax Invoice: Product prices entered here will be saved directly as a Fixed Price Bill in Billing & Invoices.'
-                              : 'Estimated Quote: Product prices here are approximate. When converted to an Invoice / Bill, prices are locked as Fixed Price.',
+                              : 'Sales Quotation: Official commercial offer. When converted to an Invoice, amounts are finalized as a Fixed Price Bill.',
                           style: GoogleFonts.inter(
                             fontSize: 11,
                             color: _createAsInvoice ? const Color(0xFF1E40AF) : const Color(0xFF065F46),
@@ -870,6 +1168,35 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                     ],
                   ),
                 ),
+                if (_errorMessage != null) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEF2F2),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFFCA5A5)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.error_outline_rounded, size: 18, color: Color(0xFFDC2626)),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            _errorMessage!,
+                            style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFFB91C1C)),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close_rounded, size: 16, color: Color(0xFFDC2626)),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                          onPressed: () => setState(() => _errorMessage = null),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 12),
                 const Divider(color: Color(0xFFE2E8F0), height: 1),
                 const SizedBox(height: 12),
@@ -965,6 +1292,7 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                           _buildLeadSearchAutocomplete(leads),
                           const SizedBox(height: 12),
                         ],
+                        // Customer & Commercial Metadata - Row 1
                         Row(
                           children: [
                             Expanded(
@@ -976,7 +1304,58 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                                 validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
                               ),
                             ),
-                            const SizedBox(width: 12),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              flex: 15,
+                              child: _buildInput(
+                                label: 'Client Code',
+                                controller: _clientCodeController,
+                                icon: Icons.tag_rounded,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              flex: 15,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('Currency', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF475569))),
+                                  const SizedBox(height: 5),
+                                  Container(
+                                    height: 42,
+                                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(10),
+                                      border: Border.all(color: const Color(0xFFCBD5E1)),
+                                    ),
+                                    child: DropdownButtonHideUnderline(
+                                      child: DropdownButton<String>(
+                                        value: _currency,
+                                        isExpanded: true,
+                                        style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
+                                        items: const [
+                                          DropdownMenuItem(value: 'QAR', child: Text('QAR (ر.ق)')),
+                                          DropdownMenuItem(value: 'AED', child: Text('AED (د.إ)')),
+                                          DropdownMenuItem(value: 'SAR', child: Text('SAR (ر.س)')),
+                                          DropdownMenuItem(value: 'OMR', child: Text('OMR (ر.ع.)')),
+                                          DropdownMenuItem(value: 'KWD', child: Text('KWD (د.ك)')),
+                                          DropdownMenuItem(value: 'BHD', child: Text('BHD (د.ب)')),
+                                          DropdownMenuItem(value: 'INR', child: Text('INR (₹)')),
+                                          DropdownMenuItem(value: 'USD', child: Text('USD (\$)')),
+                                          DropdownMenuItem(value: 'EUR', child: Text('EUR (€)')),
+                                          DropdownMenuItem(value: 'GBP', child: Text('GBP (£)')),
+                                        ],
+                                        onChanged: (val) {
+                                          if (val != null) setState(() => _currency = val);
+                                        },
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 10),
                             Expanded(
                               flex: 2,
                               child: _buildInput(
@@ -987,7 +1366,40 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                                 validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
                               ),
                             ),
-                            const SizedBox(width: 12),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+
+                        // Row 2: Contact Person, Location, CR Number, Email
+                        Row(
+                          children: [
+                            Expanded(
+                              flex: 2,
+                              child: _buildInput(
+                                label: 'Contact Person',
+                                controller: _contactPersonController,
+                                icon: Icons.person_outline_rounded,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              flex: 2,
+                              child: _buildInput(
+                                label: 'Location / City',
+                                controller: _locationController,
+                                icon: Icons.location_city_outlined,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              flex: 2,
+                              child: _buildInput(
+                                label: 'CR / Reg Number',
+                                controller: _crNumberController,
+                                icon: Icons.badge_outlined,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
                             Expanded(
                               flex: 2,
                               child: _buildInput(
@@ -998,18 +1410,38 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                             ),
                           ],
                         ),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 10),
+
+                        // Row 3: Sales Rep, Incoterms, Billing Address, Valid Until
                         Row(
                           children: [
                             Expanded(
-                              flex: 4,
+                              flex: 2,
+                              child: _buildInput(
+                                label: 'Sales Rep',
+                                controller: _salesRepController,
+                                icon: Icons.support_agent_outlined,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              flex: 2,
+                              child: _buildInput(
+                                label: 'Incoterms',
+                                controller: _incotermsController,
+                                icon: Icons.local_shipping_outlined,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              flex: 3,
                               child: _buildInput(
                                 label: 'Billing Address',
                                 controller: _addressController,
                                 icon: Icons.location_on_outlined,
                               ),
                             ),
-                            const SizedBox(width: 12),
+                            const SizedBox(width: 10),
                             Expanded(
                               flex: 2,
                               child: Column(
@@ -1028,19 +1460,23 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                                       if (picked != null) setState(() => _validUntil = picked);
                                     },
                                     child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                      height: 42,
+                                      padding: const EdgeInsets.symmetric(horizontal: 10),
                                       decoration: BoxDecoration(
                                         color: Colors.white,
                                         borderRadius: BorderRadius.circular(10),
-                                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                                        border: Border.all(color: const Color(0xFFCBD5E1)),
                                       ),
                                       child: Row(
                                         children: [
-                                          const Icon(Icons.calendar_today_outlined, size: 16, color: Color(0xFF2563EB)),
-                                          const SizedBox(width: 8),
-                                          Text(
-                                            _validUntil != null ? _validUntil!.toIso8601String().split('T').first : 'Select date',
-                                            style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF0F172A)),
+                                          const Icon(Icons.calendar_today_outlined, size: 15, color: Color(0xFF2563EB)),
+                                          const SizedBox(width: 6),
+                                          Expanded(
+                                            child: Text(
+                                              _validUntil != null ? _validUntil!.toIso8601String().split('T').first : 'Select date',
+                                              style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF0F172A)),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
                                           ),
                                         ],
                                       ),
@@ -1182,6 +1618,37 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                                 OutlinedButton.icon(
                                   style: OutlinedButton.styleFrom(
                                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                    backgroundColor: _showMarginAnalysis ? const Color(0xFFF0FDF4) : Colors.transparent,
+                                    side: BorderSide(color: _showMarginAnalysis ? const Color(0xFF16A34A) : const Color(0xFFCBD5E1)),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                  ),
+                                  onPressed: () => setState(() => _showMarginAnalysis = !_showMarginAnalysis),
+                                  icon: Icon(_showMarginAnalysis ? Icons.query_stats_rounded : Icons.visibility_off_outlined, size: 15, color: _showMarginAnalysis ? const Color(0xFF15803D) : const Color(0xFF64748B)),
+                                  label: Text(_showMarginAnalysis ? 'Cost & Margin: ON' : 'Cost & Margin: OFF', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: _showMarginAnalysis ? const Color(0xFF15803D) : const Color(0xFF64748B))),
+                                ),
+                                InkWell(
+                                  onTap: () => setState(() => _hideCostInPdf = !_hideCostInPdf),
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: _hideCostInPdf ? const Color(0xFFFEF3C7) : const Color(0xFFF1F5F9),
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: _hideCostInPdf ? const Color(0xFFFCD34D) : const Color(0xFFCBD5E1)),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(_hideCostInPdf ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded, size: 15, color: _hideCostInPdf ? const Color(0xFFB45309) : const Color(0xFF64748B)),
+                                        const SizedBox(width: 4),
+                                        Text('Hide Cost in PDF', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: _hideCostInPdf ? const Color(0xFF92400E) : const Color(0xFF475569))),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                OutlinedButton.icon(
+                                  style: OutlinedButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                                     side: const BorderSide(color: Color(0xFF6366F1)),
                                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                   ),
@@ -1220,12 +1687,13 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                         // Line Items Scrollable Container
                         LayoutBuilder(
                           builder: (context, constraints) {
-                            final double minTableWidth = 36 + 240 +
-                                (_customColumns.length * 128) +
-                                (_showQty ? 90 : 0) +
-                                (_showPrice ? 120 : 0) +
-                                (_showTax ? 85 : 0) +
-                                115 + 76 + 24;
+                            final double minTableWidth = 36 + 85 + 220 +
+                                (_customColumns.length * 120) +
+                                (_showQty ? 80 : 0) +
+                                (_showPrice ? 110 : 0) +
+                                (_showTax ? 75 : 0) +
+                                (_showMarginAnalysis ? (85 + 90 + 95) : 0) +
+                                115 + 76 + 32;
                             final double tableWidth = constraints.maxWidth > minTableWidth ? constraints.maxWidth : minTableWidth;
 
                             return Container(
@@ -1258,6 +1726,12 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                                                 width: 36,
                                                 child: Text('#', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF475569))),
                                               ),
+                                              const SizedBox(width: 8),
+                                              SizedBox(
+                                                width: 85,
+                                                child: Text('Item Code', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF475569))),
+                                              ),
+                                              const SizedBox(width: 8),
                                               Expanded(
                                                 child: Text('Product / Type to Search', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF475569))),
                                               ),
@@ -1292,7 +1766,7 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                                               if (_showQty) ...[
                                                 const SizedBox(width: 8),
                                                 SizedBox(
-                                                  width: 82,
+                                                  width: 80,
                                                   child: Row(
                                                     mainAxisAlignment: MainAxisAlignment.end,
                                                     children: [
@@ -1314,11 +1788,11 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                                               if (_showPrice) ...[
                                                 const SizedBox(width: 8),
                                                 SizedBox(
-                                                  width: 112,
+                                                  width: 110,
                                                   child: Row(
                                                     mainAxisAlignment: MainAxisAlignment.end,
                                                     children: [
-                                                      Text('Price (₹)', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF475569))),
+                                                      Text('Price ($_currency)', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF475569))),
                                                       Tooltip(
                                                         message: 'Remove Price column',
                                                         child: InkWell(
@@ -1336,7 +1810,7 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                                               if (_showTax) ...[
                                                 const SizedBox(width: 8),
                                                 SizedBox(
-                                                  width: 77,
+                                                  width: 75,
                                                   child: Row(
                                                     mainAxisAlignment: MainAxisAlignment.end,
                                                     children: [
@@ -1355,13 +1829,30 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                                                   ),
                                                 ),
                                               ],
+                                              if (_showMarginAnalysis) ...[
+                                                const SizedBox(width: 8),
+                                                SizedBox(
+                                                  width: 85,
+                                                  child: Text('CST ($_currency)', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFFB45309))),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                SizedBox(
+                                                  width: 90,
+                                                  child: Text('Cost Sum', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFFB45309))),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                SizedBox(
+                                                  width: 95,
+                                                  child: Text('Gross Margin', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF15803D))),
+                                                ),
+                                              ],
                                               const SizedBox(width: 8),
                                               SizedBox(
-                                                width: 107,
+                                                width: 115,
                                                 child: Row(
                                                   mainAxisAlignment: MainAxisAlignment.end,
                                                   children: [
-                                                    Text('Total (₹)', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF475569))),
+                                                    Text('Total ($_currency)', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF475569))),
                                                     const Padding(
                                                       padding: EdgeInsets.only(left: 4),
                                                       child: Icon(Icons.lock_outline_rounded, size: 11, color: Color(0xFF94A3B8)),
@@ -1440,6 +1931,22 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                                                     width: 36,
                                                     child: Text('${idx + 1}', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B))),
                                                   ),
+                                                  const SizedBox(width: 8),
+                                                  // Item Code Field
+                                                  SizedBox(
+                                                    width: 85,
+                                                    child: TextFormField(
+                                                      controller: item.itemCodeController,
+                                                      style: GoogleFonts.inter(fontSize: 12),
+                                                      decoration: const InputDecoration(
+                                                        hintText: 'Code',
+                                                        isDense: true,
+                                                        border: OutlineInputBorder(),
+                                                        contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 8),
                                                   // Product Search Autocomplete Field
                                                   Expanded(
                                                     child: Autocomplete<ProductModel>(
@@ -1508,7 +2015,7 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                                                                     dense: true,
                                                                     visualDensity: VisualDensity.compact,
                                                                     title: Text(opt.name, style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A))),
-                                                                    subtitle: Text('Price: ₹${opt.unitPrice.toStringAsFixed(2)} · Tax ${opt.taxPercent.toStringAsFixed(0)}%', style: GoogleFonts.inter(fontSize: 10, color: const Color(0xFF64748B))),
+                                                                    subtitle: Text('Price: $_currency ${opt.unitPrice.toStringAsFixed(2)} · Tax ${opt.taxPercent.toStringAsFixed(0)}%', style: GoogleFonts.inter(fontSize: 10, color: const Color(0xFF64748B))),
                                                                     trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 10, color: Color(0xFF94A3B8)),
                                                                     onTap: () => onSelected(opt),
                                                                   );
@@ -1541,7 +2048,7 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                                                   if (_showQty) ...[
                                                     const SizedBox(width: 8),
                                                     SizedBox(
-                                                      width: 82,
+                                                      width: 80,
                                                       child: TextFormField(
                                                         controller: item.qtyController,
                                                         textAlign: TextAlign.right,
@@ -1559,7 +2066,7 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                                                   if (_showPrice) ...[
                                                     const SizedBox(width: 8),
                                                     SizedBox(
-                                                      width: 112,
+                                                      width: 110,
                                                       child: TextFormField(
                                                         controller: item.rateController,
                                                         textAlign: TextAlign.right,
@@ -1577,7 +2084,7 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                                                   if (_showTax) ...[
                                                     const SizedBox(width: 8),
                                                     SizedBox(
-                                                      width: 77,
+                                                      width: 75,
                                                       child: TextFormField(
                                                         controller: item.taxController,
                                                         textAlign: TextAlign.right,
@@ -1591,13 +2098,54 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                                                       ),
                                                     ),
                                                   ],
+                                                  // Cost & Margin columns
+                                                  if (_showMarginAnalysis) ...[
+                                                    const SizedBox(width: 8),
+                                                    SizedBox(
+                                                      width: 85,
+                                                      child: TextFormField(
+                                                        controller: item.cstController,
+                                                        textAlign: TextAlign.right,
+                                                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                                        style: GoogleFonts.robotoMono(fontSize: 12, color: const Color(0xFF0F172A)),
+                                                        decoration: const InputDecoration(
+                                                          hintText: '0.00',
+                                                          isDense: true,
+                                                          border: OutlineInputBorder(),
+                                                          contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 8),
+                                                    SizedBox(
+                                                      width: 90,
+                                                      child: Text(
+                                                        '$_currency ${item.costSum.toStringAsFixed(2)}',
+                                                        textAlign: TextAlign.right,
+                                                        style: GoogleFonts.robotoMono(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF64748B)),
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 8),
+                                                    SizedBox(
+                                                      width: 95,
+                                                      child: Text(
+                                                        '$_currency ${item.grossMargin.toStringAsFixed(2)}\n(${item.marginPercent.toStringAsFixed(0)}%)',
+                                                        textAlign: TextAlign.right,
+                                                        style: GoogleFonts.robotoMono(
+                                                          fontSize: 10.5,
+                                                          fontWeight: FontWeight.w700,
+                                                          color: item.grossMargin >= 0 ? const Color(0xFF15803D) : const Color(0xFFDC2626),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
                                                   // Line Total (Editable if price is hidden, computed if price is visible)
                                                   const SizedBox(width: 8),
                                                   SizedBox(
-                                                    width: 107,
+                                                    width: 115,
                                                     child: _showPrice
                                                         ? Text(
-                                                            '₹${item.computeLineTotal(showPrice: _showPrice, showQty: _showQty, showTax: _showTax).toStringAsFixed(2)}',
+                                                            '$_currency ${item.computeLineTotal(showPrice: _showPrice, showQty: _showQty, showTax: _showTax).toStringAsFixed(2)}',
                                                             textAlign: TextAlign.right,
                                                             style: GoogleFonts.robotoMono(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
                                                           )
@@ -1648,11 +2196,32 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                                     maxLines: 2,
                                   ),
                                   const SizedBox(height: 10),
-                                  _buildInput(
-                                    label: 'Terms & Conditions',
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text('Terms & Conditions', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF475569))),
+                                      TextButton.icon(
+                                        onPressed: _applyDynamicTerms,
+                                        icon: const Icon(Icons.auto_fix_high_rounded, size: 14, color: Color(0xFF2563EB)),
+                                        label: Text('⚡ Auto-fill Terms (<5k / ≥5k Rule)', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF2563EB))),
+                                        style: TextButton.styleFrom(visualDensity: VisualDensity.compact, padding: EdgeInsets.zero),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  TextFormField(
                                     controller: _termsController,
-                                    icon: Icons.gavel_outlined,
-                                    maxLines: 2,
+                                    maxLines: 3,
+                                    style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF0F172A)),
+                                    decoration: InputDecoration(
+                                      isDense: true,
+                                      filled: true,
+                                      fillColor: Colors.white,
+                                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFCBD5E1))),
+                                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+                                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.5)),
+                                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                    ),
                                   ),
                                 ],
                               ),
@@ -1670,22 +2239,47 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                                 ),
                                 child: Column(
                                   children: [
-                                    _buildSummaryRow('Approximate Subtotal', '₹${_calculatedSubtotal.toStringAsFixed(2)}'),
+                                    _buildSummaryRow('Selling Subtotal', '$_currency ${_calculatedSubtotal.toStringAsFixed(2)}'),
                                     if (_calculatedDiscount > 0)
-                                      _buildSummaryRow('Discount', '-₹${_calculatedDiscount.toStringAsFixed(2)}', textColor: const Color(0xFFDC2626)),
+                                      _buildSummaryRow('Discount', '-$_currency ${_calculatedDiscount.toStringAsFixed(2)}', textColor: const Color(0xFFDC2626)),
                                     if (_calculatedTax > 0)
-                                      _buildSummaryRow('Tax / GST', '₹${_calculatedTax.toStringAsFixed(2)}'),
+                                      _buildSummaryRow('Tax / GST', '$_currency ${_calculatedTax.toStringAsFixed(2)}'),
                                     const Divider(color: Color(0xFFCBD5E1), height: 16),
                                     _buildSummaryRow(
-                                      'Approximate Total',
-                                      '₹${_calculatedGrandTotal.toStringAsFixed(2)}',
+                                      'Grand Total',
+                                      '$_currency ${_calculatedGrandTotal.toStringAsFixed(2)}',
                                       isBold: true,
                                       fontSize: 15,
                                       textColor: const Color(0xFF1E3A8A),
                                     ),
+                                    if (_showMarginAnalysis) ...[
+                                      const Divider(color: Color(0xFFCBD5E1), height: 16),
+                                      _buildSummaryRow('Total Cost (CST)', '$_currency ${_calculatedTotalCost.toStringAsFixed(2)}', textColor: const Color(0xFF64748B)),
+                                      const SizedBox(height: 4),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                        decoration: BoxDecoration(
+                                          color: _calculatedGrossMargin >= 0 ? const Color(0xFFDCFCE7) : const Color(0xFFFEE2E2),
+                                          borderRadius: BorderRadius.circular(8),
+                                          border: Border.all(color: _calculatedGrossMargin >= 0 ? const Color(0xFF86EFAC) : const Color(0xFFFCA5A5)),
+                                        ),
+                                        child: Row(
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Text('Gross Margin', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: _calculatedGrossMargin >= 0 ? const Color(0xFF15803D) : const Color(0xFFB91C1C))),
+                                            Text(
+                                              '$_currency ${_calculatedGrossMargin.toStringAsFixed(2)} (${_calculatedMarginPercent.toStringAsFixed(1)}%)',
+                                              style: GoogleFonts.robotoMono(fontSize: 12, fontWeight: FontWeight.w800, color: _calculatedGrossMargin >= 0 ? const Color(0xFF15803D) : const Color(0xFFB91C1C)),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
                                     const SizedBox(height: 6),
                                     Text(
-                                      '* Estimated quote only. Price will be fixed upon converting to Bill.',
+                                      _createAsInvoice
+                                          ? '* Fixed Price Tax Invoice with dynamic tenant branding.'
+                                          : '* Estimated quote. Prices locked upon conversion to Bill.',
                                       style: GoogleFonts.inter(fontSize: 10, color: const Color(0xFF64748B), fontStyle: FontStyle.italic),
                                     ),
                                   ],
@@ -1769,6 +2363,13 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                                   );
                                 }
                               } else {
+                                bool includeCst = !_hideCostInPdf;
+                                if (_showMarginAnalysis) {
+                                  final chosen = await _promptPrintFormat(context);
+                                  if (chosen != null) {
+                                    includeCst = chosen;
+                                  }
+                                }
                                 final quote = await _saveQuotation();
                                 if (quote != null) {
                                   nav.pop(quote);
@@ -1781,6 +2382,7 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                                     companyGstin: compGstin,
                                     companyWebsite: compWebsite,
                                     companyLogo: compLogo,
+                                    includeCst: includeCst,
                                   );
                                 }
                               }
@@ -1823,7 +2425,7 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                                   nav.pop(quote);
                                   messenger.showSnackBar(
                                     SnackBar(
-                                      content: Text('Approximate Quotation ${quote.quotationNumber} created & products saved!'),
+                                      content: Text('Sales Quotation ${quote.quotationNumber} created & products saved!'),
                                       backgroundColor: const Color(0xFF10B981),
                                     ),
                                   );

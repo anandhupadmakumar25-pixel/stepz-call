@@ -6,6 +6,7 @@ import 'package:printing/printing.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../models/quotation_model.dart';
 import '../../models/invoice_model.dart';
+import '../../models/receipt_voucher_model.dart';
 
 class PdfInvoiceService {
   static pw.MemoryImage? _decodeLogo(String? logo) {
@@ -32,9 +33,11 @@ class PdfInvoiceService {
     String? companyGstin,
     String? companyWebsite,
     String? companyLogo,
+    bool includeCst = false,
   }) async {
     final pdf = pw.Document();
     final logoImage = _decodeLogo(companyLogo);
+    final curr = quotation.currency.isNotEmpty ? quotation.currency : 'INR';
 
     pdf.addPage(
       pw.Page(
@@ -115,16 +118,16 @@ class PdfInvoiceService {
                       pw.Container(
                         padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                         decoration: pw.BoxDecoration(
-                          color: PdfColors.indigo50,
+                          color: includeCst ? PdfColors.amber50 : PdfColors.indigo50,
                           borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
-                          border: pw.Border.all(color: PdfColors.indigo200),
+                          border: pw.Border.all(color: includeCst ? PdfColors.amber300 : PdfColors.indigo200),
                         ),
                         child: pw.Text(
-                          'ESTIMATE / APPROXIMATE QUOTATION',
+                          includeCst ? 'INTERNAL CST & MARGIN QUOTATION' : 'SALES QUOTATION',
                           style: pw.TextStyle(
-                            fontSize: 12,
+                            fontSize: 11,
                             fontWeight: pw.FontWeight.bold,
-                            color: PdfColors.indigo800,
+                            color: includeCst ? PdfColors.amber900 : PdfColors.indigo800,
                           ),
                         ),
                       ),
@@ -178,17 +181,24 @@ class PdfInvoiceService {
                 final showTax = quotation.showTax;
 
                 final Map<int, pw.TableColumnWidth> colWidths = {
-                  0: const pw.FixedColumnWidth(24),
+                  0: const pw.FixedColumnWidth(22),
                   1: const pw.FlexColumnWidth(3.0),
                 };
                 int cIdx = 2;
                 for (int i = 0; i < customCols.length; i++) {
-                  colWidths[cIdx++] = const pw.FlexColumnWidth(1.4);
+                  colWidths[cIdx++] = const pw.FlexColumnWidth(1.3);
                 }
-                if (showQty) colWidths[cIdx++] = const pw.FixedColumnWidth(40);
-                if (showPrice) colWidths[cIdx++] = const pw.FixedColumnWidth(60);
-                if (showTax) colWidths[cIdx++] = const pw.FixedColumnWidth(44);
-                colWidths[cIdx++] = const pw.FixedColumnWidth(65);
+                if (showQty) colWidths[cIdx++] = const pw.FixedColumnWidth(38);
+                if (includeCst) {
+                  colWidths[cIdx++] = const pw.FixedColumnWidth(44); // CST
+                  colWidths[cIdx++] = const pw.FixedColumnWidth(50); // SUM Cost
+                }
+                if (showPrice) colWidths[cIdx++] = const pw.FixedColumnWidth(52);
+                if (showTax && !includeCst) colWidths[cIdx++] = const pw.FixedColumnWidth(40);
+                colWidths[cIdx++] = const pw.FixedColumnWidth(58); // Total
+                if (includeCst) {
+                  colWidths[cIdx++] = const pw.FixedColumnWidth(48); // Margin
+                }
 
                 return pw.Table(
                   border: pw.TableBorder(
@@ -199,19 +209,25 @@ class PdfInvoiceService {
                   children: [
                     // Table Header
                     pw.TableRow(
-                      decoration: const pw.BoxDecoration(color: PdfColors.indigo50),
+                      decoration: pw.BoxDecoration(color: includeCst ? PdfColors.amber50 : PdfColors.indigo50),
                       children: [
-                        pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('#', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9))),
-                        pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Item Description', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9))),
+                        pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('#', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5))),
+                        pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Item Description', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5))),
                         for (final col in customCols)
-                          pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(col, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9))),
+                          pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(col, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5))),
                         if (showQty)
-                          pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Qty', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9))),
+                          pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Qty', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5))),
+                        if (includeCst) ...[
+                          pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('CST', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5, color: PdfColors.amber900))),
+                          pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('SUM', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5, color: PdfColors.amber900))),
+                        ],
                         if (showPrice)
-                          pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Rate', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9))),
-                        if (showTax)
-                          pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Tax %', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9))),
-                        pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Total', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9))),
+                          pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Rate', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5))),
+                        if (showTax && !includeCst)
+                          pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Tax %', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5))),
+                        pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Total', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5))),
+                        if (includeCst)
+                          pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Margin', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5, color: PdfColors.green900))),
                       ],
                     ),
                     // Items & Section Title Rows
@@ -248,19 +264,28 @@ class PdfInvoiceService {
                         );
                       }
 
+                      final costSum = item.costPrice * item.quantity;
+                      final grossProfit = item.total - costSum;
+
                       return pw.TableRow(
                         children: [
-                          pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('$idx', style: const pw.TextStyle(fontSize: 8.5))),
-                          pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(item.description, style: const pw.TextStyle(fontSize: 9))),
+                          pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('$idx', style: const pw.TextStyle(fontSize: 8))),
+                          pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(item.description, style: const pw.TextStyle(fontSize: 8.5))),
                           for (final col in customCols)
-                            pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(item.customFields[col] ?? '-', style: const pw.TextStyle(fontSize: 8.5))),
+                            pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(item.customFields[col] ?? '-', style: const pw.TextStyle(fontSize: 8))),
                           if (showQty)
-                            pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(item.quantity.toStringAsFixed(item.quantity.truncateToDouble() == item.quantity ? 0 : 2), textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 8.5))),
+                            pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(item.quantity.toStringAsFixed(item.quantity.truncateToDouble() == item.quantity ? 0 : 2), textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 8))),
+                          if (includeCst) ...[
+                            pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(item.costPrice.toStringAsFixed(2), textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey800))),
+                            pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(costSum.toStringAsFixed(2), textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey800))),
+                          ],
                           if (showPrice)
-                            pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Rs. ${item.unitPrice.toStringAsFixed(2)}', textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 8.5))),
-                          if (showTax)
-                            pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('${item.taxPercent}%', textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 8.5))),
-                          pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Rs. ${item.total.toStringAsFixed(2)}', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold))),
+                            pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('$curr ${item.unitPrice.toStringAsFixed(2)}', textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 8))),
+                          if (showTax && !includeCst)
+                            pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('${item.taxPercent}%', textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 8))),
+                          pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('$curr ${item.total.toStringAsFixed(2)}', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold))),
+                          if (includeCst)
+                            pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(grossProfit.toStringAsFixed(2), textAlign: pw.TextAlign.right, style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: grossProfit >= 0 ? PdfColors.green800 : PdfColors.red800))),
                         ],
                       );
                     }),
@@ -303,15 +328,24 @@ class PdfInvoiceService {
                       ),
                       child: pw.Column(
                         children: [
-                          _buildPdfAmountRow('Approximate Subtotal', 'Rs. ${quotation.subtotal.toStringAsFixed(2)}'),
+                          _buildPdfAmountRow('Subtotal', '$curr ${quotation.subtotal.toStringAsFixed(2)}'),
+                          if (includeCst) ...[
+                            _buildPdfAmountRow('Total Cost (CST Sum)', '$curr ${quotation.totalCost.toStringAsFixed(2)}', textColor: PdfColors.amber900),
+                            _buildPdfAmountRow(
+                              'Gross Profit',
+                              '$curr ${quotation.grossMargin.toStringAsFixed(2)} (${quotation.subtotal > 0 ? ((quotation.grossMargin / quotation.subtotal) * 100).toStringAsFixed(1) : 0}%)',
+                              textColor: PdfColors.green800,
+                              isBold: true,
+                            ),
+                          ],
                           if (quotation.discountAmount > 0)
-                            _buildPdfAmountRow('Discount', '-Rs. ${quotation.discountAmount.toStringAsFixed(2)}', textColor: PdfColors.red700),
+                            _buildPdfAmountRow('Discount', '-$curr ${quotation.discountAmount.toStringAsFixed(2)}', textColor: PdfColors.red700),
                           if (quotation.taxAmount > 0)
-                            _buildPdfAmountRow('Tax / GST', 'Rs. ${quotation.taxAmount.toStringAsFixed(2)}'),
+                            _buildPdfAmountRow('Tax / GST', '$curr ${quotation.taxAmount.toStringAsFixed(2)}'),
                           pw.Divider(color: PdfColors.grey400, thickness: 0.5, height: 12),
                           _buildPdfAmountRow(
-                            'Approximate Grand Total',
-                            'Rs. ${quotation.grandTotal.toStringAsFixed(2)}',
+                            'Grand Total',
+                            '$curr ${quotation.grandTotal.toStringAsFixed(2)}',
                             isBold: true,
                             fontSize: 12,
                             textColor: PdfColors.indigo900,
@@ -327,7 +361,7 @@ class PdfInvoiceService {
               // Footer
               pw.Center(
                 child: pw.Text(
-                  'Thank you for your business! This is an approximate quotation / estimate. Final pricing is fixed upon Tax Invoice generation.',
+                  'Thank you for your business! This quotation is valid for 15 days from issue date.',
                   style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey500),
                 ),
               ),
@@ -352,6 +386,7 @@ class PdfInvoiceService {
   }) async {
     final pdf = pw.Document();
     final logoImage = _decodeLogo(companyLogo);
+    final curr = invoice.currency.isNotEmpty ? invoice.currency : 'INR';
 
     pdf.addPage(
       pw.Page(
@@ -599,10 +634,10 @@ class PdfInvoiceService {
                           if (showQty)
                             pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(item.quantity.toStringAsFixed(item.quantity.truncateToDouble() == item.quantity ? 0 : 2), textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 8.5))),
                           if (showPrice)
-                            pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Rs. ${item.unitPrice.toStringAsFixed(2)}', textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 8.5))),
+                            pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('$curr ${item.unitPrice.toStringAsFixed(2)}', textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 8.5))),
                           if (showTax)
                             pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('${item.taxPercent}%', textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 8.5))),
-                          pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Rs. ${item.total.toStringAsFixed(2)}', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold))),
+                          pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('$curr ${item.total.toStringAsFixed(2)}', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold))),
                         ],
                       );
                     }),
@@ -643,29 +678,29 @@ class PdfInvoiceService {
                       ),
                       child: pw.Column(
                         children: [
-                          _buildPdfAmountRow('Fixed Subtotal', 'Rs. ${invoice.subtotal.toStringAsFixed(2)}'),
+                          _buildPdfAmountRow('Fixed Subtotal', '$curr ${invoice.subtotal.toStringAsFixed(2)}'),
                           if (invoice.discountAmount > 0)
-                            _buildPdfAmountRow('Discount', '-Rs. ${invoice.discountAmount.toStringAsFixed(2)}', textColor: PdfColors.red700),
+                            _buildPdfAmountRow('Discount', '-$curr ${invoice.discountAmount.toStringAsFixed(2)}', textColor: PdfColors.red700),
                           if (invoice.taxAmount > 0)
-                            _buildPdfAmountRow('Tax / GST', 'Rs. ${invoice.taxAmount.toStringAsFixed(2)}'),
+                            _buildPdfAmountRow('Tax / GST', '$curr ${invoice.taxAmount.toStringAsFixed(2)}'),
                           pw.Divider(color: PdfColors.grey400, thickness: 0.5, height: 10),
                           _buildPdfAmountRow(
-                            'Approximate Grand Total',
-                            'Rs. ${invoice.grandTotal.toStringAsFixed(2)}',
+                            'Grand Total',
+                            '$curr ${invoice.grandTotal.toStringAsFixed(2)}',
                             isBold: true,
                             fontSize: 11,
                             textColor: PdfColors.indigo900,
                           ),
                           _buildPdfAmountRow(
                             'Amount Paid',
-                            'Rs. ${invoice.amountPaid.toStringAsFixed(2)}',
+                            '$curr ${invoice.amountPaid.toStringAsFixed(2)}',
                             fontSize: 10,
                             textColor: PdfColors.green800,
                           ),
                           pw.Divider(color: PdfColors.grey400, thickness: 0.5, height: 10),
                           _buildPdfAmountRow(
                             'Balance Due',
-                            'Rs. ${invoice.balanceDue.toStringAsFixed(2)}',
+                            '$curr ${invoice.balanceDue.toStringAsFixed(2)}',
                             isBold: true,
                             fontSize: 12,
                             textColor: invoice.balanceDue > 0 ? PdfColors.red800 : PdfColors.green800,
@@ -737,6 +772,7 @@ class PdfInvoiceService {
     String? companyGstin,
     String? companyWebsite,
     String? companyLogo,
+    bool includeCst = false,
   }) async {
     await Printing.layoutPdf(
       onLayout: (format) async => await generateQuotationPdf(
@@ -748,8 +784,9 @@ class PdfInvoiceService {
         companyGstin: companyGstin,
         companyWebsite: companyWebsite,
         companyLogo: companyLogo,
+        includeCst: includeCst,
       ),
-      name: '${quotation.quotationNumber}.pdf',
+      name: '${quotation.quotationNumber}${includeCst ? '_INTERNAL_CST' : ''}.pdf',
     );
   }
 
@@ -763,6 +800,7 @@ class PdfInvoiceService {
     String? companyGstin,
     String? companyWebsite,
     String? companyLogo,
+    bool includeCst = false,
   }) async {
     final bytes = await generateQuotationPdf(
       quotation,
@@ -773,8 +811,9 @@ class PdfInvoiceService {
       companyGstin: companyGstin,
       companyWebsite: companyWebsite,
       companyLogo: companyLogo,
+      includeCst: includeCst,
     );
-    await Printing.sharePdf(bytes: bytes, filename: '${quotation.quotationNumber}.pdf');
+    await Printing.sharePdf(bytes: bytes, filename: '${quotation.quotationNumber}${includeCst ? '_INTERNAL_CST' : ''}.pdf');
   }
 
   /// Print or preview invoice
@@ -838,14 +877,14 @@ class PdfInvoiceService {
 
 Greetings from *$companyName*!
 
-We are pleased to share your Approximate Quotation *${quotation.quotationNumber}* dated ${quotation.date}:
+We are pleased to share your Sales Quotation *${quotation.quotationNumber}* dated ${quotation.date}:
 
 *Items / Services:*
 $itemsSummary
 
-*Subtotal:* ₹${quotation.subtotal.toStringAsFixed(2)}
-${quotation.discountAmount > 0 ? '*Discount:* -₹${quotation.discountAmount.toStringAsFixed(2)}\n' : ''}*Tax / GST:* ₹${quotation.taxAmount.toStringAsFixed(2)}
-*Approximate Total Amount:* ₹${quotation.grandTotal.toStringAsFixed(2)} (Estimated Quote)
+*Subtotal:* ${quotation.currency.isNotEmpty ? quotation.currency : '₹'} ${quotation.subtotal.toStringAsFixed(2)}
+${quotation.discountAmount > 0 ? '*Discount:* -${quotation.currency.isNotEmpty ? quotation.currency : '₹'} ${quotation.discountAmount.toStringAsFixed(2)}\n' : ''}*Tax / GST:* ${quotation.currency.isNotEmpty ? quotation.currency : '₹'} ${quotation.taxAmount.toStringAsFixed(2)}
+*Total Amount:* ${quotation.currency.isNotEmpty ? quotation.currency : '₹'} ${quotation.grandTotal.toStringAsFixed(2)}
 
 ${quotation.validUntil != null ? 'Valid until: ${quotation.validUntil}\n' : ''}Please let us know if you have any questions or would like to proceed.
 
@@ -881,6 +920,508 @@ ${invoice.balanceDue > 0 ? 'Please complete the remaining balance at your earlie
 For any support, feel free to reply directly to this message.''';
 
     final uri = Uri.parse('https://wa.me/$phoneToUse?text=${Uri.encodeComponent(message)}');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+      return true;
+    }
+    return false;
+  }
+
+  /// Generate luxury bilingual Receipt Voucher PDF (سند قبض)
+  static Future<Uint8List> generateReceiptVoucherPdf(
+    ReceiptVoucherModel voucher, {
+    String companyName = 'Nine Stars Perfumes Trading L L C SP',
+    String? companyPhone,
+    String? companyEmail,
+    String? companyAddress,
+    String? companyGstin,
+    String? companyWebsite,
+    String? companyLogo,
+  }) async {
+    final pdf = pw.Document();
+    final logoImage = _decodeLogo(companyLogo);
+    final curr = voucher.currency.isNotEmpty ? voucher.currency : 'INR';
+
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(28),
+        build: (pw.Context context) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+            children: [
+              // Main Outer Box with security border
+              pw.Container(
+                padding: const pw.EdgeInsets.all(16),
+                decoration: pw.BoxDecoration(
+                  border: pw.Border.all(color: PdfColors.blue900, width: 2),
+                  borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
+                ),
+                child: pw.Stack(
+                  children: [
+                    pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+                      children: [
+                        // Header Row: Logo, Company info, Title & Number
+                        pw.Row(
+                          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                          crossAxisAlignment: pw.CrossAxisAlignment.start,
+                          children: [
+                            if (logoImage != null)
+                              pw.Container(
+                                width: 60,
+                                height: 60,
+                                margin: const pw.EdgeInsets.only(right: 12),
+                                child: pw.Image(logoImage, fit: pw.BoxFit.contain),
+                              ),
+                            pw.Expanded(
+                              child: pw.Column(
+                                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                                children: [
+                                  pw.Text(
+                                    companyName.toUpperCase(),
+                                    style: pw.TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: pw.FontWeight.bold,
+                                      color: PdfColors.blue900,
+                                    ),
+                                  ),
+                                  if (companyAddress != null && companyAddress.isNotEmpty)
+                                    pw.Text(companyAddress, style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.grey700)),
+                                  pw.Row(
+                                    children: [
+                                      if (companyPhone != null && companyPhone.isNotEmpty)
+                                        pw.Text('Mob: $companyPhone   ', style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.grey700)),
+                                      if (companyEmail != null && companyEmail.isNotEmpty)
+                                        pw.Text('Email: $companyEmail', style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.grey700)),
+                                    ],
+                                  ),
+                                  if (companyGstin != null && companyGstin.isNotEmpty)
+                                    pw.Text('CR / Reg: $companyGstin', style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.grey700)),
+                                ],
+                              ),
+                            ),
+                            pw.Column(
+                              crossAxisAlignment: pw.CrossAxisAlignment.end,
+                              children: [
+                                pw.Container(
+                                  padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                  decoration: pw.BoxDecoration(
+                                    color: PdfColors.blue50,
+                                    borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+                                    border: pw.Border.all(color: PdfColors.blue800, width: 1),
+                                  ),
+                                  child: pw.Text('RECEIPT VOUCHER', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900)),
+                                ),
+                                pw.SizedBox(height: 4),
+                                pw.Text('NO. ${voucher.voucherNumber}', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.red800)),
+                                pw.Text('Date: ${voucher.date}', style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey800)),
+                              ],
+                            ),
+                          ],
+                        ),
+                        pw.Divider(color: PdfColors.blue800, thickness: 1, height: 16),
+
+                        // Amount Box
+                        pw.Row(
+                          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                          children: [
+                            pw.Container(
+                              padding: const pw.EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                              decoration: pw.BoxDecoration(
+                                border: pw.Border.all(color: PdfColors.blue900, width: 1.5),
+                                borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
+                                color: PdfColors.blue50,
+                              ),
+                              child: pw.Row(
+                                children: [
+                                  pw.Text('$curr  ', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11, color: PdfColors.blue900)),
+                                  pw.Text(
+                                    '# ${voucher.amount.toStringAsFixed(2)} #',
+                                    style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 13, color: PdfColors.blue900),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (voucher.invoiceNumber.isNotEmpty)
+                              pw.Text('Invoice Ref: ${voucher.invoiceNumber}', style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+                          ],
+                        ),
+                        pw.SizedBox(height: 12),
+
+                        // Received From Line
+                        pw.Row(
+                          children: [
+                            pw.Text('Received From Mr./M/s.: ', style: pw.TextStyle(fontSize: 9.5, fontWeight: pw.FontWeight.bold, color: PdfColors.grey800)),
+                            pw.Expanded(
+                              child: pw.Container(
+                                padding: const pw.EdgeInsets.only(bottom: 2),
+                                decoration: const pw.BoxDecoration(
+                                  border: pw.Border(bottom: pw.BorderSide(color: PdfColors.grey600, width: 0.8)),
+                                ),
+                                child: pw.Text(
+                                  voucher.customerName,
+                                  style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        pw.SizedBox(height: 10),
+
+                        // The Sum of Line (English Only)
+                        pw.Row(
+                          crossAxisAlignment: pw.CrossAxisAlignment.start,
+                          children: [
+                            pw.Text('The sum of: ', style: pw.TextStyle(fontSize: 9.5, fontWeight: pw.FontWeight.bold, color: PdfColors.grey800)),
+                            pw.Expanded(
+                              child: pw.Container(
+                                width: double.infinity,
+                                padding: const pw.EdgeInsets.only(bottom: 2),
+                                decoration: const pw.BoxDecoration(
+                                  border: pw.Border(bottom: pw.BorderSide(color: PdfColors.grey600, width: 0.8)),
+                                ),
+                                child: pw.Text(
+                                  voucher.amountInWordsEn.isNotEmpty ? voucher.amountInWordsEn : '${voucher.amount.toStringAsFixed(2)} $curr Only',
+                                  style: pw.TextStyle(fontSize: 9.5, fontWeight: pw.FontWeight.bold, color: PdfColors.grey900),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        pw.SizedBox(height: 10),
+
+                        // Payment Method Details Line
+                        pw.Row(
+                          children: [
+                            pw.Text('By: ', style: pw.TextStyle(fontSize: 9.5, fontWeight: pw.FontWeight.bold, color: PdfColors.grey800)),
+                            pw.Expanded(
+                              flex: 3,
+                              child: pw.Container(
+                                padding: const pw.EdgeInsets.only(bottom: 2),
+                                decoration: const pw.BoxDecoration(
+                                  border: pw.Border(bottom: pw.BorderSide(color: PdfColors.grey600, width: 0.8)),
+                                ),
+                                child: pw.Text(
+                                  voucher.paymentMethod + (voucher.chequeNumber.isNotEmpty ? ' #${voucher.chequeNumber}' : ''),
+                                  style: const pw.TextStyle(fontSize: 9.5, color: PdfColors.grey900),
+                                ),
+                              ),
+                            ),
+                            pw.SizedBox(width: 8),
+                            pw.Text('Bank: ', style: pw.TextStyle(fontSize: 9.5, fontWeight: pw.FontWeight.bold, color: PdfColors.grey800)),
+                            pw.Expanded(
+                              flex: 3,
+                              child: pw.Container(
+                                padding: const pw.EdgeInsets.only(bottom: 2),
+                                decoration: const pw.BoxDecoration(
+                                  border: pw.Border(bottom: pw.BorderSide(color: PdfColors.grey600, width: 0.8)),
+                                ),
+                                child: pw.Text(
+                                  voucher.bankName.isNotEmpty ? voucher.bankName : 'Cash / Direct',
+                                  style: const pw.TextStyle(fontSize: 9.5, color: PdfColors.grey900),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        pw.SizedBox(height: 10),
+
+                        // Being Line
+                        pw.Row(
+                          children: [
+                            pw.Text('Being: ', style: pw.TextStyle(fontSize: 9.5, fontWeight: pw.FontWeight.bold, color: PdfColors.grey800)),
+                            pw.Expanded(
+                              child: pw.Container(
+                                padding: const pw.EdgeInsets.only(bottom: 2),
+                                decoration: const pw.BoxDecoration(
+                                  border: pw.Border(bottom: pw.BorderSide(color: PdfColors.grey600, width: 0.8)),
+                                ),
+                                child: pw.Text(
+                                  voucher.being.isNotEmpty ? voucher.being : 'Payment received with thanks',
+                                  style: pw.TextStyle(fontSize: 9.5, fontStyle: pw.FontStyle.italic, color: PdfColors.grey900),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        pw.SizedBox(height: 12),
+
+                        // Financial Balance Breakdown Box (Total, Received Now, Previously Paid, Balance Due)
+                        pw.Container(
+                          padding: const pw.EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          decoration: pw.BoxDecoration(
+                            color: PdfColors.grey100,
+                            borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
+                            border: pw.Border.all(color: PdfColors.grey300, width: 0.8),
+                          ),
+                          child: pw.Row(
+                            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                            children: [
+                              pw.Column(
+                                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                                children: [
+                                  pw.Text('Total Amount', style: const pw.TextStyle(fontSize: 7.5, color: PdfColors.grey700)),
+                                  pw.SizedBox(height: 2),
+                                  pw.Text(
+                                    '$curr ${(voucher.totalInvoiceAmount > 0 ? voucher.totalInvoiceAmount : voucher.amount).toStringAsFixed(2)}',
+                                    style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.grey900),
+                                  ),
+                                ],
+                              ),
+                              pw.Container(width: 1, height: 24, color: PdfColors.grey300),
+                              pw.Column(
+                                crossAxisAlignment: pw.CrossAxisAlignment.center,
+                                children: [
+                                  pw.Text('Amount Received', style: const pw.TextStyle(fontSize: 7.5, color: PdfColors.grey700)),
+                                  pw.SizedBox(height: 2),
+                                  pw.Text(
+                                    '$curr ${voucher.amount.toStringAsFixed(2)}',
+                                    style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.green900),
+                                  ),
+                                ],
+                              ),
+                              pw.Container(width: 1, height: 24, color: PdfColors.grey300),
+                              pw.Column(
+                                crossAxisAlignment: pw.CrossAxisAlignment.center,
+                                children: [
+                                  pw.Text('Previously Paid', style: const pw.TextStyle(fontSize: 7.5, color: PdfColors.grey700)),
+                                  pw.SizedBox(height: 2),
+                                  pw.Text(
+                                    '$curr ${voucher.previouslyPaid.toStringAsFixed(2)}',
+                                    style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.grey800),
+                                  ),
+                                ],
+                              ),
+                              pw.Container(width: 1, height: 24, color: PdfColors.grey300),
+                              pw.Column(
+                                crossAxisAlignment: pw.CrossAxisAlignment.end,
+                                children: [
+                                  pw.Text('Balance Due', style: const pw.TextStyle(fontSize: 7.5, color: PdfColors.grey700)),
+                                  pw.SizedBox(height: 2),
+                                  pw.Text(
+                                    '$curr ${voucher.balanceDue.toStringAsFixed(2)}',
+                                    style: pw.TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: pw.FontWeight.bold,
+                                      color: voucher.balanceDue > 0 ? PdfColors.red900 : PdfColors.green900,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        pw.SizedBox(height: 24),
+
+                        // Signatures Area
+                        pw.Row(
+                          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                          crossAxisAlignment: pw.CrossAxisAlignment.end,
+                          children: [
+                            // Left: Receiver Sign
+                            pw.Column(
+                              crossAxisAlignment: pw.CrossAxisAlignment.start,
+                              children: [
+                                pw.Container(width: 140, height: 1, color: PdfColors.grey600),
+                                pw.SizedBox(height: 4),
+                                pw.Text('Receiver\'s Signature', style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.grey700)),
+                              ],
+                            ),
+
+                            // Right: Authorized Sign
+                            pw.Column(
+                              crossAxisAlignment: pw.CrossAxisAlignment.end,
+                              children: [
+                                pw.Container(width: 140, height: 1, color: PdfColors.grey600),
+                                pw.SizedBox(height: 4),
+                                pw.Text('Authorized Signature', style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.grey700)),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+
+                    // Overlay Rubber Stamp (unclipped, genuine stamp position)
+                    if (voucher.hasWatermarkStamp)
+                      pw.Positioned(
+                        right: 70,
+                        bottom: 12,
+                        child: pw.Transform.rotate(
+                          angle: -0.14,
+                          child: pw.Container(
+                            padding: const pw.EdgeInsets.all(2),
+                            decoration: pw.BoxDecoration(
+                              border: pw.Border.all(color: PdfColors.blue800, width: 2),
+                              borderRadius: const pw.BorderRadius.all(pw.Radius.circular(5)),
+                            ),
+                            child: pw.Container(
+                              padding: const pw.EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+                              decoration: pw.BoxDecoration(
+                                border: pw.Border.all(color: PdfColors.blue800, width: 0.8),
+                                borderRadius: const pw.BorderRadius.all(pw.Radius.circular(3)),
+                              ),
+                              child: pw.Column(
+                                mainAxisSize: pw.MainAxisSize.min,
+                                children: [
+                                  pw.Text(
+                                    'RECEIVED',
+                                    style: pw.TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: pw.FontWeight.bold,
+                                      color: PdfColors.blue800,
+                                      letterSpacing: 2,
+                                    ),
+                                  ),
+                                  pw.SizedBox(height: 1),
+                                  pw.Text(
+                                    'VERIFIED PAYMENT • ${voucher.date}',
+                                    style: pw.TextStyle(fontSize: 6.5, fontWeight: pw.FontWeight.bold, color: PdfColors.blue800),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+
+              // Optional Proof of Delivery (POD) Section
+              if (voucher.includePodSlip) ...[
+                pw.SizedBox(height: 16),
+                pw.Container(
+                  padding: const pw.EdgeInsets.all(12),
+                  decoration: pw.BoxDecoration(
+                    border: pw.Border.all(color: PdfColors.grey700, width: 1),
+                    borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
+                  ),
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Container(
+                        padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: pw.BoxDecoration(
+                          border: pw.Border.all(color: PdfColors.grey800, width: 1),
+                        ),
+                        child: pw.Text('PROOF OF DELIVERY', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
+                      ),
+                      pw.SizedBox(height: 8),
+                      pw.Row(
+                        children: [
+                          pw.Expanded(
+                            child: pw.Column(
+                              crossAxisAlignment: pw.CrossAxisAlignment.start,
+                              children: [
+                                pw.Text('Date Of Delivery: ${voucher.podDeliveryDate ?? "..........................."}', style: const pw.TextStyle(fontSize: 8.5)),
+                                pw.SizedBox(height: 4),
+                                pw.Text('Commodity: ${voucher.podCommodity.isNotEmpty ? voucher.podCommodity : "..........................."}', style: const pw.TextStyle(fontSize: 8.5)),
+                                pw.SizedBox(height: 4),
+                                pw.Text('Driver Name: ${voucher.podDriverName.isNotEmpty ? voucher.podDriverName : "..........................."}', style: const pw.TextStyle(fontSize: 8.5)),
+                              ],
+                            ),
+                          ),
+                          pw.Expanded(
+                            child: pw.Column(
+                              crossAxisAlignment: pw.CrossAxisAlignment.start,
+                              children: [
+                                pw.Text('Receiver Name: ${voucher.podReceiverName.isNotEmpty ? voucher.podReceiverName : "..........................."}', style: const pw.TextStyle(fontSize: 8.5)),
+                                pw.SizedBox(height: 4),
+                                pw.Text('Receiver\'s Mob: ${voucher.podReceiverPhone.isNotEmpty ? voucher.podReceiverPhone : "..........................."}', style: const pw.TextStyle(fontSize: 8.5)),
+                                pw.SizedBox(height: 4),
+                                pw.Text('Receiver\'s Sign: ...........................', style: const pw.TextStyle(fontSize: 8.5)),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          );
+        },
+      ),
+    );
+
+    return pdf.save();
+  }
+
+  /// Print or preview Receipt Voucher
+  static Future<void> printReceiptVoucher(
+    ReceiptVoucherModel voucher, {
+    String companyName = 'Stepz Telecaller CRM',
+    String? companyPhone,
+    String? companyEmail,
+    String? companyAddress,
+    String? companyGstin,
+    String? companyWebsite,
+    String? companyLogo,
+  }) async {
+    await Printing.layoutPdf(
+      onLayout: (format) async => await generateReceiptVoucherPdf(
+        voucher,
+        companyName: companyName,
+        companyPhone: companyPhone,
+        companyEmail: companyEmail,
+        companyAddress: companyAddress,
+        companyGstin: companyGstin,
+        companyWebsite: companyWebsite,
+        companyLogo: companyLogo,
+      ),
+      name: '${voucher.voucherNumber}.pdf',
+    );
+  }
+
+  /// Share Receipt Voucher PDF file
+  static Future<void> shareReceiptVoucherPdf(
+    ReceiptVoucherModel voucher, {
+    String companyName = 'Stepz Telecaller CRM',
+    String? companyPhone,
+    String? companyEmail,
+    String? companyAddress,
+    String? companyGstin,
+    String? companyWebsite,
+    String? companyLogo,
+  }) async {
+    final bytes = await generateReceiptVoucherPdf(
+      voucher,
+      companyName: companyName,
+      companyPhone: companyPhone,
+      companyEmail: companyEmail,
+      companyAddress: companyAddress,
+      companyGstin: companyGstin,
+      companyWebsite: companyWebsite,
+      companyLogo: companyLogo,
+    );
+    await Printing.sharePdf(bytes: bytes, filename: '${voucher.voucherNumber}.pdf');
+  }
+
+  /// Launch WhatsApp with pre-filled message for Receipt Voucher
+  static Future<bool> shareReceiptVoucherToWhatsApp(
+    ReceiptVoucherModel voucher, {
+    String companyName = 'Stepz Telecaller CRM',
+  }) async {
+    final curr = voucher.currency.isNotEmpty ? voucher.currency : 'INR';
+    final message = '''Official Payment Receipt Voucher - *$companyName*
+
+Receipt Voucher: *${voucher.voucherNumber}*
+Date: ${voucher.date}
+Received From: *${voucher.customerName}*
+Amount: *$curr ${voucher.amount.toStringAsFixed(2)}*
+${voucher.amountInWordsEn.isNotEmpty ? 'Amount in Words: ${voucher.amountInWordsEn}\n' : ''}${voucher.amountInWordsAr.isNotEmpty ? 'المبلغ بالحروف: ${voucher.amountInWordsAr}\n' : ''}
+Payment Mode: ${voucher.paymentMethod}
+${voucher.chequeNumber.isNotEmpty ? 'Cheque No: ${voucher.chequeNumber}\n' : ''}For: ${voucher.being.isNotEmpty ? voucher.being : 'Payment received with thanks'}
+
+Status: *VERIFIED & RECEIVED ✅*
+
+Thank you for your business!
+*$companyName*''';
+
+    final uri = Uri.parse('https://wa.me/?text=${Uri.encodeComponent(message)}');
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
       return true;

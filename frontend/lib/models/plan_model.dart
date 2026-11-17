@@ -41,6 +41,8 @@ class PlanModel {
         return '£';
       case 'AED':
         return 'د.إ';
+      case 'QAR':
+        return 'QR';
       default:
         return '₹';
     }

@@ -3,9 +3,9 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../core/widgets/glass/glass_card.dart';
 import '../../core/widgets/glass/gradient_button.dart';
-import '../../core/services/pdf_invoice_service.dart';
 import '../../models/invoice_model.dart';
 import '../../providers/billing_provider.dart';
+import 'receipt_voucher_dialog.dart';
 
 class RecordPaymentDialog extends StatefulWidget {
   final InvoiceModel invoice;
@@ -24,6 +24,7 @@ class _RecordPaymentDialogState extends State<RecordPaymentDialog> {
 
   String _paymentMode = 'UPI';
   bool _isSaving = false;
+  String? _errorMessage;
 
   final List<String> _paymentModes = [
     'UPI',
@@ -54,13 +55,12 @@ class _RecordPaymentDialogState extends State<RecordPaymentDialog> {
   }
 
   Future<void> _handleRecordPayment() async {
+    setState(() => _errorMessage = null);
     if (!_formKey.currentState!.validate()) return;
 
     final amount = double.tryParse(_amountController.text.trim()) ?? 0.0;
     if (amount <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Payment amount must be greater than 0')),
-      );
+      setState(() => _errorMessage = 'Payment amount must be greater than 0');
       return;
     }
 
@@ -77,30 +77,36 @@ class _RecordPaymentDialogState extends State<RecordPaymentDialog> {
 
     if (mounted) {
       if (success) {
+        final generatedVoucher = provider.lastGeneratedReceipt;
         Navigator.of(context).pop(true);
+        if (generatedVoucher != null) {
+          showDialog(
+            context: context,
+            builder: (ctx) => ReceiptVoucherDialog(voucher: generatedVoucher),
+          );
+        }
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Payment of ₹${amount.toStringAsFixed(2)} recorded successfully!',
+              'Payment of ${widget.invoice.currency.isNotEmpty ? widget.invoice.currency : "₹"} ${amount.toStringAsFixed(2)} recorded! Official Receipt Voucher generated.',
             ),
             backgroundColor: const Color(0xFF10B981),
             action: SnackBarAction(
-              label: 'WhatsApp Receipt',
+              label: 'View Voucher',
               textColor: Colors.white,
               onPressed: () {
-                final updatedInv = provider.selectedInvoice ?? widget.invoice;
-                PdfInvoiceService.shareInvoiceToWhatsApp(updatedInv);
+                if (generatedVoucher != null) {
+                  showDialog(
+                    context: context,
+                    builder: (ctx) => ReceiptVoucherDialog(voucher: generatedVoucher),
+                  );
+                }
               },
             ),
           ),
         );
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(provider.errorMessage ?? 'Failed to record payment'),
-            backgroundColor: const Color(0xFFEF4444),
-          ),
-        );
+        setState(() => _errorMessage = provider.errorMessage ?? 'Failed to record payment');
       }
     }
   }
@@ -182,6 +188,34 @@ class _RecordPaymentDialogState extends State<RecordPaymentDialog> {
                 const Divider(color: Color(0xFFE2E8F0), height: 1),
                 const SizedBox(height: 14),
 
+                if (_errorMessage != null) ...[
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEF2F2),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFFCA5A5)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.error_outline_rounded, color: Color(0xFFDC2626), size: 18),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _errorMessage!,
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: const Color(0xFFDC2626),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+
                 // Invoice Balance Summary
                 Container(
                   padding: const EdgeInsets.all(12),
@@ -195,14 +229,14 @@ class _RecordPaymentDialogState extends State<RecordPaymentDialog> {
                       Column(
                         children: [
                           Text(
-                            'Grand Total',
+                            'Invoice Total',
                             style: GoogleFonts.inter(
                               fontSize: 11,
                               color: const Color(0xFF64748B),
                             ),
                           ),
                           Text(
-                            '₹${inv.grandTotal.toStringAsFixed(2)}',
+                            '${inv.currency.isNotEmpty ? inv.currency : "₹"} ${inv.grandTotal.toStringAsFixed(2)}',
                             style: GoogleFonts.robotoMono(
                               fontSize: 13,
                               fontWeight: FontWeight.w700,
@@ -220,7 +254,7 @@ class _RecordPaymentDialogState extends State<RecordPaymentDialog> {
                             ),
                           ),
                           Text(
-                            '₹${inv.amountPaid.toStringAsFixed(2)}',
+                            '${inv.currency.isNotEmpty ? inv.currency : "₹"} ${inv.amountPaid.toStringAsFixed(2)}',
                             style: GoogleFonts.robotoMono(
                               fontSize: 13,
                               fontWeight: FontWeight.w700,
@@ -239,7 +273,7 @@ class _RecordPaymentDialogState extends State<RecordPaymentDialog> {
                             ),
                           ),
                           Text(
-                            '₹${inv.balanceDue.toStringAsFixed(2)}',
+                            '${inv.currency.isNotEmpty ? inv.currency : "₹"} ${inv.balanceDue.toStringAsFixed(2)}',
                             style: GoogleFonts.robotoMono(
                               fontSize: 14,
                               fontWeight: FontWeight.w800,
@@ -255,7 +289,7 @@ class _RecordPaymentDialogState extends State<RecordPaymentDialog> {
 
                 // Amount Input
                 Text(
-                  'Amount Received (₹) *',
+                  'Amount Received (${inv.currency.isNotEmpty ? inv.currency : "₹"}) *',
                   style: GoogleFonts.inter(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
@@ -279,9 +313,12 @@ class _RecordPaymentDialogState extends State<RecordPaymentDialog> {
                     return null;
                   },
                   decoration: InputDecoration(
-                    prefixIcon: const Icon(
-                      Icons.currency_rupee_rounded,
-                      size: 18,
+                    prefixIcon: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                      child: Text(
+                        inv.currency.isNotEmpty ? inv.currency : '₹',
+                        style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
+                      ),
                     ),
                     filled: true,
                     fillColor: Colors.white,

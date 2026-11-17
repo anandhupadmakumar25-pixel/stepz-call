@@ -26,7 +26,7 @@ class InvoiceListScreen extends StatefulWidget {
 }
 
 class _InvoiceListScreenState extends State<InvoiceListScreen> {
-  // 0 = Bills & Invoices (Fixed Price), 1 = Quotations & Estimates (Approximate)
+  // 0 = Bills & Invoices (Fixed Price), 1 = Quotations
   late int _selectedViewTab;
   String _selectedInvoiceStatus = 'ALL';
   String _selectedQuoteStatus = 'ALL';
@@ -1194,14 +1194,14 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
-                      'APPROX ESTIMATE',
+                      'SALES QUOTE',
                       style: GoogleFonts.inter(fontSize: 7.5, fontWeight: FontWeight.w800, color: const Color(0xFFB45309)),
                     ),
                   ),
-                  Text('Rs. ${quote.grandTotal.toStringAsFixed(2)}', style: GoogleFonts.robotoMono(fontSize: isMobile ? 14 : 16, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A))),
+                  Text('${quote.currency.isNotEmpty ? quote.currency : "₹"} ${quote.grandTotal.toStringAsFixed(2)}', style: GoogleFonts.robotoMono(fontSize: isMobile ? 14 : 16, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A))),
                   const SizedBox(height: 2),
                   Text(
-                    isConverted ? 'Locked to Fixed Bill' : 'Approximate',
+                    isConverted ? 'Locked to Fixed Bill' : 'Quotation',
                     style: GoogleFonts.inter(
                       fontSize: 10.5,
                       fontWeight: FontWeight.w600,

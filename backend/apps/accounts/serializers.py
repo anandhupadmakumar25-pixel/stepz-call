@@ -10,10 +10,18 @@ User = get_user_model()
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     def validate(self, attrs):
         username_field = self.username_field
-        if username_field in attrs and isinstance(attrs[username_field], str):
-            attrs[username_field] = attrs[username_field].strip().lower()
-        if 'email' in attrs and isinstance(attrs['email'], str):
-            attrs['email'] = attrs['email'].strip().lower()
+        login_input = str(attrs.get(username_field) or attrs.get('email') or attrs.get('username') or '').strip()
+
+        if login_input:
+            from django.db.models import Q
+            matched_user = User.objects.filter(
+                Q(email__iexact=login_input) | Q(username__iexact=login_input)
+            ).first()
+            if matched_user:
+                attrs[username_field] = matched_user.email
+            else:
+                attrs[username_field] = login_input.lower()
+
         data = super().validate(attrs)
         user = self.user
 
@@ -59,6 +67,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         data['user'] = {
             'id': str(user.id),
             'email': user.email,
+            'username': user.username or '',
             'first_name': user.first_name,
             'last_name': user.last_name,
             'full_name': user.full_name,
@@ -73,6 +82,10 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             'company_gstin': company.gstin if company else None,
             'company_website': company.website if company else None,
             'company_status': company.status if company else 'ACTIVE',
+            'company_country_code': company.default_country_code if company else '+91',
+            'company_country_iso': company.default_country_iso if company else 'IN',
+            'company_currency': company.currency if company else 'INR',
+            'company_currency_symbol': company.currency_symbol if company else '₹',
             'plan_billing_cycle': company.plan_billing_cycle if company else 'MONTHLY',
             'plan_expires_at': plan_expires_at_iso,
             'is_plan_expired': company.is_plan_expired if company else False,
@@ -98,6 +111,10 @@ class UserProfileSerializer(serializers.ModelSerializer):
     company_address = serializers.CharField(source='company.address', read_only=True, default='', allow_null=True)
     company_gstin = serializers.CharField(source='company.gstin', read_only=True, default='', allow_null=True)
     company_website = serializers.CharField(source='company.website', read_only=True, default='', allow_null=True)
+    company_country_code = serializers.CharField(source='company.default_country_code', read_only=True, default='+91', allow_null=True)
+    company_country_iso = serializers.CharField(source='company.default_country_iso', read_only=True, default='IN', allow_null=True)
+    company_currency = serializers.CharField(source='company.currency', read_only=True, default='INR')
+    company_currency_symbol = serializers.CharField(source='company.currency_symbol', read_only=True, default='₹')
     branch_name = serializers.CharField(source='branch.name', read_only=True)
     full_name = serializers.CharField(read_only=True)
     company_allowed_menus = serializers.SerializerMethodField()
@@ -111,9 +128,10 @@ class UserProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = [
-            'id', 'email', 'first_name', 'last_name', 'full_name',
+            'id', 'email', 'username', 'first_name', 'last_name', 'full_name',
             'phone', 'role', 'is_master_admin', 'company', 'company_name',
             'company_logo', 'company_phone', 'company_email', 'company_address', 'company_gstin', 'company_website',
+            'company_country_code', 'company_country_iso', 'company_currency', 'company_currency_symbol',
             'branch', 'branch_name',
             'company_allowed_menus', 'can_manage_branches', 'company_plan_name',
             'company_plan_expires_at', 'company_days_until_expiry', 'company_is_plan_expired',
@@ -134,10 +152,10 @@ class UserProfileSerializer(serializers.ModelSerializer):
         return obj.company.plan_expires_at.isoformat() if (obj.company and obj.company.plan_expires_at) else None
 
     def get_company_days_until_expiry(self, obj):
-        return obj.company.days_until_expiry() if obj.company else None
+        return obj.company.days_until_expiry if obj.company else None
 
     def get_company_is_plan_expired(self, obj):
-        return obj.company.is_plan_expired() if obj.company else False
+        return obj.company.is_plan_expired if obj.company else False
 
 class TeamSerializer(serializers.ModelSerializer):
     manager_name = serializers.CharField(source='manager.full_name', read_only=True)
@@ -240,7 +258,7 @@ class EmployeeListSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = [
-            'id', 'email', 'first_name', 'last_name', 'full_name', 'phone',
+            'id', 'email', 'username', 'first_name', 'last_name', 'full_name', 'phone',
             'role', 'branch', 'branch_name', 'branch_code',
             'department_id', 'department_name', 'department_attendance_mode',
             'custom_role_ids', 'custom_role_names', 'resolved_permissions',

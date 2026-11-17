@@ -3,13 +3,15 @@ from django.utils import timezone
 from django.db.models import Sum, Count, Q
 from rest_framework import views, status, generics
 from rest_framework.response import Response
-from apps.billing.models import Quotation, Invoice, Product
+from apps.billing.models import Quotation, Invoice, ReceiptVoucher, Product
 from apps.billing.serializers import (
     QuotationSerializer,
     InvoiceSerializer,
+    ReceiptVoucherSerializer,
     RecordPaymentSerializer,
     ProductSerializer,
 )
+from apps.billing.utils.number_to_words import amount_to_words_en, amount_to_words_ar
 from apps.core.permissions import IsEmployee, IsCompanyAdmin
 
 def generate_quotation_number(company):
@@ -42,6 +44,23 @@ def generate_invoice_number(company):
         num = 1
     candidate = f"{prefix}{num:04d}"
     while Invoice.objects.filter(company=company, invoice_number=candidate).exists():
+        num += 1
+        candidate = f"{prefix}{num:04d}"
+    return candidate
+
+def generate_receipt_voucher_number(company):
+    year = datetime.date.today().year
+    prefix = f"RV-{year}-"
+    latest = ReceiptVoucher.objects.filter(company=company, voucher_number__startswith=prefix).order_by('-voucher_number').first()
+    if latest:
+        try:
+            num = int(latest.voucher_number.split('-')[-1]) + 1
+        except Exception:
+            num = ReceiptVoucher.objects.filter(company=company).count() + 1
+    else:
+        num = 1
+    candidate = f"{prefix}{num:04d}"
+    while ReceiptVoucher.objects.filter(company=company, voucher_number=candidate).exists():
         num += 1
         candidate = f"{prefix}{num:04d}"
     return candidate
@@ -136,6 +155,21 @@ class QuotationListCreateView(views.APIView):
         data = request.data.copy()
         if not data.get('quotation_number'):
             data['quotation_number'] = generate_quotation_number(company)
+        if not data.get('currency'):
+            data['currency'] = getattr(company, 'currency', 'INR') or 'INR'
+
+        items = data.get('items', [])
+        if isinstance(items, list):
+            cst_sum = 0.0
+            for it in items:
+                if isinstance(it, dict):
+                    cst = float(it.get('cst') or it.get('cost_price') or 0.0)
+                    qty = float(it.get('qty') or it.get('quantity') or 1.0)
+                    cst_sum += cst * qty
+            if cst_sum > 0:
+                data['total_cost'] = round(cst_sum, 2)
+                gt = float(data.get('grand_total') or 0.0)
+                data['gross_margin'] = round(gt - cst_sum, 2)
 
         serializer = QuotationSerializer(data=data)
         if serializer.is_valid():
@@ -314,6 +348,26 @@ class InvoiceListCreateView(views.APIView):
         data = request.data.copy()
         if not data.get('invoice_number'):
             data['invoice_number'] = generate_invoice_number(company)
+        curr = data.get('currency') or getattr(company, 'currency', 'INR') or 'INR'
+        data['currency'] = curr
+
+        gt = float(data.get('grand_total') or 0.0)
+        if not data.get('amount_in_words_en') and gt:
+            data['amount_in_words_en'] = amount_to_words_en(gt, curr)
+        if not data.get('amount_in_words_ar') and gt:
+            data['amount_in_words_ar'] = amount_to_words_ar(gt, curr)
+
+        items = data.get('items', [])
+        if isinstance(items, list):
+            cst_sum = 0.0
+            for it in items:
+                if isinstance(it, dict):
+                    cst = float(it.get('cst') or it.get('cost_price') or 0.0)
+                    qty = float(it.get('qty') or it.get('quantity') or 1.0)
+                    cst_sum += cst * qty
+            if cst_sum > 0:
+                data['total_cost'] = round(cst_sum, 2)
+                data['gross_margin'] = round(gt - cst_sum, 2)
 
         serializer = InvoiceSerializer(data=data)
         if serializer.is_valid():
@@ -387,6 +441,9 @@ class InvoiceDetailView(views.APIView):
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+    def put(self, request, pk):
+        return self.patch(request, pk)
+
     def delete(self, request, pk):
         user = request.user
         company = user.company
@@ -409,12 +466,16 @@ class InvoiceRecordPaymentView(views.APIView):
 
     def post(self, request, pk):
         user = request.user
-        company = user.company
         inv = Invoice.objects.filter(id=pk).first()
         if not inv:
             return Response({"error": "Invoice not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        if not user.is_super_admin and inv.company_id != company.id:
+        company = inv.company or user.company
+        if not company:
+            from apps.companies.models import Company
+            company = Company.objects.first()
+
+        if not user.is_super_admin and inv.company_id and user.company_id and inv.company_id != user.company_id:
             return Response({"error": "Unauthorized access."}, status=status.HTTP_403_FORBIDDEN)
 
         if user.role == 'EMPLOYEE' and inv.created_by_id != user.id and (not inv.lead or inv.lead.assigned_to_id != user.id):
@@ -429,7 +490,8 @@ class InvoiceRecordPaymentView(views.APIView):
         ref = serializer.validated_data.get('payment_reference', '')
         p_notes = serializer.validated_data.get('notes', '')
 
-        new_paid = float(inv.amount_paid) + amount
+        prev_paid = float(inv.amount_paid)
+        new_paid = prev_paid + amount
         inv.amount_paid = new_paid
         inv.payment_mode = mode
         if ref:
@@ -442,8 +504,174 @@ class InvoiceRecordPaymentView(views.APIView):
         elif new_paid > 0:
             inv.payment_status = 'PARTIAL'
 
+        rem_balance = max(0.0, float(inv.grand_total) - new_paid)
+
+        receipt_data = None
+        if serializer.validated_data.get('generate_receipt', True):
+            v_num = generate_receipt_voucher_number(company)
+            pm = mode.upper().replace(' ', '_')
+            if 'CASH' in pm:
+                p_choice = 'CASH'
+            elif 'CHEQUE' in pm or 'CHECK' in pm:
+                p_choice = 'CHEQUE'
+            elif 'BANK' in pm or 'TRANSFER' in pm or 'UPI' in pm:
+                p_choice = 'BANK_TRANSFER'
+            elif 'CARD' in pm:
+                p_choice = 'CARD'
+            else:
+                p_choice = 'ONLINE'
+
+            being_text = f"Payment for Invoice #{inv.invoice_number} - {inv.customer_name}"
+            if p_notes:
+                being_text += f" ({p_notes})"
+
+            rv = ReceiptVoucher.objects.create(
+                company=company,
+                created_by=user,
+                invoice=inv,
+                quotation=inv.quotation,
+                voucher_number=v_num,
+                customer_name=inv.customer_name,
+                customer_phone=inv.customer_phone,
+                customer_email=inv.customer_email,
+                amount=amount,
+                currency=inv.currency,
+                total_invoice_amount=inv.grand_total,
+                previously_paid=prev_paid,
+                balance_due=rem_balance,
+                amount_in_words_en=amount_to_words_en(amount, inv.currency),
+                amount_in_words_ar=amount_to_words_ar(amount, inv.currency),
+                payment_method=p_choice,
+                cheque_number=serializer.validated_data.get('cheque_number', ''),
+                bank_name=serializer.validated_data.get('bank_name', ''),
+                cheque_date=serializer.validated_data.get('cheque_date', None),
+                payment_reference=ref,
+                being=being_text,
+                receiver_name=serializer.validated_data.get('receiver_name', '') or getattr(user, 'full_name', '') or getattr(user, 'username', '') or getattr(user, 'email', ''),
+                accountant_name=serializer.validated_data.get('accountant_name', ''),
+                has_watermark_stamp=serializer.validated_data.get('has_watermark_stamp', True),
+                include_pod_slip=serializer.validated_data.get('include_pod_slip', False),
+                pod_driver_name=serializer.validated_data.get('pod_driver_name', ''),
+                pod_receiver_name=serializer.validated_data.get('pod_receiver_name', ''),
+                pod_receiver_phone=serializer.validated_data.get('pod_receiver_phone', ''),
+                pod_commodity=serializer.validated_data.get('pod_commodity', ''),
+                notes=p_notes,
+            )
+            receipt_data = ReceiptVoucherSerializer(rv).data
+
         inv.save()
-        return Response(InvoiceSerializer(inv).data, status=status.HTTP_200_OK)
+        resp_data = InvoiceSerializer(inv).data
+        if receipt_data:
+            resp_data['receipt_voucher'] = receipt_data
+        return Response(resp_data, status=status.HTTP_200_OK)
+
+
+class ReceiptVoucherListCreateView(views.APIView):
+    permission_classes = [IsEmployee]
+
+    def get(self, request):
+        user = request.user
+        company = user.company
+        if not company and not user.is_super_admin:
+            return Response([])
+
+        if user.is_super_admin:
+            qs = ReceiptVoucher.objects.all()
+        elif user.role == 'EMPLOYEE':
+            qs = ReceiptVoucher.objects.filter(company=company).filter(
+                Q(created_by=user) | Q(invoice__created_by=user)
+            )
+        else:
+            qs = ReceiptVoucher.objects.filter(company=company)
+
+        invoice_id = request.query_params.get('invoice_id') or request.query_params.get('invoice')
+        if invoice_id:
+            qs = qs.filter(invoice_id=invoice_id)
+        quotation_id = request.query_params.get('quotation_id') or request.query_params.get('quotation')
+        if quotation_id:
+            qs = qs.filter(quotation_id=quotation_id)
+        search = request.query_params.get('search')
+        if search:
+            qs = qs.filter(
+                Q(voucher_number__icontains=search.strip()) |
+                Q(customer_name__icontains=search.strip()) |
+                Q(being__icontains=search.strip())
+            )
+        return Response(ReceiptVoucherSerializer(qs.order_by('-created_at'), many=True).data)
+
+    def post(self, request):
+        company = request.user.company
+        if not company:
+            return Response({"error": "No company associated."}, status=status.HTTP_400_BAD_REQUEST)
+
+        data = request.data.copy()
+        if not data.get('voucher_number'):
+            data['voucher_number'] = generate_receipt_voucher_number(company)
+
+        curr = data.get('currency') or getattr(company, 'currency', 'INR') or 'INR'
+        data['currency'] = curr
+        amt = data.get('amount', 0.00)
+        if not data.get('amount_in_words_en') and amt:
+            data['amount_in_words_en'] = amount_to_words_en(amt, curr)
+        if not data.get('amount_in_words_ar') and amt:
+            data['amount_in_words_ar'] = amount_to_words_ar(amt, curr)
+
+        serializer = ReceiptVoucherSerializer(data=data)
+        if serializer.is_valid():
+            rv = serializer.save(
+                company=company,
+                created_by=request.user
+            )
+            return Response(ReceiptVoucherSerializer(rv).data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ReceiptVoucherDetailView(views.APIView):
+    permission_classes = [IsEmployee]
+
+    def get(self, request, pk):
+        user = request.user
+        company = user.company
+        rv = ReceiptVoucher.objects.filter(id=pk).first()
+        if not rv:
+            return Response({"error": "Receipt voucher not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        if not user.is_super_admin and rv.company_id != company.id:
+            return Response({"error": "Unauthorized access."}, status=status.HTTP_403_FORBIDDEN)
+
+        return Response(ReceiptVoucherSerializer(rv).data)
+
+    def patch(self, request, pk):
+        user = request.user
+        company = user.company
+        rv = ReceiptVoucher.objects.filter(id=pk).first()
+        if not rv:
+            return Response({"error": "Receipt voucher not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        if not user.is_super_admin and rv.company_id != company.id:
+            return Response({"error": "Unauthorized access."}, status=status.HTTP_403_FORBIDDEN)
+
+        serializer = ReceiptVoucherSerializer(rv, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def delete(self, request, pk):
+        user = request.user
+        company = user.company
+        rv = ReceiptVoucher.objects.filter(id=pk).first()
+        if not rv:
+            return Response({"error": "Receipt voucher not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        if not user.is_super_admin and rv.company_id != company.id:
+            return Response({"error": "Unauthorized access."}, status=status.HTTP_403_FORBIDDEN)
+
+        if not user.is_company_admin:
+            return Response({"error": "Only company admin can delete receipt vouchers."}, status=status.HTTP_403_FORBIDDEN)
+
+        rv.delete()
+        return Response({"message": "Receipt voucher deleted successfully."})
 
 
 class BillingOverviewKPIView(views.APIView):
