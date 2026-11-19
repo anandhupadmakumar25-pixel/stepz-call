@@ -39,6 +39,8 @@ class ReceiptVoucherModel {
   final String podCommodity;
 
   final String notes;
+  final String? templateId;
+  final Map<String, dynamic> templateSnapshot;
   final String createdAt;
   final String updatedAt;
 
@@ -78,6 +80,8 @@ class ReceiptVoucherModel {
     this.podDeliveryDate,
     this.podCommodity = '',
     this.notes = '',
+    this.templateId,
+    this.templateSnapshot = const {},
     required this.createdAt,
     this.updatedAt = '',
   });
@@ -125,6 +129,8 @@ class ReceiptVoucherModel {
       podDeliveryDate: json['pod_delivery_date']?.toString() ?? json['podDeliveryDate']?.toString(),
       podCommodity: json['pod_commodity']?.toString() ?? json['podCommodity']?.toString() ?? '',
       notes: json['notes']?.toString() ?? '',
+      templateId: json['template']?.toString(),
+      templateSnapshot: (json['template_snapshot'] as Map<String, dynamic>?) ?? const {},
       createdAt: json['created_at']?.toString() ?? json['createdAt']?.toString() ?? '',
       updatedAt: json['updated_at']?.toString() ?? json['updatedAt']?.toString() ?? '',
     );

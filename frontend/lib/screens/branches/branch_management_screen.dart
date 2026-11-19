@@ -1,7 +1,10 @@
+import 'dart:convert';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/company_logo_view.dart';
 import '../../core/widgets/glass/glass_card.dart';
 import '../../core/widgets/glass/gradient_button.dart';
 import '../../core/widgets/glass/glass_text_field.dart';
@@ -22,6 +25,7 @@ import 'map_picker_screen.dart';
 import '../../providers/company_provider.dart';
 import 'company_rules_tab.dart';
 import 'company_profile_tab.dart';
+import '../billing/document_templates_tab.dart';
 import '../companies/edit_company_dialog.dart';
 import '../../models/company_model.dart';
 
@@ -45,10 +49,10 @@ class _BranchManagementScreenState extends State<BranchManagementScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final p = context.read<LeadProvider>();
       p.fetchBranches();
-      p.fetchCategories();
       context.read<EmployeeProvider>().fetchEmployees();
       context.read<DepartmentProvider>().fetchDepartments();
       context.read<RoleProvider>().fetchRoles();
+      context.read<CompanyProvider>().fetchMyCompany();
       context.read<CompanyProvider>().fetchPayrollPolicy();
       context.read<CompanyProvider>().fetchCompanyRules();
     });
@@ -149,6 +153,111 @@ class _BranchManagementScreenState extends State<BranchManagementScreen>
     }
   }
 
+  Widget _buildBranchLogoPicker({
+    required String customLogo,
+    required String companyLogo,
+    required String branchName,
+    required void Function(String picked) onPick,
+    required VoidCallback onReset,
+  }) {
+    final hasCustom = customLogo.trim().isNotEmpty;
+    final previewLogo = hasCustom ? customLogo : companyLogo;
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Row(
+        children: [
+          CompanyLogoView(
+            logo: previewLogo,
+            companyName: branchName.isNotEmpty ? branchName : 'Branch',
+            size: 46,
+            borderRadius: BorderRadius.circular(10),
+            borderColor: const Color(0xFFCBD5E1),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Branch Logo (Optional)',
+                  style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  hasCustom ? 'Custom branch logo selected' : 'Using Company Main Logo (Default)',
+                  style: GoogleFonts.inter(
+                    fontSize: 10.5,
+                    color: hasCustom ? const Color(0xFF047857) : const Color(0xFF64748B),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    SizedBox(
+                      height: 30,
+                      child: OutlinedButton.icon(
+                        onPressed: () async {
+                          try {
+                            final res = await FilePicker.platform.pickFiles(type: FileType.image, withData: true);
+                            if (res != null && res.files.isNotEmpty && res.files.first.bytes != null) {
+                              final f = res.files.first;
+                              final ext = (f.extension ?? 'png').toLowerCase();
+                              final mime = (ext == 'jpg' || ext == 'jpeg') ? 'image/jpeg' : 'image/png';
+                              final b64 = base64Encode(f.bytes!);
+                              onPick('data:$mime;base64,$b64');
+                            }
+                          } catch (_) {}
+                        },
+                        icon: const Icon(Icons.upload_file_rounded, size: 13.5, color: Color(0xFF1D4ED8)),
+                        label: Text(
+                          hasCustom ? 'Change Logo' : 'Upload Logo',
+                          style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF1D4ED8)),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          side: const BorderSide(color: Color(0xFFBFDBFE)),
+                          backgroundColor: const Color(0xFFEFF6FF),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                      ),
+                    ),
+                    if (hasCustom)
+                      SizedBox(
+                        height: 30,
+                        child: TextButton(
+                          onPressed: onReset,
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          child: Text(
+                            'Use Company Logo',
+                            style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFFDC2626)),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showAddBranchDialog() {
     final nameCtrl = TextEditingController();
     final codeCtrl = TextEditingController();
@@ -157,6 +266,9 @@ class _BranchManagementScreenState extends State<BranchManagementScreen>
     final lngCtrl = TextEditingController();
     final radiusCtrl = TextEditingController(text: '100');
     bool geofenceEnabled = true;
+    String customLogo = '';
+    final companyLogo = context.read<CompanyProvider>().activeCompanyDetail?.logo ??
+        (context.read<AuthProvider>().currentUser?.companyLogo ?? '');
 
     showDialog(
       context: context,
@@ -227,7 +339,15 @@ class _BranchManagementScreenState extends State<BranchManagementScreen>
                         controller: addressCtrl,
                         maxLines: 2,
                       ),
-                      const SizedBox(height: 18),
+                      const SizedBox(height: 14),
+                      _buildBranchLogoPicker(
+                        customLogo: customLogo,
+                        companyLogo: companyLogo,
+                        branchName: nameCtrl.text,
+                        onPick: (picked) => setDlgState(() => customLogo = picked),
+                        onReset: () => setDlgState(() => customLogo = ''),
+                      ),
+                      const SizedBox(height: 16),
 
                       // Geofence configuration container
                       Container(
@@ -366,6 +486,7 @@ class _BranchManagementScreenState extends State<BranchManagementScreen>
                                   name: nameCtrl.text.trim(),
                                   code: codeCtrl.text.trim(),
                                   address: addressCtrl.text.trim(),
+                                  logo: customLogo,
                                   latitude: double.tryParse(latCtrl.text.trim()),
                                   longitude: double.tryParse(lngCtrl.text.trim()),
                                   radiusMeters: int.tryParse(radiusCtrl.text.trim()) ?? 100,
@@ -404,6 +525,9 @@ class _BranchManagementScreenState extends State<BranchManagementScreen>
     final lngCtrl = TextEditingController(text: branch.longitude?.toString() ?? '');
     final radiusCtrl = TextEditingController(text: branch.radiusMeters.toString());
     bool geofenceEnabled = branch.geofenceEnabled;
+    String customLogo = branch.logo;
+    final companyLogo = context.read<CompanyProvider>().activeCompanyDetail?.logo ??
+        (context.read<AuthProvider>().currentUser?.companyLogo ?? '');
 
     showDialog(
       context: context,
@@ -474,7 +598,15 @@ class _BranchManagementScreenState extends State<BranchManagementScreen>
                         controller: addressCtrl,
                         maxLines: 2,
                       ),
-                      const SizedBox(height: 18),
+                      const SizedBox(height: 14),
+                      _buildBranchLogoPicker(
+                        customLogo: customLogo,
+                        companyLogo: companyLogo,
+                        branchName: nameCtrl.text,
+                        onPick: (picked) => setDlgState(() => customLogo = picked),
+                        onReset: () => setDlgState(() => customLogo = ''),
+                      ),
+                      const SizedBox(height: 16),
 
                       // Geofence configuration container
                       Container(
@@ -614,6 +746,7 @@ class _BranchManagementScreenState extends State<BranchManagementScreen>
                                   name: nameCtrl.text.trim(),
                                   code: codeCtrl.text.trim(),
                                   address: addressCtrl.text.trim(),
+                                  logo: customLogo,
                                   latitude: double.tryParse(latCtrl.text.trim()),
                                   longitude: double.tryParse(lngCtrl.text.trim()),
                                   radiusMeters: int.tryParse(radiusCtrl.text.trim()) ?? 100,
@@ -879,7 +1012,14 @@ class _BranchManagementScreenState extends State<BranchManagementScreen>
                           final isSelected = selectedBranches.contains(b.id);
                           return FilterChip(
                             selected: isSelected,
-                            label: Text(b.name, style: GoogleFonts.inter(fontSize: 12, fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400)),
+                            label: Text(
+                              b.name,
+                              style: GoogleFonts.inter(
+                                fontSize: 12,
+                                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                                color: isSelected ? const Color(0xFF78350F) : const Color(0xFF1E293B),
+                              ),
+                            ),
                             selectedColor: AppColors.neonViolet.withValues(alpha: 0.15),
                             checkmarkColor: AppColors.neonViolet,
                             backgroundColor: Colors.white,
@@ -1666,12 +1806,6 @@ class _BranchManagementScreenState extends State<BranchManagementScreen>
           b.code.toLowerCase().contains(_searchQuery.toLowerCase());
     }).toList();
 
-    final categories = leadProvider.categories.where((c) {
-      if (_searchQuery.isEmpty) return true;
-      return c.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          c.description.toLowerCase().contains(_searchQuery.toLowerCase());
-    }).toList();
-
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: SafeArea(
@@ -1703,7 +1837,7 @@ class _BranchManagementScreenState extends State<BranchManagementScreen>
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Branches, Geofence & Structure',
+                              'Company Settings',
                               style: GoogleFonts.inter(
                                 fontSize: isMobile ? 18 : 22,
                                 fontWeight: FontWeight.w800,
@@ -1715,7 +1849,7 @@ class _BranchManagementScreenState extends State<BranchManagementScreen>
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              'Organize branch GPS geofences, departments, and lead categories',
+                              'Manage company profile, branches, departments, roles, payroll rules, and templates',
                               style: GoogleFonts.inter(
                                 fontSize: 12,
                                 color: const Color(0xFF64748B),
@@ -1729,33 +1863,81 @@ class _BranchManagementScreenState extends State<BranchManagementScreen>
                     ],
                   ),
                   Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
+                    spacing: 8,
+                    runSpacing: 8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       GradientPrimaryButton(
-                        text: 'Add Branch',
-                        icon: Icons.add_business_rounded,
-                        onPressed: _showAddBranchDialog,
-                      ),
-                      GlassSecondaryButton(
-                        text: 'Add Department',
-                        icon: Icons.corporate_fare_rounded,
-                        onPressed: () => _showDepartmentDialog(),
-                      ),
-                      GlassSecondaryButton(
-                        text: 'Add Custom Role',
-                        icon: Icons.security_rounded,
-                        onPressed: () => _showRoleDialog(),
-                      ),
-                      GlassSecondaryButton(
-                        text: 'Add Category',
-                        icon: Icons.add_circle_outline_rounded,
-                        onPressed: _showAddCategoryDialog,
-                      ),
-                      GlassSecondaryButton(
-                        text: 'Edit Profile & Logo',
-                        icon: Icons.business_rounded,
+                        text: 'Edit Company',
+                        icon: Icons.edit_rounded,
+                        height: 36,
+                        borderRadius: 10,
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
                         onPressed: _openCompanyProfileEditDialog,
+                      ),
+                      SizedBox(
+                        height: 36,
+                        child: OutlinedButton.icon(
+                          onPressed: _showAddBranchDialog,
+                          icon: const Icon(Icons.add_business_rounded, size: 15, color: Color(0xFF047857)),
+                          label: Text(
+                            'Add Branch',
+                            style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFF047857)),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: Color(0xFFA7F3D0)),
+                            backgroundColor: const Color(0xFFECFDF5),
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                        ),
+                      ),
+                      SizedBox(
+                        height: 36,
+                        width: 36,
+                        child: PopupMenuButton<String>(
+                          tooltip: 'Quick Add',
+                          padding: EdgeInsets.zero,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          icon: Container(
+                            width: 36,
+                            height: 36,
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: const Color(0xFFE2E8F0)),
+                            ),
+                            child: const Icon(Icons.more_vert_rounded, size: 18, color: Color(0xFF334155)),
+                          ),
+                          onSelected: (val) {
+                            if (val == 'dept') _showDepartmentDialog();
+                            if (val == 'role') _showRoleDialog();
+                          },
+                          itemBuilder: (ctx) => const [
+                            PopupMenuItem(
+                              value: 'dept',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.corporate_fare_rounded, size: 16, color: Color(0xFF0284C7)),
+                                  SizedBox(width: 8),
+                                  Text('Add Department'),
+                                ],
+                              ),
+                            ),
+                            PopupMenuItem(
+                              value: 'role',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.security_rounded, size: 16, color: Color(0xFFD97706)),
+                                  SizedBox(width: 8),
+                                  Text('Add Custom Role'),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
@@ -1850,12 +2032,12 @@ class _BranchManagementScreenState extends State<BranchManagementScreen>
                 ),
               const SizedBox(height: 18),
 
-              // Tabs Toolbar
+              // Tabs Toolbar (Light Enterprise Pill Bar)
               Container(
                 decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.35),
+                  color: const Color(0xFFF1F5F9),
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: AppColors.glassBorder),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
                 ),
                 padding: const EdgeInsets.all(5),
                 child: TabBar(
@@ -1865,48 +2047,49 @@ class _BranchManagementScreenState extends State<BranchManagementScreen>
                     borderRadius: BorderRadius.circular(10),
                     boxShadow: [
                       BoxShadow(
-                        color: AppColors.neonViolet.withValues(alpha: 0.4),
-                        blurRadius: 10,
+                        color: const Color(0xFF047857).withValues(alpha: 0.25),
+                        blurRadius: 8,
                         offset: const Offset(0, 2),
                       ),
                     ],
                   ),
                   indicatorSize: TabBarIndicatorSize.tab,
+                  dividerColor: Colors.transparent,
                   labelColor: Colors.white,
-                  unselectedLabelColor: AppColors.textSecondary,
+                  unselectedLabelColor: const Color(0xFF475569),
                   labelStyle: GoogleFonts.inter(
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
                   ),
                   unselectedLabelStyle: GoogleFonts.inter(
                     fontSize: 12,
-                    fontWeight: FontWeight.w500,
+                    fontWeight: FontWeight.w600,
                   ),
-                  isScrollable: isMobile,
-                  tabAlignment: isMobile ? TabAlignment.start : TabAlignment.fill,
+                  isScrollable: true,
+                  tabAlignment: TabAlignment.start,
                   tabs: [
-                    Tab(text: 'BRANCHES (${leadProvider.branches.length})'),
-                    Tab(text: 'CATEGORIES (${leadProvider.categories.length})'),
-                    Tab(text: 'DEPARTMENTS (${deptProvider.departments.length})'),
-                    Tab(text: 'ROLES & RBAC (${roleProvider.roles.length})'),
-                    Tab(text: 'RULES & PAYROLL (${compProvider.companyRules.length})'),
-                    const Tab(text: 'COMPANY PROFILE & LOGO'),
+                    const Tab(text: 'Company Details'),
+                    Tab(text: 'Branches (${leadProvider.branches.length})'),
+                    Tab(text: 'Departments (${deptProvider.departments.length})'),
+                    Tab(text: 'Roles & RBAC (${roleProvider.roles.length})'),
+                    Tab(text: 'Rules & Payroll (${compProvider.companyRules.length})'),
+                    const Tab(text: 'Document Templates'),
                   ],
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 14),
 
               // Content Area
               Expanded(
                 child: TabBarView(
                   controller: _tabController,
                   children: [
+                    const CompanyProfileTab(),
                     _buildBranchList(branches, leadProvider),
-                    _buildCategoryList(categories, leadProvider),
                     _buildDepartmentList(deptProvider.departments, deptProvider, leadProvider),
                     _buildRoleList(roleProvider.roles, roleProvider),
                     const CompanyRulesTab(),
-                    const CompanyProfileTab(),
+                    const DocumentTemplatesTab(),
                   ],
                 ),
               ),
@@ -1997,116 +2180,161 @@ class _BranchManagementScreenState extends State<BranchManagementScreen>
       separatorBuilder: (_, __) => const SizedBox(height: 10),
       itemBuilder: (ctx, i) {
         final b = branches[i];
+        final hasGps = b.latitude != null && b.longitude != null;
         return GlassCard(
-          blur: 18,
-          opacity: 0.12,
-          borderRadius: BorderRadius.circular(16),
-          borderColor: AppColors.glassBorder,
-          padding: const EdgeInsets.all(18),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  gradient: AppColors.primaryGradient,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(
-                  Icons.storefront_rounded,
-                  color: Colors.white,
-                  size: 20,
-                ),
+          opacity: 0.96,
+          borderRadius: BorderRadius.circular(14),
+          borderColor: const Color(0xFFE2E8F0),
+          padding: EdgeInsets.zero,
+          child: Theme(
+            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+            child: ExpansionTile(
+              tilePadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+              childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              collapsedShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              leading: CompanyLogoView(
+                logo: b.effectiveLogo.isNotEmpty ? b.effectiveLogo : (context.read<CompanyProvider>().activeCompanyDetail?.logo ?? ''),
+                companyName: b.name,
+                size: 38,
+                borderRadius: BorderRadius.circular(10),
+                borderColor: const Color(0xFFCBD5E1),
               ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
+              title: Row(
+                children: [
+                  Flexible(
+                    child: Text(
                       b.name,
                       style: GoogleFonts.inter(
-                        fontSize: 15,
+                        fontSize: 13.5,
                         fontWeight: FontWeight.w800,
                         color: const Color(0xFF0F172A),
                       ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    if (b.code.isNotEmpty)
+                  ),
+                  if (b.code.isNotEmpty) ...[
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(5),
+                        border: Border.all(color: const Color(0xFFCBD5E1)),
+                      ),
+                      child: Text(
+                        b.code,
+                        style: GoogleFonts.robotoMono(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFF334155),
+                        ),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: hasGps ? const Color(0xFFECFDF5) : const Color(0xFFFFFBEB),
+                      borderRadius: BorderRadius.circular(5),
+                    ),
+                    child: Text(
+                      hasGps ? 'GPS' : 'NO GPS',
+                      style: GoogleFonts.inter(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w800,
+                        color: hasGps ? const Color(0xFF059669) : const Color(0xFFD97706),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              subtitle: Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text(
+                  '${b.leadCount} Leads${b.address.isNotEmpty ? " · ${b.address}" : ""}',
+                  style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B)),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              children: [
+                const Divider(color: Color(0xFFE2E8F0), height: 14),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (b.address.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: Text(
+                            'Address: ${b.address}',
+                            style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF334155)),
+                          ),
+                        ),
                       Text(
-                        'Code: ${b.code}',
+                        hasGps
+                            ? 'Geofence: ${b.radiusMeters}m (${b.latitude!.toStringAsFixed(4)}, ${b.longitude!.toStringAsFixed(4)})'
+                            : 'Geofence: Not configured',
                         style: GoogleFonts.robotoMono(
                           fontSize: 11,
-                          color: AppColors.neonCyan,
                           fontWeight: FontWeight.w600,
+                          color: hasGps ? const Color(0xFF047857) : const Color(0xFFD97706),
                         ),
                       ),
-                    if (b.address.isNotEmpty)
-                      Text(
-                        b.address,
-                        style: GoogleFonts.inter(
-                          fontSize: 12,
-                          color: const Color(0xFF64748B),
-                        ),
-                      ),
-                    if (b.latitude != null && b.longitude != null)
-                      Container(
-                        margin: const EdgeInsets.only(top: 6),
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: (b.geofenceEnabled ? AppColors.neonCyan : Colors.grey).withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: (b.geofenceEnabled ? AppColors.neonCyan : Colors.grey).withValues(alpha: 0.3)),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.share_location_rounded, size: 12, color: b.geofenceEnabled ? AppColors.neonCyan : Colors.grey),
-                            const SizedBox(width: 4),
-                            Text(
-                              '${b.radiusMeters}m Geofence (${b.latitude!.toStringAsFixed(3)}, ${b.longitude!.toStringAsFixed(3)})',
-                              style: GoogleFonts.robotoMono(fontSize: 10, fontWeight: FontWeight.w600, color: b.geofenceEnabled ? AppColors.neonCyan : Colors.grey),
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          SizedBox(
+                            height: 34,
+                            child: OutlinedButton.icon(
+                              onPressed: () => _showEditBranchDialog(b),
+                              icon: const Icon(Icons.edit_outlined, size: 14.5, color: Color(0xFF1D4ED8)),
+                              label: Text(
+                                'Edit Branch',
+                                style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w700, color: const Color(0xFF1D4ED8)),
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                side: const BorderSide(color: Color(0xFFBFDBFE)),
+                                backgroundColor: const Color(0xFFEFF6FF),
+                                padding: const EdgeInsets.symmetric(horizontal: 12),
+                                minimumSize: Size.zero,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
                             ),
-                          ],
-                        ),
-                      )
-                    else
-                      Container(
-                        margin: const EdgeInsets.only(top: 6),
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Colors.amber.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          '⚠️ No GPS Geofence Set',
-                          style: GoogleFonts.inter(fontSize: 10, color: Colors.amber.shade800, fontWeight: FontWeight.w500),
-                        ),
+                          ),
+                          SizedBox(
+                            height: 34,
+                            child: OutlinedButton.icon(
+                              onPressed: () => leadProvider.deleteBranch(b.id),
+                              icon: const Icon(Icons.delete_outline_rounded, size: 14.5, color: Color(0xFFDC2626)),
+                              label: Text(
+                                'Delete',
+                                style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w700, color: const Color(0xFFDC2626)),
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                side: const BorderSide(color: Color(0xFFFECDD3)),
+                                backgroundColor: const Color(0xFFFFF1F2),
+                                padding: const EdgeInsets.symmetric(horizontal: 12),
+                                minimumSize: Size.zero,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-              AnimatedStatusBadge(
-                label: '${b.leadCount} Leads',
-                statusColor: AppColors.neonCyan,
-              ),
-              const SizedBox(width: 6),
-              IconButton(
-                icon: const Icon(
-                  Icons.edit_outlined,
-                  color: AppColors.neonCyan,
-                  size: 18,
-                ),
-                tooltip: 'Edit Branch & Geofence',
-                onPressed: () => _showEditBranchDialog(b),
-              ),
-              IconButton(
-                icon: const Icon(
-                  Icons.delete_outline_rounded,
-                  color: AppColors.neonCoral,
-                  size: 18,
-                ),
-                onPressed: () => leadProvider.deleteBranch(b.id),
-              ),
-            ],
+              ],
+            ),
           ),
         );
       },

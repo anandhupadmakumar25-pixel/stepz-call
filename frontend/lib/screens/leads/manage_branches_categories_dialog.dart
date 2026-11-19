@@ -21,10 +21,9 @@ class _ManageBranchesCategoriesDialogState extends State<ManageBranchesCategorie
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 1, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<LeadProvider>().fetchBranches();
-      context.read<LeadProvider>().fetchCategories();
     });
   }
 
@@ -333,69 +332,9 @@ class _ManageBranchesCategoriesDialogState extends State<ManageBranchesCategorie
               ),
               const SizedBox(height: 16),
 
-              // Glass Tabs
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.25),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-                ),
-                child: TabBar(
-                  controller: _tabController,
-                  indicator: BoxDecoration(
-                    gradient: AppColors.primaryGradient,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  indicatorSize: TabBarIndicatorSize.tab,
-                  labelColor: Colors.white,
-                  unselectedLabelColor: AppColors.textSecondary,
-                  labelStyle: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700),
-                  dividerColor: Colors.transparent,
-                  tabs: [
-                    Tab(
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.storefront_rounded, size: 16),
-                          const SizedBox(width: 6),
-                          Flexible(
-                            child: Text(
-                              'Branches (${leadProvider.branches.length})',
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Tab(
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.local_offer_rounded, size: 16),
-                          const SizedBox(width: 6),
-                          Flexible(
-                            child: Text(
-                              'Categories (${leadProvider.categories.length})',
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Tab View Content
+              // Branches Content
               Expanded(
-                child: TabBarView(
-                  controller: _tabController,
-                  children: [
-                    _buildBranchesTab(leadProvider),
-                    _buildCategoriesTab(leadProvider),
-                  ],
-                ),
+                child: _buildBranchesTab(leadProvider),
               ),
             ],
           ),

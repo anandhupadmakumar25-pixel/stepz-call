@@ -26,6 +26,9 @@ class CompanyProvider extends ChangeNotifier {
   String? _selectedSuperAdminFilter;
 
   List<CompanyRenewalRequestModel> _renewalRequests = [];
+  List<Map<String, dynamic>> _featureCatalog = [];
+  List<Map<String, dynamic>> _featureRequests = [];
+  bool _isLoadingFeatureCatalog = false;
   Map<String, int> _renewalRequestMetrics = {
     'pending_count': 0,
     'approved_count': 0,
@@ -362,6 +365,22 @@ class CompanyProvider extends ChangeNotifier {
       }
       if (_activeCompanyDetail?.id == companyId) {
         _activeCompanyDetail = updated;
+      }
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> deleteCompany(String companyId) async {
+    try {
+      await ApiClient.delete('/companies/$companyId/');
+      _companies.removeWhere((c) => c.id == companyId);
+      if (_activeCompanyDetail?.id == companyId) {
+        _activeCompanyDetail = null;
       }
       notifyListeners();
       return true;
@@ -809,6 +828,83 @@ class CompanyProvider extends ChangeNotifier {
       return {'success': false, 'message': 'Failed to submit renewal request.'};
     } catch (e) {
       return {'success': false, 'message': e.toString()};
+    }
+  }
+
+  List<Map<String, dynamic>> get featureCatalog => _featureCatalog;
+  List<Map<String, dynamic>> get featureRequests => _featureRequests;
+  bool get isLoadingFeatureCatalog => _isLoadingFeatureCatalog;
+
+  Future<void> fetchFeatureCatalog() async {
+    _isLoadingFeatureCatalog = true;
+    notifyListeners();
+    try {
+      final res = await ApiClient.get('/companies/features/catalog/');
+      if (res is List) {
+        _featureCatalog = res
+            .whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
+      }
+    } catch (_) {}
+    _isLoadingFeatureCatalog = false;
+    notifyListeners();
+  }
+
+  Future<void> fetchFeatureRequests({String? statusFilter}) async {
+    try {
+      final query = statusFilter != null ? '?status=$statusFilter' : '';
+      final res = await ApiClient.get('/companies/feature-requests/$query');
+      if (res is List) {
+        _featureRequests = res
+            .whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
+        notifyListeners();
+      }
+    } catch (_) {}
+  }
+
+  Future<bool> submitFeatureRequest({
+    required String featureKey,
+    required String featureName,
+    String requestType = 'COMPANY_FEATURE',
+    String note = '',
+  }) async {
+    try {
+      await ApiClient.post('/companies/feature-requests/', {
+        'feature_key': featureKey,
+        'feature_name': featureName,
+        'request_type': requestType,
+        'note': note.trim(),
+      });
+      await fetchFeatureCatalog();
+      await fetchFeatureRequests();
+      return true;
+    } catch (e) {
+      _errorMessage = e.toString().replaceAll('Exception: ', '');
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> reviewFeatureRequest({
+    required String requestId,
+    required String status,
+    String reviewNote = '',
+  }) async {
+    try {
+      await ApiClient.patch('/companies/feature-requests/$requestId/', {
+        'status': status,
+        'review_note': reviewNote.trim(),
+      });
+      await fetchFeatureRequests();
+      await fetchFeatureCatalog();
+      return true;
+    } catch (e) {
+      _errorMessage = e.toString().replaceAll('Exception: ', '');
+      notifyListeners();
+      return false;
     }
   }
 }

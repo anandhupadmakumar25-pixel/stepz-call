@@ -7,6 +7,7 @@ import '../../core/widgets/glass/glass_card.dart';
 import '../../core/widgets/glass/gradient_button.dart';
 import '../../core/widgets/glass/animated_status_badge.dart';
 import '../../core/widgets/app_back_button.dart';
+import '../../core/widgets/date_range_filter_bar.dart';
 import '../../core/responsive/responsive_layout.dart';
 import '../../routes/app_routes.dart';
 import '../../providers/lead_provider.dart';
@@ -14,6 +15,7 @@ import '../../providers/auth_provider.dart';
 import '../../models/lead_model.dart';
 import 'import_wizard_dialog.dart';
 import 'bulk_assign_dialog.dart';
+import 'reassign_leads_dialog.dart';
 import 'add_lead_dialog.dart';
 import 'lead_detail_screen.dart';
 import 'manage_branches_categories_dialog.dart';
@@ -29,7 +31,8 @@ class _LeadDirectoryScreenState extends State<LeadDirectoryScreen> {
   final _searchController = TextEditingController();
   String _selectedStatus = 'ALL';
   String _selectedBranch = 'ALL';
-  String _selectedCategory = 'ALL';
+  String? _dateFrom;
+  String? _dateTo;
   final Set<String> _selectedLeadIds = {};
 
   final List<String> _statusOptions = [
@@ -52,7 +55,6 @@ class _LeadDirectoryScreenState extends State<LeadDirectoryScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final p = context.read<LeadProvider>();
       p.fetchBranches();
-      p.fetchCategories();
       p.fetchLeads();
     });
   }
@@ -67,8 +69,9 @@ class _LeadDirectoryScreenState extends State<LeadDirectoryScreen> {
     context.read<LeadProvider>().fetchLeads(
       status: _selectedStatus,
       branchId: _selectedBranch,
-      categoryId: _selectedCategory,
       search: _searchController.text,
+      dateFrom: _dateFrom,
+      dateTo: _dateTo,
     );
   }
 
@@ -108,7 +111,6 @@ class _LeadDirectoryScreenState extends State<LeadDirectoryScreen> {
     final isMobile = ResponsiveLayout.isMobile(context);
 
     final branches = leadProvider.branches;
-    final categories = leadProvider.categories;
 
     return GlassScaffold(
       backgroundImage: 'assets/images/telecaller_workspace_bg.jpg',
@@ -120,82 +122,181 @@ class _LeadDirectoryScreenState extends State<LeadDirectoryScreen> {
           isMobile ? 10 : 20,
         ),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Top Header Bar with Prominent Back Button
-            Row(
-              children: [
-                const AppBackButton(fallbackRoute: AppRoutes.dashboard),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
+            // Top Header Bar with Uniform Action Buttons (Flush Left & Right)
+            LayoutBuilder(
+              builder: (ctx, headerConstraints) {
+                final titleBlock = Row(
+                  children: [
+                    const AppBackButton(fallbackRoute: AppRoutes.dashboard),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Flexible(
-                            child: Text(
-                              isTelecaller ? 'My Assigned Leads' : 'Company Lead Directory',
-                              style: GoogleFonts.inter(
-                                fontSize: isMobile ? 18 : 22,
-                                fontWeight: FontWeight.w800,
-                                color: const Color(0xFF0F172A),
-                                letterSpacing: -0.3,
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  isTelecaller ? 'My Assigned Leads' : 'Company Lead Directory',
+                                  style: GoogleFonts.inter(
+                                    fontSize: isMobile ? 18 : 22,
+                                    fontWeight: FontWeight.w800,
+                                    color: const Color(0xFF0F172A),
+                                    letterSpacing: -0.3,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                              const SizedBox(width: 8),
+                              AnimatedStatusBadge(
+                                label: '${leadProvider.totalCount} Leads',
+                                statusColor: AppColors.neonCyan,
+                              ),
+                            ],
                           ),
-                          const SizedBox(width: 10),
-                          AnimatedStatusBadge(
-                            label: '${leadProvider.totalCount} Leads',
-                            statusColor: AppColors.neonCyan,
+                          const SizedBox(height: 3),
+                          Text(
+                            'Manage leads, branch filters, and staff assignment',
+                            style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ],
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Centralized lead management directory with branch, category, and pipeline status filters',
-                        style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
+                    ),
+                  ],
+                );
 
-            // Top Toolbar Glass Card
-            GlassCard(
-              blur: 20,
-              opacity: 0.16,
-              borderRadius: BorderRadius.circular(20),
-              padding: const EdgeInsets.all(18),
-              child: Column(
-                children: [
-                  // Search & Dynamic Filter Controls
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 10,
-                    crossAxisAlignment: WrapCrossAlignment.center,
+                final actionButtons = (!isTelecaller || canCreateLead || canImportLeads || canManageBranches)
+                    ? Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          if (canManageBranches)
+                            SizedBox(
+                              height: 36,
+                              child: OutlinedButton.icon(
+                                onPressed: () {
+                                  showDialog(
+                                    context: context,
+                                    builder: (_) => const ManageBranchesCategoriesDialog(),
+                                  );
+                                },
+                                icon: const Icon(Icons.storefront_outlined, size: 15, color: Color(0xFF334155)),
+                                label: Text('Branches', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFF334155))),
+                                style: OutlinedButton.styleFrom(
+                                  side: const BorderSide(color: Color(0xFFCBD5E1)),
+                                  backgroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                                  minimumSize: Size.zero,
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                ),
+                              ),
+                            ),
+                          if (canImportLeads)
+                            SizedBox(
+                              height: 36,
+                              child: OutlinedButton.icon(
+                                onPressed: () {
+                                  showDialog(
+                                    context: context,
+                                    builder: (_) => const ImportWizardDialog(),
+                                  );
+                                },
+                                icon: const Icon(Icons.upload_file_rounded, size: 15, color: Color(0xFF1D4ED8)),
+                                label: Text(isMobile ? 'Import' : 'Import CSV', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFF1D4ED8))),
+                                style: OutlinedButton.styleFrom(
+                                  side: const BorderSide(color: Color(0xFFBFDBFE)),
+                                  backgroundColor: const Color(0xFFEFF6FF),
+                                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                                  minimumSize: Size.zero,
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                ),
+                              ),
+                            ),
+                          if (canCreateLead)
+                            GradientPrimaryButton(
+                              text: 'Add Lead',
+                              icon: Icons.add_rounded,
+                              height: 36,
+                              borderRadius: 10,
+                              padding: const EdgeInsets.symmetric(horizontal: 14),
+                              onPressed: () {
+                                showDialog(
+                                  context: context,
+                                  builder: (_) => const AddLeadDialog(),
+                                );
+                              },
+                            ),
+                        ],
+                      )
+                    : null;
+
+                if (!isMobile && headerConstraints.maxWidth >= 720) {
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      // Search Input
-                      ConstrainedBox(
-                        constraints: BoxConstraints(
-                          minWidth: isMobile ? double.infinity : 220,
-                          maxWidth: isMobile ? double.infinity : 300,
-                        ),
+                      Expanded(child: titleBlock),
+                      if (actionButtons != null) ...[
+                        const SizedBox(width: 16),
+                        actionButtons,
+                      ],
+                    ],
+                  );
+                }
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    titleBlock,
+                    if (actionButtons != null) ...[
+                      const SizedBox(height: 10),
+                      actionButtons,
+                    ],
+                  ],
+                );
+              },
+            ),
+            const SizedBox(height: 14),
+
+            // Filter & Selection Toolbar Card
+            GlassCard(
+              blur: 18,
+              opacity: 0.96,
+              borderRadius: BorderRadius.circular(16),
+              borderColor: const Color(0xFFE2E8F0),
+              padding: EdgeInsets.all(isMobile ? 12 : 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  DateRangeFilterBar(
+                    onChanged: (from, to) {
+                      _dateFrom = from;
+                      _dateTo = to;
+                      _triggerFilter();
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  LayoutBuilder(
+                    builder: (ctx, filterConstraints) {
+                      final searchField = SizedBox(
+                        height: 38,
                         child: TextField(
                           controller: _searchController,
                           onChanged: (_) => _triggerFilter(),
-                          style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF0F172A), fontWeight: FontWeight.w500),
+                          style: GoogleFonts.inter(fontSize: 12.5, color: const Color(0xFF0F172A), fontWeight: FontWeight.w500),
                           decoration: InputDecoration(
                             hintText: 'Search name, phone, city...',
-                            hintStyle: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF94A3B8)),
-                            prefixIcon: const Icon(Icons.search_rounded, size: 18, color: Color(0xFF94A3B8)),
+                            hintStyle: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8)),
+                            prefixIcon: const Icon(Icons.search_rounded, size: 17, color: Color(0xFF64748B)),
                             filled: true,
-                            fillColor: Colors.white,
+                            fillColor: const Color(0xFFF8FAFC),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(10),
                               borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
@@ -206,9 +307,9 @@ class _LeadDirectoryScreenState extends State<LeadDirectoryScreen> {
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(10),
-                              borderSide: const BorderSide(color: Color(0xFF6366F1), width: 1.5),
+                              borderSide: const BorderSide(color: Color(0xFF047857), width: 1.5),
                             ),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                             isDense: true,
                             suffixIcon: _searchController.text.isNotEmpty
                                 ? IconButton(
@@ -221,11 +322,10 @@ class _LeadDirectoryScreenState extends State<LeadDirectoryScreen> {
                                 : null,
                           ),
                         ),
-                      ),
+                      );
 
-                      // Branch Filter
-                      _buildDropdownFilter(
-                        width: isMobile ? double.infinity : 160,
+                      final branchDrop = _buildDropdownFilter(
+                        width: double.infinity,
                         value: _selectedBranch,
                         items: [
                           const DropdownMenuItem(value: 'ALL', child: Text('All Branches', overflow: TextOverflow.ellipsis)),
@@ -236,26 +336,10 @@ class _LeadDirectoryScreenState extends State<LeadDirectoryScreen> {
                           setState(() => _selectedBranch = val);
                           _triggerFilter();
                         },
-                      ),
+                      );
 
-                      // Category Filter
-                      _buildDropdownFilter(
-                        width: isMobile ? double.infinity : 160,
-                        value: _selectedCategory,
-                        items: [
-                          const DropdownMenuItem(value: 'ALL', child: Text('All Categories', overflow: TextOverflow.ellipsis)),
-                          ...categories.map((c) => DropdownMenuItem(value: c.id, child: Text(c.name, overflow: TextOverflow.ellipsis))),
-                        ],
-                        onChanged: (val) {
-                          if (val == null) return;
-                          setState(() => _selectedCategory = val);
-                          _triggerFilter();
-                        },
-                      ),
-
-                      // Status Filter
-                      _buildDropdownFilter(
-                        width: isMobile ? double.infinity : 165,
+                      final statusDrop = _buildDropdownFilter(
+                        width: double.infinity,
                         value: _selectedStatus,
                         items: _statusOptions.map((s) => DropdownMenuItem(value: s, child: Text(s.replaceAll('_', ' '), overflow: TextOverflow.ellipsis))).toList(),
                         onChanged: (val) {
@@ -263,177 +347,134 @@ class _LeadDirectoryScreenState extends State<LeadDirectoryScreen> {
                           setState(() => _selectedStatus = val);
                           _triggerFilter();
                         },
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
+                      );
 
-                  // Actions Area: Count Badges & Action Buttons
-                  isMobile
-                      ? Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                      if (!isMobile && filterConstraints.maxWidth >= 680) {
+                        return Row(
                           children: [
-                            Row(
-                              children: [
-                                AnimatedStatusBadge(
-                                  label: '${leadProvider.totalCount} Leads',
-                                  statusColor: AppColors.neonCyan,
+                            Expanded(flex: 3, child: searchField),
+                            const SizedBox(width: 10),
+                            Expanded(flex: 2, child: branchDrop),
+                            const SizedBox(width: 10),
+                            Expanded(flex: 2, child: statusDrop),
+                          ],
+                        );
+                      }
+
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          searchField,
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Expanded(child: branchDrop),
+                              const SizedBox(width: 8),
+                              Expanded(child: statusDrop),
+                            ],
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+
+                  // Selection Action Bar (shown only when leads are checked)
+                  if (canAssignLeads && _selectedLeadIds.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    const Divider(color: Color(0xFFE2E8F0), height: 1),
+                    const SizedBox(height: 10),
+                    Builder(builder: (_) {
+                      final selectedLeads = leadProvider.leads
+                          .where((l) => _selectedLeadIds.contains(l.id))
+                          .toList();
+                      final unassignedIds = selectedLeads
+                          .where((l) => l.assignedTo == null || l.assignedTo!.isEmpty)
+                          .map((l) => l.id)
+                          .toList();
+                      final assignedLeads = selectedLeads
+                          .where((l) => l.assignedTo != null && l.assignedTo!.isNotEmpty)
+                          .toList();
+
+                      return Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        alignment: WrapAlignment.spaceBetween,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Text(
+                            '${_selectedLeadIds.length} Selected'
+                            '${unassignedIds.isNotEmpty ? " · ${unassignedIds.length} Unassigned" : ""}'
+                            '${assignedLeads.isNotEmpty ? " · ${assignedLeads.length} Assigned" : ""}',
+                            style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
+                          ),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              if (unassignedIds.isNotEmpty)
+                                GradientPrimaryButton(
+                                  text: 'Bulk Assign (${unassignedIds.length})',
+                                  icon: Icons.assignment_ind_rounded,
+                                  gradient: AppColors.sunsetGradient,
+                                  height: 34,
+                                  borderRadius: 9,
+                                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                                  onPressed: () {
+                                    showDialog(
+                                      context: context,
+                                      builder: (_) => BulkAssignDialog(selectedLeadIds: unassignedIds),
+                                    ).then((_) {
+                                      setState(() => _selectedLeadIds.clear());
+                                      _triggerFilter();
+                                    });
+                                  },
                                 ),
-                                if (_selectedLeadIds.isNotEmpty) ...[
-                                  const SizedBox(width: 10),
-                                  AnimatedStatusBadge(
-                                    label: '${_selectedLeadIds.length} Selected',
-                                    statusColor: AppColors.neonViolet,
-                                  ),
-                                ],
-                              ],
-                            ),
-                            if (!isTelecaller || canCreateLead || canImportLeads || canAssignLeads) ...[
-                              const SizedBox(height: 12),
-                              Wrap(
-                                spacing: 8,
-                                runSpacing: 8,
-                                children: [
-                                  if (canAssignLeads && _selectedLeadIds.isNotEmpty)
-                                    GradientPrimaryButton(
-                                      text: 'Bulk Assign (${_selectedLeadIds.length})',
-                                      icon: Icons.assignment_ind_rounded,
-                                      gradient: AppColors.sunsetGradient,
-                                      onPressed: () {
-                                        showDialog(
-                                          context: context,
-                                          builder: (_) => BulkAssignDialog(selectedLeadIds: _selectedLeadIds.toList()),
-                                        ).then((_) {
-                                          setState(() => _selectedLeadIds.clear());
-                                          _triggerFilter();
-                                        });
-                                      },
-                                    ),
-                                  if (canManageBranches)
-                                    GlassSecondaryButton(
-                                      text: 'Categories',
-                                      icon: Icons.tune_rounded,
-                                      onPressed: () {
-                                        showDialog(
-                                          context: context,
-                                          builder: (_) => const ManageBranchesCategoriesDialog(),
-                                        );
-                                      },
-                                    ),
-                                  if (canImportLeads)
-                                    GlassSecondaryButton(
-                                      text: 'Import',
-                                      icon: Icons.upload_file_rounded,
-                                      onPressed: () {
-                                        showDialog(
-                                          context: context,
-                                          builder: (_) => const ImportWizardDialog(),
-                                        );
-                                      },
-                                    ),
-                                  if (canCreateLead)
-                                    GradientPrimaryButton(
-                                      text: 'Add Lead',
-                                      icon: Icons.add_rounded,
-                                      onPressed: () {
-                                        showDialog(
-                                          context: context,
-                                          builder: (_) => const AddLeadDialog(),
-                                        );
-                                      },
-                                    ),
-                                ],
+                              if (assignedLeads.isNotEmpty)
+                                GradientPrimaryButton(
+                                  text: 'Reassign (${assignedLeads.length})',
+                                  icon: Icons.swap_horiz_rounded,
+                                  gradient: AppColors.primaryGradient,
+                                  height: 34,
+                                  borderRadius: 9,
+                                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                                  onPressed: () {
+                                    showDialog(
+                                      context: context,
+                                      builder: (_) => ReassignLeadsDialog(assignedLeads: assignedLeads),
+                                    ).then((res) {
+                                      if (res == true) {
+                                        setState(() => _selectedLeadIds.clear());
+                                        _triggerFilter();
+                                      }
+                                    });
+                                  },
+                                ),
+                              SizedBox(
+                                height: 34,
+                                child: TextButton(
+                                  onPressed: () => setState(() => _selectedLeadIds.clear()),
+                                  child: Text('Clear', style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w700, color: const Color(0xFF64748B))),
+                                ),
                               ),
                             ],
-                          ],
-                        )
-                      : Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Row(
-                              children: [
-                                AnimatedStatusBadge(
-                                  label: '${leadProvider.totalCount} Leads Found',
-                                  statusColor: AppColors.neonCyan,
-                                ),
-                                if (_selectedLeadIds.isNotEmpty) ...[
-                                  const SizedBox(width: 10),
-                                  AnimatedStatusBadge(
-                                    label: '${_selectedLeadIds.length} Selected',
-                                    statusColor: AppColors.neonViolet,
-                                  ),
-                                ],
-                              ],
-                            ),
-                            if (!isTelecaller || canCreateLead || canImportLeads || canAssignLeads)
-                              Wrap(
-                                spacing: 10,
-                                runSpacing: 8,
-                                children: [
-                                  if (canAssignLeads && _selectedLeadIds.isNotEmpty)
-                                    GradientPrimaryButton(
-                                      text: 'Bulk Assign (${_selectedLeadIds.length})',
-                                      icon: Icons.assignment_ind_rounded,
-                                      gradient: AppColors.sunsetGradient,
-                                      onPressed: () {
-                                        showDialog(
-                                          context: context,
-                                          builder: (_) => BulkAssignDialog(selectedLeadIds: _selectedLeadIds.toList()),
-                                        ).then((_) {
-                                          setState(() => _selectedLeadIds.clear());
-                                          _triggerFilter();
-                                        });
-                                      },
-                                    ),
-                                  if (canManageBranches)
-                                    GlassSecondaryButton(
-                                      text: 'Branches & Categories',
-                                      icon: Icons.tune_rounded,
-                                      onPressed: () {
-                                        showDialog(
-                                          context: context,
-                                          builder: (_) => const ManageBranchesCategoriesDialog(),
-                                        );
-                                      },
-                                    ),
-                                  if (canImportLeads)
-                                    GlassSecondaryButton(
-                                      text: 'Import CSV / Excel',
-                                      icon: Icons.upload_file_rounded,
-                                      onPressed: () {
-                                        showDialog(
-                                          context: context,
-                                          builder: (_) => const ImportWizardDialog(),
-                                        );
-                                      },
-                                    ),
-                                  if (canCreateLead)
-                                    GradientPrimaryButton(
-                                      text: 'Add Lead',
-                                      icon: Icons.add_rounded,
-                                      onPressed: () {
-                                        showDialog(
-                                          context: context,
-                                          builder: (_) => const AddLeadDialog(),
-                                        );
-                                      },
-                                    ),
-                                ],
-                              ),
-                          ],
-                        ),
+                          ),
+                        ],
+                      );
+                    }),
+                  ],
                 ],
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
 
             // Leads Directory List / Table
             Expanded(
               child: GlassCard(
-                blur: 20,
-                opacity: 0.16,
-                borderRadius: BorderRadius.circular(20),
-                padding: const EdgeInsets.all(16),
+                blur: 18,
+                opacity: 0.96,
+                borderRadius: BorderRadius.circular(16),
+                borderColor: const Color(0xFFE2E8F0),
+                padding: EdgeInsets.all(isMobile ? 10 : 14),
                 child: leadProvider.isLoading && leadProvider.leads.isEmpty
                     ? const Center(child: CircularProgressIndicator())
                     : leadProvider.leads.isEmpty
@@ -441,15 +482,15 @@ class _LeadDirectoryScreenState extends State<LeadDirectoryScreen> {
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Icon(Icons.person_off_rounded, size: 52, color: Colors.white24),
-                                const SizedBox(height: 12),
+                                const Icon(Icons.person_off_rounded, size: 46, color: Color(0xFF94A3B8)),
+                                const SizedBox(height: 10),
                                 Text(
                                   'No Leads Found',
-                                  style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
+                                  style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
                                 ),
-                                const SizedBox(height: 6),
+                                const SizedBox(height: 4),
                                 Text(
-                                  'No records match your selected branch, category, or status query.',
+                                  'No records match your selected branch, date, or status filter.',
                                   style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
                                 ),
                               ],
@@ -506,22 +547,25 @@ class _LeadDirectoryScreenState extends State<LeadDirectoryScreen> {
   Widget _buildDataTable(List<LeadModel> leads, bool isTelecaller) {
     final horizontalScrollController = ScrollController();
 
-    return Scrollbar(
-      controller: horizontalScrollController,
-      thumbVisibility: true,
-      child: SingleChildScrollView(
-        controller: horizontalScrollController,
-        scrollDirection: Axis.horizontal,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minWidth: 1050),
+    return LayoutBuilder(
+      builder: (ctx, constraints) {
+        final tableMinWidth = constraints.maxWidth > 900 ? constraints.maxWidth : 900.0;
+        return Scrollbar(
+          controller: horizontalScrollController,
+          thumbVisibility: true,
           child: SingleChildScrollView(
-            scrollDirection: Axis.vertical,
-            child: DataTable(
-              showCheckboxColumn: !isTelecaller,
-              headingRowHeight: 46,
-              dataRowMinHeight: 52,
-              dataRowMaxHeight: 60,
-              headingTextStyle: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 11, color: const Color(0xFFCBD5E1), letterSpacing: 0.6),
+            controller: horizontalScrollController,
+            scrollDirection: Axis.horizontal,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minWidth: tableMinWidth),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.vertical,
+                child: DataTable(
+                  showCheckboxColumn: !isTelecaller,
+                  headingRowHeight: 44,
+                  dataRowMinHeight: 52,
+                  dataRowMaxHeight: 60,
+                  headingTextStyle: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 11, color: const Color(0xFF475569), letterSpacing: 0.6),
               onSelectAll: !isTelecaller
                   ? (selected) {
                       setState(() {
@@ -537,20 +581,12 @@ class _LeadDirectoryScreenState extends State<LeadDirectoryScreen> {
                 DataColumn(label: Text('CUSTOMER NAME')),
                 DataColumn(label: Text('PHONE (E.164)')),
                 DataColumn(label: Text('BRANCH')),
-                DataColumn(label: Text('CATEGORY')),
                 DataColumn(label: Text('STATUS')),
                 DataColumn(label: Text('ASSIGNED TO')),
                 DataColumn(label: Text('ACTIONS')),
               ],
               rows: leads.map((lead) {
                 final isSelected = _selectedLeadIds.contains(lead.id);
-
-                Color catColor = const Color(0xFF8B5CF6);
-                if (lead.categoryColor != null) {
-                  try {
-                    catColor = Color(int.parse(lead.categoryColor!.replaceAll('#', '0xFF')));
-                  } catch (_) {}
-                }
 
                 return DataRow(
                   selected: isSelected,
@@ -639,20 +675,6 @@ class _LeadDirectoryScreenState extends State<LeadDirectoryScreen> {
                       ),
                     ),
                     DataCell(
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: catColor.withValues(alpha: 0.18),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: catColor.withValues(alpha: 0.35)),
-                        ),
-                        child: Text(
-                          lead.categoryName ?? 'General',
-                          style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: catColor),
-                        ),
-                      ),
-                    ),
-                    DataCell(
                       AnimatedStatusBadge(label: lead.status, statusColor: _getStatusColor(lead.status)),
                     ),
                     DataCell(
@@ -682,10 +704,31 @@ class _LeadDirectoryScreenState extends State<LeadDirectoryScreen> {
                       ),
                     ),
                     DataCell(
-                      IconButton(
-                        icon: const Icon(Icons.arrow_forward_rounded, size: 18, color: Color(0xFF818CF8)),
-                        tooltip: 'View Profile',
-                        onPressed: () => _openLeadDetail(lead.id),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (lead.assignedTo != null &&
+                              lead.assignedTo!.isNotEmpty &&
+                              (context.read<AuthProvider>().currentUser?.isCompanyAdmin == true ||
+                                  (context.read<AuthProvider>().currentUser?.hasPermission('leads.assign') ?? false)))
+                            IconButton(
+                              icon: const Icon(Icons.swap_horiz_rounded, size: 18, color: Color(0xFF4338CA)),
+                              tooltip: 'Reassign to another employee',
+                              onPressed: () {
+                                showDialog(
+                                  context: context,
+                                  builder: (_) => ReassignLeadsDialog(assignedLeads: [lead]),
+                                ).then((res) {
+                                  if (res == true) _triggerFilter();
+                                });
+                              },
+                            ),
+                          IconButton(
+                            icon: const Icon(Icons.arrow_forward_rounded, size: 18, color: Color(0xFF818CF8)),
+                            tooltip: 'View Profile',
+                            onPressed: () => _openLeadDetail(lead.id),
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -695,6 +738,8 @@ class _LeadDirectoryScreenState extends State<LeadDirectoryScreen> {
           ),
         ),
       ),
+    );
+      },
     );
   }
 
@@ -706,13 +751,6 @@ class _LeadDirectoryScreenState extends State<LeadDirectoryScreen> {
       itemBuilder: (context, index) {
         final lead = leads[index];
         final isSelected = _selectedLeadIds.contains(lead.id);
-
-        Color catColor = const Color(0xFF8B5CF6);
-        if (lead.categoryColor != null) {
-          try {
-            catColor = Color(int.parse(lead.categoryColor!.replaceAll('#', '0xFF')));
-          } catch (_) {}
-        }
 
         return Container(
           padding: const EdgeInsets.all(14),
@@ -795,23 +833,37 @@ class _LeadDirectoryScreenState extends State<LeadDirectoryScreen> {
                           style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w600, color: const Color(0xFF0F172A)),
                         ),
                       ),
-                    if (lead.categoryName != null)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: catColor.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          '🏷 ${lead.categoryName}',
-                          style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, color: catColor),
-                        ),
-                      ),
-                    if (lead.assignedToName != null)
+                    if (lead.assignedToName != null) ...[
                       Text(
                         '👤 ${lead.assignedToName}',
                         style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
                       ),
+                      if (context.read<AuthProvider>().currentUser?.isCompanyAdmin == true ||
+                          (context.read<AuthProvider>().currentUser?.hasPermission('leads.assign') ?? false))
+                        InkWell(
+                          onTap: () {
+                            showDialog(
+                              context: context,
+                              builder: (_) => ReassignLeadsDialog(assignedLeads: [lead]),
+                            ).then((res) {
+                              if (res == true) _triggerFilter();
+                            });
+                          },
+                          borderRadius: BorderRadius.circular(6),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEEF2FF),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: const Color(0xFFC7D2FE)),
+                            ),
+                            child: Text(
+                              'Reassign',
+                              style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, color: const Color(0xFF4338CA)),
+                            ),
+                          ),
+                        ),
+                    ],
                   ],
                 ),
               ],

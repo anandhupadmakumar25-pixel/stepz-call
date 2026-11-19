@@ -11,6 +11,9 @@ from apps.billing.views import (
     ReceiptVoucherListCreateView,
     ReceiptVoucherDetailView,
     BillingOverviewKPIView,
+    DocumentTemplateListCreateView,
+    DocumentTemplateDetailView,
+    DocumentTemplateSetDefaultView,
 )
 
 urlpatterns = [
@@ -26,4 +29,7 @@ urlpatterns = [
     path('invoices/<uuid:pk>/record-payment/', InvoiceRecordPaymentView.as_view(), name='invoice_record_payment'),
     path('receipt-vouchers/', ReceiptVoucherListCreateView.as_view(), name='receipt_voucher_list_create'),
     path('receipt-vouchers/<uuid:pk>/', ReceiptVoucherDetailView.as_view(), name='receipt_voucher_detail'),
+    path('templates/', DocumentTemplateListCreateView.as_view(), name='document_template_list_create'),
+    path('templates/<uuid:pk>/', DocumentTemplateDetailView.as_view(), name='document_template_detail'),
+    path('templates/<uuid:pk>/set-default/', DocumentTemplateSetDefaultView.as_view(), name='document_template_set_default'),
 ]

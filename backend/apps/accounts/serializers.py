@@ -3,9 +3,29 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from apps.companies.models import Company
-from apps.accounts.models import Team, EmployeeProfile, Invitation, Department, AttendanceRecord, FieldVisit, CustomRole
+from apps.accounts.models import (
+    Team, EmployeeProfile, Invitation, Department,
+    AttendanceRecord, FieldVisit, CustomRole,
+    SectionDelegation, PermissionAuditLog,
+)
 
 User = get_user_model()
+
+
+def _serialize_active_delegations(user):
+    return [
+        {
+            'id': str(d.id),
+            'title': d.title or 'Acting In-Charge',
+            'delegator_id': str(d.delegator_id),
+            'delegator_name': d.delegator.full_name if d.delegator else 'Admin',
+            'sections': d.sections or [],
+            'permissions': d.permissions or [],
+            'start_date': d.start_date.isoformat(),
+            'end_date': d.end_date.isoformat(),
+        }
+        for d in user.get_active_delegations()
+    ]
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     def validate(self, attrs):
@@ -100,6 +120,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             'custom_role_ids': [str(r.id) for r in user.custom_roles.all()],
             'custom_role_names': [r.name for r in user.custom_roles.all()],
             'resolved_permissions': user.resolved_permissions,
+            'active_delegations': _serialize_active_delegations(user),
         }
         return data
 
@@ -124,6 +145,8 @@ class UserProfileSerializer(serializers.ModelSerializer):
     company_days_until_expiry = serializers.SerializerMethodField()
     company_is_plan_expired = serializers.SerializerMethodField()
     is_master_admin = serializers.BooleanField(read_only=True)
+    resolved_permissions = serializers.ReadOnlyField()
+    active_delegations = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -135,9 +158,13 @@ class UserProfileSerializer(serializers.ModelSerializer):
             'branch', 'branch_name',
             'company_allowed_menus', 'can_manage_branches', 'company_plan_name',
             'company_plan_expires_at', 'company_days_until_expiry', 'company_is_plan_expired',
+            'resolved_permissions', 'active_delegations',
             'is_active', 'created_at'
         ]
         read_only_fields = ['id', 'email', 'role', 'company', 'company_name', 'created_at']
+
+    def get_active_delegations(self, obj):
+        return _serialize_active_delegations(obj)
 
     def get_company_allowed_menus(self, obj):
         return obj.company.get_allowed_menus() if obj.company else []
@@ -359,3 +386,48 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
 class ChangePasswordSerializer(serializers.Serializer):
     old_password = serializers.CharField(required=True)
     new_password = serializers.CharField(required=True, validators=[validate_password])
+
+
+class SectionDelegationSerializer(serializers.ModelSerializer):
+    delegator_name = serializers.CharField(source='delegator.full_name', read_only=True)
+    delegator_email = serializers.CharField(source='delegator.email', read_only=True)
+    delegatee_name = serializers.CharField(source='delegatee.full_name', read_only=True)
+    delegatee_email = serializers.CharField(source='delegatee.email', read_only=True)
+    revoked_by_name = serializers.CharField(source='revoked_by.full_name', read_only=True, default='')
+    is_currently_effective = serializers.BooleanField(read_only=True)
+
+    class Meta:
+        model = SectionDelegation
+        fields = [
+            'id', 'delegator', 'delegator_name', 'delegator_email',
+            'delegatee', 'delegatee_name', 'delegatee_email',
+            'title', 'sections', 'permissions',
+            'start_date', 'end_date', 'reason',
+            'is_active', 'is_currently_effective',
+            'revoked_at', 'revoked_by', 'revoked_by_name',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = [
+            'id', 'delegator', 'is_currently_effective',
+            'revoked_at', 'revoked_by', 'created_at', 'updated_at',
+        ]
+
+    def validate(self, attrs):
+        start = attrs.get('start_date')
+        end = attrs.get('end_date')
+        if start and end and end < start:
+            raise serializers.ValidationError({'end_date': 'End date must be on or after start date.'})
+        return attrs
+
+
+class PermissionAuditLogSerializer(serializers.ModelSerializer):
+    actor_name = serializers.CharField(source='actor.full_name', read_only=True, default='System')
+    on_behalf_of_name = serializers.CharField(source='on_behalf_of.full_name', read_only=True, default='')
+
+    class Meta:
+        model = PermissionAuditLog
+        fields = [
+            'id', 'actor', 'actor_name', 'on_behalf_of', 'on_behalf_of_name',
+            'action', 'target_model', 'target_id', 'details', 'ip_address', 'created_at',
+        ]
+        read_only_fields = fields

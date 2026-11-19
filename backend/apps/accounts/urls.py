@@ -16,7 +16,26 @@ from apps.accounts.views import (
     AttendanceAdminRecordsView,
     TeamListCreateView,
     TeamDetailView,
-    ChangePasswordView
+    ChangePasswordView,
+    PermissionCatalogView,
+    SectionDelegationListCreateView,
+    SectionDelegationRevokeView,
+    PermissionAuditLogListView,
+)
+from apps.accounts.views_hr import (
+    CompanyHolidayListCreateView,
+    CompanyHolidayDetailView,
+    LeaveTypeListCreateView,
+    MyLeaveBalancesView,
+    LeaveRequestListCreateView,
+    LeaveRequestActionView,
+    AttendanceRegularizationListCreateView,
+    AttendanceRegularizationActionView,
+    EmployeeSalaryStructureListUpsertView,
+    PayrollRunListGenerateView,
+    PayrollRunDetailView,
+    PayrollRunFinalizePayView,
+    MyPayslipsView,
 )
 from rest_framework_simplejwt.views import TokenRefreshView
 
@@ -39,4 +58,22 @@ urlpatterns = [
     path('attendance/records/', AttendanceAdminRecordsView.as_view(), name='attendance_admin_records'),
     path('teams/', TeamListCreateView.as_view(), name='team_list_create'),
     path('teams/<uuid:pk>/', TeamDetailView.as_view(), name='team_detail'),
+    path('permissions/catalog/', PermissionCatalogView.as_view(), name='permission_catalog'),
+    path('delegations/', SectionDelegationListCreateView.as_view(), name='section_delegation_list_create'),
+    path('delegations/<uuid:pk>/revoke/', SectionDelegationRevokeView.as_view(), name='section_delegation_revoke'),
+    path('audit-logs/', PermissionAuditLogListView.as_view(), name='permission_audit_logs'),
+    # HR, Leave, Holidays, Regularization & Payroll
+    path('holidays/', CompanyHolidayListCreateView.as_view(), name='company_holiday_list_create'),
+    path('holidays/<uuid:pk>/', CompanyHolidayDetailView.as_view(), name='company_holiday_detail'),
+    path('leave-types/', LeaveTypeListCreateView.as_view(), name='leave_type_list_create'),
+    path('leave-balances/', MyLeaveBalancesView.as_view(), name='my_leave_balances'),
+    path('leaves/', LeaveRequestListCreateView.as_view(), name='leave_request_list_create'),
+    path('leaves/<uuid:pk>/action/', LeaveRequestActionView.as_view(), name='leave_request_action'),
+    path('regularizations/', AttendanceRegularizationListCreateView.as_view(), name='attendance_regularization_list_create'),
+    path('regularizations/<uuid:pk>/action/', AttendanceRegularizationActionView.as_view(), name='attendance_regularization_action'),
+    path('salary-structures/', EmployeeSalaryStructureListUpsertView.as_view(), name='salary_structure_list_upsert'),
+    path('payroll-runs/', PayrollRunListGenerateView.as_view(), name='payroll_run_list_generate'),
+    path('payroll-runs/<uuid:pk>/', PayrollRunDetailView.as_view(), name='payroll_run_detail'),
+    path('payroll-runs/<uuid:pk>/action/', PayrollRunFinalizePayView.as_view(), name='payroll_run_action'),
+    path('my-payslips/', MyPayslipsView.as_view(), name='my_payslips'),
 ]

@@ -27,6 +27,7 @@ class TelecallerDashboardScreen extends StatefulWidget {
 class _TelecallerDashboardScreenState extends State<TelecallerDashboardScreen> {
   String _queueSearchQuery = '';
   String _selectedStatusFilter = 'ALL';
+  int _mobileWorkspaceTab = 0;
 
   @override
   void initState() {
@@ -123,7 +124,7 @@ class _TelecallerDashboardScreenState extends State<TelecallerDashboardScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // ==========================================
-            // ZONE 1: SHIFT & TARGET HUD
+            // ZONE 1: COMPACT EXECUTIVE HEADER
             // ==========================================
             _buildExecutiveHeader(
               greeting: _getGreeting(),
@@ -132,53 +133,143 @@ class _TelecallerDashboardScreenState extends State<TelecallerDashboardScreen> {
               branchName: branchName,
               isMobile: isMobile,
               isDesktop: isDesktop,
+              canViewTasks: (user?.hasMenuPermission('tasks') ?? false) &&
+                  (user?.hasPermission('tasks.view') ?? false),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
 
-            // Stepz Attendance Punch & Geofence
-            if (user?.hasPermission('attendance.punch') ?? true) ...[
-              const StepzPunchWidget(),
-              const SizedBox(height: 16),
-            ],
-
-            // Daily Calling Pacing Hero Card
-            _buildPacingHeroCard(
-              dash: dash,
-              targetPct: targetPct,
-              remainingCalls: remainingCalls,
-              isMobile: isMobile,
+            // Side-by-side Attendance & Daily Target Pacing on Desktop/Tablet
+            LayoutBuilder(
+              builder: (ctx, c) {
+                final showPunch = user?.hasPermission('attendance.punch') ?? true;
+                final pacingCard = _buildPacingHeroCard(
+                  dash: dash,
+                  targetPct: targetPct,
+                  remainingCalls: remainingCalls,
+                  isMobile: isMobile,
+                );
+                if (!showPunch) return pacingCard;
+                if (c.maxWidth >= 900) {
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Expanded(flex: 5, child: StepzPunchWidget()),
+                      const SizedBox(width: 14),
+                      Expanded(flex: 7, child: pacingCard),
+                    ],
+                  );
+                }
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const StepzPunchWidget(),
+                    const SizedBox(height: 12),
+                    pacingCard,
+                  ],
+                );
+              },
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
 
             // 4 Micro Metric Stat Badges
             _buildLuxuryStatCards(dash, isDesktop, isMobile),
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
 
             // ==========================================
-            // ZONE 2: PRIMARY CALLING WORKSTATION (PROMINENT QUEUE)
+            // ZONE 2 & 3: RESPONSIVE WORKSPACE (SPLIT DESKTOP / TABBED MOBILE)
             // ==========================================
-            _buildMyAssignedLeadsQueue(context, isMobile, companyName),
-            const SizedBox(height: 20),
-
-            // ==========================================
-            // ZONE 3: SPLIT DESK (CALLBACKS & CALL HISTORY)
-            // ==========================================
-            if (isDesktop)
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(flex: 6, child: _buildPriorityCallbacksCard(context, dash, isMobile)),
-                  const SizedBox(width: 18),
-                  Expanded(flex: 6, child: _buildRecentActivityLedger(dash, isMobile)),
-                ],
-              )
-            else ...[
-              _buildPriorityCallbacksCard(context, dash, isMobile),
-              const SizedBox(height: 18),
-              _buildRecentActivityLedger(dash, isMobile),
-            ],
-            const SizedBox(height: 28),
+            LayoutBuilder(
+              builder: (ctx, c) {
+                if (c.maxWidth >= 1080) {
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        flex: 7,
+                        child: _buildMyAssignedLeadsQueue(context, isMobile, companyName),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        flex: 5,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _buildPriorityCallbacksCard(context, dash, isMobile),
+                            const SizedBox(height: 16),
+                            _buildRecentActivityLedger(dash, isMobile),
+                          ],
+                        ),
+                      ),
+                    ],
+                  );
+                }
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                      ),
+                      child: Row(
+                        children: [
+                          _buildWorkspaceTabBtn(0, 'Leads Queue', Icons.people_alt_rounded),
+                          _buildWorkspaceTabBtn(1, 'Callbacks', Icons.phone_callback_rounded),
+                          _buildWorkspaceTabBtn(2, 'Activity', Icons.history_rounded),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    if (_mobileWorkspaceTab == 0)
+                      _buildMyAssignedLeadsQueue(context, isMobile, companyName)
+                    else if (_mobileWorkspaceTab == 1)
+                      _buildPriorityCallbacksCard(context, dash, isMobile)
+                    else
+                      _buildRecentActivityLedger(dash, isMobile),
+                  ],
+                );
+              },
+            ),
+            const SizedBox(height: 24),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWorkspaceTabBtn(int idx, String label, IconData icon) {
+    final active = _mobileWorkspaceTab == idx;
+    return Expanded(
+      child: InkWell(
+        onTap: () => setState(() => _mobileWorkspaceTab = idx),
+        borderRadius: BorderRadius.circular(9),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 6),
+          decoration: BoxDecoration(
+            color: active ? const Color(0xFF047857) : Colors.transparent,
+            borderRadius: BorderRadius.circular(9),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 15, color: active ? Colors.white : const Color(0xFF64748B)),
+              const SizedBox(width: 5),
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    fontWeight: active ? FontWeight.w700 : FontWeight.w600,
+                    color: active ? Colors.white : const Color(0xFF64748B),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -194,22 +285,53 @@ class _TelecallerDashboardScreenState extends State<TelecallerDashboardScreen> {
     required String? branchName,
     required bool isMobile,
     required bool isDesktop,
+    bool canViewTasks = true,
   }) {
     return GlassCard(
-      padding: EdgeInsets.all(isMobile ? 16 : 20),
-      borderRadius: BorderRadius.circular(20),
+      padding: EdgeInsets.all(isMobile ? 14 : 16),
+      borderRadius: BorderRadius.circular(18),
       borderColor: const Color(0xFFE2E8F0),
       child: isMobile
           ? Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _buildHeaderIdentity(greeting, userName, companyName, branchName),
-                const SizedBox(height: 14),
-                SizedBox(
-                  width: double.infinity,
-                  child: GradientPrimaryButton(
-                    text: 'Start Calling Tasks',
-                    icon: Icons.phone_forwarded_rounded,
+                if (canViewTasks) ...[
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: GradientPrimaryButton(
+                      text: 'My Assigned Tasks',
+                      icon: Icons.assignment_turned_in_rounded,
+                      height: 40,
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF047857), Color(0xFF059669)],
+                      ),
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const CallingTasksScreen()),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ],
+            )
+          : Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: _buildHeaderIdentity(greeting, userName, companyName, branchName),
+                ),
+                if (canViewTasks) ...[
+                  const SizedBox(width: 16),
+                  GradientPrimaryButton(
+                    text: 'My Assigned Tasks',
+                    icon: Icons.assignment_turned_in_rounded,
+                    height: 42,
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    borderRadius: 12,
                     gradient: const LinearGradient(
                       colors: [Color(0xFF047857), Color(0xFF059669)],
                     ),
@@ -220,32 +342,7 @@ class _TelecallerDashboardScreenState extends State<TelecallerDashboardScreen> {
                       );
                     },
                   ),
-                ),
-              ],
-            )
-          : Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: _buildHeaderIdentity(greeting, userName, companyName, branchName),
-                ),
-                const SizedBox(width: 16),
-                GradientPrimaryButton(
-                  text: 'Start Calling Tasks',
-                  icon: Icons.phone_forwarded_rounded,
-                  height: 44,
-                  padding: const EdgeInsets.symmetric(horizontal: 22),
-                  borderRadius: 12,
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF047857), Color(0xFF059669)],
-                  ),
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const CallingTasksScreen()),
-                    );
-                  },
-                ),
+                ],
               ],
             ),
     );
@@ -761,7 +858,10 @@ class _TelecallerDashboardScreenState extends State<TelecallerDashboardScreen> {
   // ==========================================
   Widget _buildMyAssignedLeadsQueue(BuildContext context, bool isMobile, String companyName) {
     final leadProvider = context.watch<LeadProvider>();
-    final allLeads = leadProvider.leads;
+    final currentUserId = context.read<AuthProvider>().currentUser?.id;
+    final allLeads = currentUserId != null
+        ? leadProvider.leads.where((l) => l.assignedTo == currentUserId).toList()
+        : leadProvider.leads;
 
     final filteredLeads = allLeads.where((lead) {
       if (_selectedStatusFilter != 'ALL') {
@@ -1074,9 +1174,13 @@ class _TelecallerDashboardScreenState extends State<TelecallerDashboardScreen> {
                         children: [
                           const Icon(Icons.call_rounded, size: 14, color: Colors.white),
                           const SizedBox(width: 4),
-                          Text(
-                            'Call',
-                            style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w700, color: Colors.white),
+                          Flexible(
+                            child: Text(
+                              'Call',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.white),
+                            ),
                           ),
                         ],
                       ),
@@ -1108,9 +1212,13 @@ class _TelecallerDashboardScreenState extends State<TelecallerDashboardScreen> {
                         children: [
                           const Icon(Icons.chat_bubble_outline_rounded, size: 13, color: Color(0xFF075E54)),
                           const SizedBox(width: 4),
-                          Text(
-                            'WhatsApp',
-                            style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF075E54)),
+                          Flexible(
+                            child: Text(
+                              isMobile ? 'Chat' : 'WhatsApp',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF075E54)),
+                            ),
                           ),
                         ],
                       ),
@@ -1146,9 +1254,13 @@ class _TelecallerDashboardScreenState extends State<TelecallerDashboardScreen> {
                         children: [
                           const Icon(Icons.add_task_rounded, size: 13, color: Color(0xFF2563EB)),
                           const SizedBox(width: 4),
-                          Text(
-                            'Outcome',
-                            style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF2563EB)),
+                          Flexible(
+                            child: Text(
+                              'Outcome',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF2563EB)),
+                            ),
                           ),
                         ],
                       ),

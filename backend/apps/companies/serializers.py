@@ -6,6 +6,7 @@ from apps.companies.models import (
     CompanyCustomRule,
     CompanyRenewalRequest,
     CompanySubscriptionHistory,
+    FeatureRequest,
 )
 
 class PlanSerializer(serializers.ModelSerializer):
@@ -265,4 +266,30 @@ class CompanySubscriptionHistorySerializer(serializers.ModelSerializer):
 
     def get_approved_by_name(self, obj):
         return obj.approved_by.full_name if obj.approved_by else 'System / Super Admin'
+
+
+class FeatureRequestSerializer(serializers.ModelSerializer):
+    company_name = serializers.CharField(source='company.name', read_only=True)
+    requested_by_name = serializers.SerializerMethodField()
+    reviewed_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = FeatureRequest
+        fields = [
+            'id', 'company', 'company_name', 'requested_by', 'requested_by_name',
+            'request_type', 'feature_key', 'feature_name', 'note',
+            'status', 'reviewed_by', 'reviewed_by_name', 'reviewed_at',
+            'review_note', 'created_at',
+        ]
+        read_only_fields = [
+            'id', 'company', 'company_name', 'requested_by', 'requested_by_name',
+            'status', 'reviewed_by', 'reviewed_by_name', 'reviewed_at',
+            'review_note', 'created_at',
+        ]
+
+    def get_requested_by_name(self, obj):
+        return obj.requested_by.full_name if obj.requested_by else ''
+
+    def get_reviewed_by_name(self, obj):
+        return obj.reviewed_by.full_name if obj.reviewed_by else ''
 

@@ -1,7 +1,20 @@
 from decimal import Decimal
 from rest_framework import serializers
-from apps.billing.models import Quotation, Invoice, ReceiptVoucher, Product
+from apps.billing.models import Quotation, Invoice, ReceiptVoucher, Product, DocumentTemplate
 from apps.billing.utils.number_to_words import amount_to_words_en, amount_to_words_ar
+
+
+class DocumentTemplateSerializer(serializers.ModelSerializer):
+    created_by_name = serializers.CharField(source='created_by.full_name', read_only=True, default='')
+
+    class Meta:
+        model = DocumentTemplate
+        fields = [
+            'id', 'name', 'doc_type', 'is_default', 'is_active',
+            'layout_json', 'created_by', 'created_by_name',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'created_by', 'created_by_name', 'created_at', 'updated_at']
 
 class ProductSerializer(serializers.ModelSerializer):
     class Meta:
@@ -27,7 +40,9 @@ class QuotationSerializer(serializers.ModelSerializer):
             'currency', 'created_by', 'created_by_name', 'date', 'valid_until',
             'items', 'custom_columns', 'subtotal', 'tax_amount', 'discount_amount', 'grand_total',
             'total_cost', 'gross_margin', 'hide_cost_in_pdf',
-            'notes', 'terms_and_conditions', 'status', 'created_at', 'updated_at'
+            'notes', 'terms_and_conditions', 'status',
+            'template', 'template_snapshot',
+            'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_by', 'created_by_name', 'date', 'created_at', 'updated_at']
 
@@ -50,6 +65,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
             'amount_in_words_en', 'amount_in_words_ar',
             'amount_paid', 'balance_due', 'payment_status', 'payment_mode',
             'payment_reference', 'payment_notes', 'notes', 'terms_and_conditions',
+            'template', 'template_snapshot',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_by', 'created_by_name', 'date', 'balance_due', 'created_at', 'updated_at']
@@ -73,7 +89,7 @@ class ReceiptVoucherSerializer(serializers.ModelSerializer):
             'created_by', 'created_by_name',
             'has_watermark_stamp', 'include_pod_slip',
             'pod_driver_name', 'pod_receiver_name', 'pod_receiver_phone', 'pod_delivery_date', 'pod_commodity',
-            'notes', 'created_at', 'updated_at'
+            'notes', 'template', 'template_snapshot', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_by', 'created_by_name', 'date', 'created_at', 'updated_at']
 
@@ -97,3 +113,5 @@ class RecordPaymentSerializer(serializers.Serializer):
     pod_receiver_name = serializers.CharField(max_length=128, required=False, allow_blank=True, default='')
     pod_receiver_phone = serializers.CharField(max_length=32, required=False, allow_blank=True, default='')
     pod_commodity = serializers.CharField(max_length=255, required=False, allow_blank=True, default='')
+    template = serializers.UUIDField(required=False, allow_null=True, default=None)
+    template_snapshot = serializers.JSONField(required=False, default=dict)

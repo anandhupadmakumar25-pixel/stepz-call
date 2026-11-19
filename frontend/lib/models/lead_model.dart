@@ -3,6 +3,8 @@ class BranchModel {
   final String name;
   final String code;
   final String address;
+  final String logo;
+  final String effectiveLogo;
   final double? latitude;
   final double? longitude;
   final int radiusMeters;
@@ -16,6 +18,8 @@ class BranchModel {
     required this.name,
     this.code = '',
     this.address = '',
+    this.logo = '',
+    this.effectiveLogo = '',
     this.latitude,
     this.longitude,
     this.radiusMeters = 100,
@@ -37,6 +41,8 @@ class BranchModel {
       name: json['name'] ?? '',
       code: json['code'] ?? '',
       address: json['address'] ?? '',
+      logo: json['logo']?.toString() ?? '',
+      effectiveLogo: json['effective_logo']?.toString() ?? (json['logo']?.toString() ?? ''),
       latitude: parseCoord(json['latitude']),
       longitude: parseCoord(json['longitude']),
       radiusMeters: json['radius_meters'] is int ? json['radius_meters'] : (int.tryParse(json['radius_meters']?.toString() ?? '100') ?? 100),
@@ -83,6 +89,8 @@ class CallingTaskModel {
   final String id;
   final String title;
   final String description;
+  final String taskType;
+  final String targetRole;
   final String? branchId;
   final String? branchName;
   final String? categoryId;
@@ -90,10 +98,13 @@ class CallingTaskModel {
   final String? categoryColor;
   final String? assignedToId;
   final String? assignedToName;
+  final String assignedToRole;
   final String? createdByName;
   final String priority;
   final String status;
   final String? dueDate;
+  final String completionReport;
+  final String? reportSubmittedAt;
   final int targetCount;
   final int totalLeadsCount;
   final int completedLeadsCount;
@@ -105,6 +116,8 @@ class CallingTaskModel {
     required this.id,
     required this.title,
     this.description = '',
+    this.taskType = 'GENERAL',
+    this.targetRole = '',
     this.branchId,
     this.branchName,
     this.categoryId,
@@ -112,10 +125,13 @@ class CallingTaskModel {
     this.categoryColor,
     this.assignedToId,
     this.assignedToName,
+    this.assignedToRole = '',
     this.createdByName,
     this.priority = 'MEDIUM',
     this.status = 'PENDING',
     this.dueDate,
+    this.completionReport = '',
+    this.reportSubmittedAt,
     this.targetCount = 0,
     this.totalLeadsCount = 0,
     this.completedLeadsCount = 0,
@@ -129,6 +145,8 @@ class CallingTaskModel {
       id: json['id']?.toString() ?? '',
       title: json['title'] ?? '',
       description: json['description'] ?? '',
+      taskType: json['task_type']?.toString() ?? 'GENERAL',
+      targetRole: json['target_role']?.toString() ?? '',
       branchId: json['branch']?.toString(),
       branchName: json['branch_name'],
       categoryId: json['category']?.toString(),
@@ -136,10 +154,13 @@ class CallingTaskModel {
       categoryColor: json['category_color'] ?? '#6366F1',
       assignedToId: json['assigned_to']?.toString(),
       assignedToName: json['assigned_to_name'],
+      assignedToRole: json['assigned_to_role']?.toString() ?? '',
       createdByName: json['created_by_name'],
       priority: json['priority'] ?? 'MEDIUM',
       status: json['status'] ?? 'PENDING',
       dueDate: json['due_date'],
+      completionReport: json['completion_report']?.toString() ?? '',
+      reportSubmittedAt: json['report_submitted_at']?.toString(),
       targetCount: json['target_count'] ?? 0,
       totalLeadsCount: json['total_leads_count'] ?? 0,
       completedLeadsCount: json['completed_leads_count'] ?? 0,

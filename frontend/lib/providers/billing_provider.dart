@@ -4,12 +4,14 @@ import '../models/quotation_model.dart';
 import '../models/invoice_model.dart';
 import '../models/product_model.dart';
 import '../models/receipt_voucher_model.dart';
+import '../models/document_template_model.dart';
 
 class BillingProvider extends ChangeNotifier {
   List<QuotationModel> _quotations = [];
   List<InvoiceModel> _invoices = [];
   List<ReceiptVoucherModel> _receiptVouchers = [];
   List<ProductModel> _products = [];
+  List<DocumentTemplateModel> _templates = [];
   QuotationModel? _selectedQuotation;
   InvoiceModel? _selectedInvoice;
   ReceiptVoucherModel? _selectedReceiptVoucher;
@@ -22,6 +24,14 @@ class BillingProvider extends ChangeNotifier {
   List<InvoiceModel> get invoices => _invoices;
   List<ReceiptVoucherModel> get receiptVouchers => _receiptVouchers;
   List<ProductModel> get products => _products;
+  List<DocumentTemplateModel> get templates => _templates;
+  List<DocumentTemplateModel> templatesForType(String docType) =>
+      _templates.where((t) => t.docType == docType && t.isActive).toList();
+  DocumentTemplateModel? defaultTemplateFor(String docType) {
+    final list = templatesForType(docType);
+    if (list.isEmpty) return null;
+    return list.firstWhere((t) => t.isDefault, orElse: () => list.first);
+  }
   QuotationModel? get selectedQuotation => _selectedQuotation;
   InvoiceModel? get selectedInvoice => _selectedInvoice;
   ReceiptVoucherModel? get selectedReceiptVoucher => _selectedReceiptVoucher;
@@ -72,7 +82,7 @@ class BillingProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> fetchQuotations({String? leadId, String? status}) async {
+  Future<void> fetchQuotations({String? leadId, String? status, String? dateFrom, String? dateTo}) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
@@ -83,6 +93,8 @@ class BillingProvider extends ChangeNotifier {
         params.add('lead_id=$leadId');
       }
       if (status != null && status.isNotEmpty && status != 'ALL') params.add('status=$status');
+      if (dateFrom != null && dateFrom.isNotEmpty) params.add('date_from=$dateFrom');
+      if (dateTo != null && dateTo.isNotEmpty) params.add('date_to=$dateTo');
 
       final query = params.isNotEmpty ? '?${params.join('&')}' : '';
       final res = await ApiClient.get('/billing/quotations/$query');
@@ -237,7 +249,7 @@ class BillingProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> fetchInvoices({String? leadId, String? status}) async {
+  Future<void> fetchInvoices({String? leadId, String? status, String? dateFrom, String? dateTo}) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
@@ -248,6 +260,8 @@ class BillingProvider extends ChangeNotifier {
         params.add('lead_id=$leadId');
       }
       if (status != null && status.isNotEmpty && status != 'ALL') params.add('status=$status');
+      if (dateFrom != null && dateFrom.isNotEmpty) params.add('date_from=$dateFrom');
+      if (dateTo != null && dateTo.isNotEmpty) params.add('date_to=$dateTo');
 
       final query = params.isNotEmpty ? '?${params.join('&')}' : '';
       final res = await ApiClient.get('/billing/invoices/$query');
@@ -354,6 +368,8 @@ class BillingProvider extends ChangeNotifier {
     String? podReceiverPhone,
     String? podDeliveryDate,
     String? podCommodity,
+    String? templateId,
+    Map<String, dynamic>? templateSnapshot,
   }) async {
     _isLoading = true;
     _errorMessage = null;
@@ -379,6 +395,8 @@ class BillingProvider extends ChangeNotifier {
         'pod_receiver_phone': podReceiverPhone ?? '',
         if (podDeliveryDate != null) 'pod_delivery_date': podDeliveryDate,
         'pod_commodity': podCommodity ?? '',
+        if (templateId != null) 'template': templateId,
+        if (templateSnapshot != null && templateSnapshot.isNotEmpty) 'template_snapshot': templateSnapshot,
       };
 
       final res = await ApiClient.post('/billing/invoices/$invoiceId/record-payment/', payload);
@@ -424,6 +442,8 @@ class BillingProvider extends ChangeNotifier {
     String? invoiceId,
     String? quotationId,
     String? search,
+    String? dateFrom,
+    String? dateTo,
   }) async {
     _isLoading = true;
     _errorMessage = null;
@@ -434,6 +454,8 @@ class BillingProvider extends ChangeNotifier {
       if (invoiceId != null && invoiceId.isNotEmpty) params.add('invoice_id=$invoiceId');
       if (quotationId != null && quotationId.isNotEmpty) params.add('quotation_id=$quotationId');
       if (search != null && search.isNotEmpty) params.add('search=${Uri.encodeComponent(search)}');
+      if (dateFrom != null && dateFrom.isNotEmpty) params.add('date_from=$dateFrom');
+      if (dateTo != null && dateTo.isNotEmpty) params.add('date_to=$dateTo');
 
       final query = params.isNotEmpty ? '?${params.join('&')}' : '';
       final res = await ApiClient.get('/billing/receipt-vouchers/$query');
@@ -521,5 +543,105 @@ class BillingProvider extends ChangeNotifier {
         notifyListeners();
       }
     } catch (_) {}
+  }
+
+  Future<void> fetchTemplates({String? docType}) async {
+    try {
+      final query = docType != null && docType.isNotEmpty ? '?doc_type=$docType' : '';
+      final res = await ApiClient.get('/billing/templates/$query');
+      if (res is List) {
+        final loaded = res
+            .whereType<Map<String, dynamic>>()
+            .map((e) => DocumentTemplateModel.fromJson(e))
+            .toList();
+        if (docType != null && docType.isNotEmpty) {
+          _templates.removeWhere((t) => t.docType == docType);
+          _templates.addAll(loaded);
+        } else {
+          _templates = loaded;
+        }
+        notifyListeners();
+      }
+    } catch (_) {}
+  }
+
+  Future<DocumentTemplateModel?> createTemplate({
+    required String name,
+    required String docType,
+    required TemplateLayoutConfig layout,
+    bool isDefault = false,
+  }) async {
+    _errorMessage = null;
+    try {
+      final res = await ApiClient.post('/billing/templates/', {
+        'name': name.trim(),
+        'doc_type': docType,
+        'is_default': isDefault,
+        'layout_json': layout.toJson(),
+      });
+      final created = DocumentTemplateModel.fromJson(res as Map<String, dynamic>);
+      await fetchTemplates();
+      return created;
+    } on ApiException catch (e) {
+      _errorMessage = e.message;
+      notifyListeners();
+      return null;
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
+      return null;
+    }
+  }
+
+  Future<DocumentTemplateModel?> updateTemplate({
+    required String id,
+    String? name,
+    TemplateLayoutConfig? layout,
+    bool? isDefault,
+  }) async {
+    _errorMessage = null;
+    try {
+      final payload = <String, dynamic>{};
+      if (name != null) payload['name'] = name.trim();
+      if (layout != null) payload['layout_json'] = layout.toJson();
+      if (isDefault != null) payload['is_default'] = isDefault;
+      final res = await ApiClient.patch('/billing/templates/$id/', payload);
+      final updated = DocumentTemplateModel.fromJson(res as Map<String, dynamic>);
+      await fetchTemplates();
+      return updated;
+    } on ApiException catch (e) {
+      _errorMessage = e.message;
+      notifyListeners();
+      return null;
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
+      return null;
+    }
+  }
+
+  Future<bool> deleteTemplate(String id) async {
+    try {
+      await ApiClient.delete('/billing/templates/$id/');
+      _templates.removeWhere((t) => t.id == id);
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> setDefaultTemplate(String id) async {
+    try {
+      await ApiClient.post('/billing/templates/$id/set-default/', {});
+      await fetchTemplates();
+      return true;
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
+      return false;
+    }
   }
 }

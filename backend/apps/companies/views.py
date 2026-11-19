@@ -16,6 +16,8 @@ from apps.companies.models import (
     CompanyCustomRule,
     CompanyRenewalRequest,
     CompanySubscriptionHistory,
+    FEATURE_CATALOG,
+    FeatureRequest,
 )
 from apps.companies.serializers import (
     CompanySerializer,
@@ -28,6 +30,7 @@ from apps.companies.serializers import (
     CompanyRenewalRequestCreateSerializer,
     CompanyRenewalRequestApproveSerializer,
     CompanySubscriptionHistorySerializer,
+    FeatureRequestSerializer,
 )
 from apps.core.permissions import IsSuperAdmin, IsCompanyAdmin, IsEmployee, IsMasterAdmin
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -180,6 +183,24 @@ class CompanyListCreateView(views.APIView):
             LeadCategory.objects.create(company=company, name='Client', color_code='#10B981')
             LeadCategory.objects.create(company=company, name='Academy', color_code='#F59E0B')
 
+            if plan:
+                initial_amount = (
+                    plan.price_yearly if plan_billing_cycle == 'YEARLY'
+                    else plan.price_monthly
+                )
+                CompanySubscriptionHistory.objects.create(
+                    company=company,
+                    plan_name=plan.name,
+                    billing_cycle=plan_billing_cycle if plan_billing_cycle in ['MONTHLY', 'YEARLY', 'DAYS', 'CUSTOM_DATE'] else 'MONTHLY',
+                    extension_days=plan_duration_days,
+                    previous_expiry=None,
+                    new_expiry=plan_expires_at,
+                    amount_paid=initial_amount,
+                    currency=plan.currency,
+                    approved_by=request.user,
+                    notes='Initial plan billing on company creation',
+                )
+
         return Response({
             "company": CompanySerializer(company).data,
             "admin_email": admin_email,
@@ -235,6 +256,38 @@ class CompanyDetailView(views.APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data)
+
+    def delete(self, request, pk):
+        if not request.user.is_super_admin:
+            return Response(
+                {"error": "Only Super Admin or Master Admin can delete a company."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if request.user.is_master_admin:
+            company = Company.objects.filter(id=pk).first()
+        else:
+            company = Company.objects.filter(
+                Q(created_by=request.user) | Q(assigned_super_admin=request.user),
+                id=pk,
+            ).first()
+
+        if not company:
+            return Response({"error": "Company not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        company_name = company.name
+        try:
+            with transaction.atomic():
+                company.delete()
+            return Response(
+                {"message": f"Company '{company_name}' deleted permanently."},
+                status=status.HTTP_200_OK,
+            )
+        except Exception as e:
+            return Response(
+                {"error": f"Failed to delete company: {str(e)}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
 class MyCompanyView(views.APIView):
     def get_permissions(self):
@@ -426,8 +479,15 @@ class PlatformBillingOverviewView(views.APIView):
     permission_classes = [IsSuperAdmin]
 
     def get(self, request):
-        active_companies = Company.objects.filter(status='ACTIVE')
-        total_companies = Company.objects.count()
+        user = request.user
+        base_companies = Company.objects.all()
+        if not user.is_master_admin:
+            base_companies = base_companies.filter(
+                Q(assigned_super_admin=user) | Q(created_by=user)
+            )
+
+        active_companies = base_companies.filter(status='ACTIVE')
+        total_companies = base_companies.count()
 
         # Calculate MRR from active plans
         mrr = 0.0
@@ -439,7 +499,7 @@ class PlatformBillingOverviewView(views.APIView):
 
         plan_breakdown = []
         for plan in Plan.objects.all():
-            comp_count = plan.companies.filter(status='ACTIVE').count()
+            comp_count = active_companies.filter(plan=plan).count()
             plan_breakdown.append({
                 'plan_name': plan.name,
                 'plan_code': plan.code,
@@ -453,7 +513,7 @@ class PlatformBillingOverviewView(views.APIView):
             'active_subscribers': active_companies.count(),
             'monthly_recurring_revenue': mrr,
             'annual_recurring_revenue': arr,
-            'currency': 'USD',
+            'currency': 'INR',
             'plan_breakdown': plan_breakdown,
         })
 
@@ -1277,4 +1337,182 @@ class CompanySubscriptionHistoryListView(views.APIView):
                 "total_revenue": float(total_revenue),
             }
         })
+
+
+class FeatureCatalogView(views.APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        company = request.user.company
+        pending_keys = set()
+        if company:
+            pending_keys = set(
+                FeatureRequest.objects.filter(
+                    company=company,
+                    status='PENDING'
+                ).values_list('feature_key', flat=True)
+            )
+
+        items = []
+        for entry in FEATURE_CATALOG:
+            key = entry['key']
+            is_enabled = company.has_menu_permission(key) if company else True
+            items.append({
+                **entry,
+                'is_enabled': is_enabled,
+                'has_pending_request': key in pending_keys,
+            })
+        return Response(items)
+
+
+class FeatureRequestListCreateView(views.APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        qs = FeatureRequest.objects.select_related('company', 'requested_by', 'reviewed_by')
+        if user.is_master_admin:
+            pass
+        elif user.role == 'SUPER_ADMIN':
+            qs = qs.filter(request_type='COMPANY_FEATURE').filter(
+                Q(company__assigned_super_admin=user) | Q(company__created_by=user) | Q(company__assigned_super_admin__isnull=True)
+            )
+        elif user.role == 'COMPANY_ADMIN' and user.company:
+            qs = qs.filter(company=user.company)
+        elif user.company:
+            qs = qs.filter(company=user.company, requested_by=user)
+        else:
+            return Response([])
+
+        status_filter = request.query_params.get('status')
+        if status_filter:
+            qs = qs.filter(status=status_filter.upper())
+        return Response(FeatureRequestSerializer(qs[:200], many=True).data)
+
+    def post(self, request):
+        user = request.user
+        company = user.company
+        if not company:
+            return Response({"error": "Company account required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        feature_key = (request.data.get('feature_key') or '').strip()
+        feature_name = (request.data.get('feature_name') or '').strip()
+        request_type = (request.data.get('request_type') or 'COMPANY_FEATURE').strip().upper()
+        note = (request.data.get('note') or '').strip()
+
+        if not feature_key:
+            return Response({"error": "feature_key is required"}, status=status.HTTP_400_BAD_REQUEST)
+        if request_type not in ['COMPANY_FEATURE', 'USER_PERMISSION']:
+            return Response({"error": "Invalid request_type"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not feature_name:
+            match = next((f for f in FEATURE_CATALOG if f['key'] == feature_key), None)
+            feature_name = match['name'] if match else feature_key.replace('_', ' ').title()
+
+        existing = FeatureRequest.objects.filter(
+            company=company,
+            feature_key=feature_key,
+            request_type=request_type,
+            status='PENDING',
+        )
+        if request_type == 'USER_PERMISSION':
+            existing = existing.filter(requested_by=user)
+        if existing.exists():
+            return Response(
+                {"error": "A pending request for this feature already exists."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        req_obj = FeatureRequest.objects.create(
+            company=company,
+            requested_by=user,
+            request_type=request_type,
+            feature_key=feature_key,
+            feature_name=feature_name,
+            note=note,
+        )
+
+        from apps.notifications.models import Notification
+        if request_type == 'COMPANY_FEATURE':
+            recipients = (
+                [company.assigned_super_admin]
+                if company.assigned_super_admin
+                else list(User.objects.filter(role='SUPER_ADMIN', is_active=True)[:5])
+            )
+            for recipient in recipients:
+                if recipient:
+                    Notification.objects.create(
+                        user=recipient,
+                        company=company,
+                        title=f"Feature Request: {feature_name}",
+                        message=f"{company.name} ({user.full_name}) requested access to '{feature_name}'.",
+                        notification_type='SYSTEM',
+                        entity_type='feature_request',
+                        entity_id=str(req_obj.id),
+                    )
+        else:
+            admins = User.objects.filter(company=company, role='COMPANY_ADMIN', is_active=True)
+            for admin in admins:
+                Notification.objects.create(
+                    user=admin,
+                    company=company,
+                    title=f"Permission Request: {feature_name}",
+                    message=f"{user.full_name} requested '{feature_name}' permission.",
+                    notification_type='SYSTEM',
+                    entity_type='feature_request',
+                    entity_id=str(req_obj.id),
+                )
+
+        return Response(FeatureRequestSerializer(req_obj).data, status=status.HTTP_201_CREATED)
+
+
+class FeatureRequestReviewView(views.APIView):
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, pk):
+        user = request.user
+        req_obj = FeatureRequest.objects.select_related('company', 'requested_by').filter(id=pk).first()
+        if not req_obj:
+            return Response({"error": "Feature request not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        if req_obj.request_type == 'COMPANY_FEATURE':
+            if not (user.is_master_admin or user.role == 'SUPER_ADMIN'):
+                return Response({"error": "Only Super Admin can review company feature requests"}, status=status.HTTP_403_FORBIDDEN)
+        else:
+            if not (user.is_master_admin or user.role == 'SUPER_ADMIN' or (user.role == 'COMPANY_ADMIN' and user.company_id == req_obj.company_id)):
+                return Response({"error": "Only Company Admin can review permission requests"}, status=status.HTTP_403_FORBIDDEN)
+
+        new_status = (request.data.get('status') or '').strip().upper()
+        review_note = (request.data.get('review_note') or '').strip()
+        if new_status not in ['APPROVED', 'REJECTED']:
+            return Response({"error": "Status must be APPROVED or REJECTED"}, status=status.HTTP_400_BAD_REQUEST)
+
+        with transaction.atomic():
+            req_obj.status = new_status
+            req_obj.reviewed_by = user
+            req_obj.reviewed_at = timezone.now()
+            req_obj.review_note = review_note
+            req_obj.save()
+
+            if new_status == 'APPROVED' and req_obj.request_type == 'COMPANY_FEATURE':
+                company = req_obj.company
+                current_menus = list(company.allowed_menus or company.get_allowed_menus())
+                if req_obj.feature_key not in current_menus:
+                    current_menus.append(req_obj.feature_key)
+                    company.allowed_menus = current_menus
+                    company.save(update_fields=['allowed_menus', 'updated_at'])
+
+        from apps.notifications.models import Notification
+        if req_obj.requested_by:
+            Notification.objects.create(
+                user=req_obj.requested_by,
+                company=req_obj.company,
+                title=f"Feature Request {new_status.title()}: {req_obj.feature_name}",
+                message=f"Your request for '{req_obj.feature_name}' was {new_status.lower()}." + (f" Note: {review_note}" if review_note else ""),
+                notification_type='SYSTEM',
+                entity_type='feature_request',
+                entity_id=str(req_obj.id),
+            )
+
+        return Response(FeatureRequestSerializer(req_obj).data)
 

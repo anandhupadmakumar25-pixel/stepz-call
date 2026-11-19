@@ -1,7 +1,7 @@
 from django.db import models
 from apps.core.models import TimeStampedModel, TenantModel
 
-ALL_MENU_KEYS = [
+LEGACY_MENU_KEYS = [
     'branches',
     'employees',
     'attendance',
@@ -10,6 +10,35 @@ ALL_MENU_KEYS = [
     'recordings',
     'callbacks',
     'call_history',
+    'analytics',
+]
+
+V2_EXTENSION_PARENT_MAP = {
+    'leave': 'attendance',
+    'payroll': 'employees',
+    'delegation': 'employees',
+    'quotations': 'leads',
+    'billing': 'leads',
+    'templates': 'leads',
+    'reports': 'analytics',
+}
+
+ALL_MENU_KEYS = [
+    'branches',
+    'employees',
+    'attendance',
+    'leave',
+    'payroll',
+    'delegation',
+    'leads',
+    'tasks',
+    'recordings',
+    'callbacks',
+    'call_history',
+    'quotations',
+    'billing',
+    'templates',
+    'reports',
     'analytics',
 ]
 
@@ -201,7 +230,15 @@ class Company(TimeStampedModel):
         return 'employees' in self.get_allowed_menus()
 
     def has_menu_permission(self, menu_key):
-        return menu_key in self.get_allowed_menus()
+        menus = self.get_allowed_menus()
+        if menu_key in menus:
+            return True
+        # Backward compatibility: if the company/plan only lists legacy keys,
+        # auto-enable v2 extension modules when their parent module is enabled.
+        has_v2_keys = any(k in menus for k in V2_EXTENSION_PARENT_MAP.keys())
+        if not has_v2_keys and menu_key in V2_EXTENSION_PARENT_MAP:
+            return V2_EXTENSION_PARENT_MAP[menu_key] in menus
+        return False
 
     def can_access_recordings(self):
         return 'recordings' in self.get_allowed_menus()
@@ -412,4 +449,173 @@ class CompanySubscriptionHistory(TimeStampedModel):
 
     def __str__(self):
         return f"{self.company.name} renewed ({self.billing_cycle}) until {self.new_expiry.strftime('%Y-%m-%d')}"
+
+
+FEATURE_CATALOG = [
+    {
+        'key': 'branches',
+        'name': 'Multi-Branch Management',
+        'category': 'Organization',
+        'description': 'Create and manage multiple office branches, branch logos, geo-fencing radiuses, and multi-branch employee check-ins.',
+        'highlights': ['Create unlimited branches', 'Custom branch logo & address', 'Branch-level geo-fencing & check-ins'],
+    },
+    {
+        'key': 'employees',
+        'name': 'Employee & RBAC Management',
+        'category': 'Organization',
+        'description': 'Manage staff accounts, custom functional roles, granular permissions, and daily call quotas.',
+        'highlights': ['Staff directory & status controls', 'Custom functional roles (RBAC)', 'Daily call quota tracking'],
+    },
+    {
+        'key': 'attendance',
+        'name': 'Attendance & Geo-Fencing',
+        'category': 'HR & Operations',
+        'description': 'Track daily employee check-ins/check-outs with GPS geo-fencing and field visit logs.',
+        'highlights': ['Fixed office geo-fence check-in', 'Field/remote tracking mode', 'Daily attendance reports'],
+    },
+    {
+        'key': 'leave',
+        'name': 'Leave Management',
+        'category': 'HR & Operations',
+        'description': 'Employee leave applications, approval workflows, and leave balance policies.',
+        'highlights': ['Leave requests & approvals', 'Leave balance tracking', 'Holiday calendar'],
+    },
+    {
+        'key': 'payroll',
+        'name': 'Payroll & Salary Slips',
+        'category': 'HR & Operations',
+        'description': 'Automated monthly payroll calculation, deductions, and downloadable salary slips.',
+        'highlights': ['Attendance-linked payroll', 'Custom salary rules', 'Payslip generation'],
+    },
+    {
+        'key': 'delegation',
+        'name': 'Delegation & Access Handover',
+        'category': 'Organization',
+        'description': 'Temporarily delegate manager or admin responsibilities to another staff member.',
+        'highlights': ['Time-bound delegation', 'Audit trail of delegated actions'],
+    },
+    {
+        'key': 'leads',
+        'name': 'Lead Directory & Assignment',
+        'category': 'CRM & Sales',
+        'description': 'Centralized lead pool, CSV import, staff assignment/reassignment, and status pipeline.',
+        'highlights': ['CSV bulk lead import', 'Staff assignment & reassignment', 'Lead call history & notes'],
+    },
+    {
+        'key': 'tasks',
+        'name': 'Employee Tasks & Reporting',
+        'category': 'CRM & Sales',
+        'description': 'Assign general or lead-linked tasks to any employee role with due dates and completion reports.',
+        'highlights': ['Role-wide task assignment', 'Due dates & priority levels', 'Employee completion reports'],
+    },
+    {
+        'key': 'recordings',
+        'name': 'Call Recordings',
+        'category': 'CRM & Sales',
+        'description': 'Capture, store, and playback employee-customer call recordings for quality assurance.',
+        'highlights': ['Cloud recording storage', 'In-app audio playback', 'Linked to lead timeline'],
+    },
+    {
+        'key': 'callbacks',
+        'name': 'Scheduled Callbacks',
+        'category': 'CRM & Sales',
+        'description': 'Schedule and track customer callback reminders so no follow-up is missed.',
+        'highlights': ['Callback reminders', 'Overdue callback alerts'],
+    },
+    {
+        'key': 'call_history',
+        'name': 'Call History & Logs',
+        'category': 'CRM & Sales',
+        'description': 'Detailed call duration, outcome, and timestamps across all company staff.',
+        'highlights': ['Full call audit log', 'Filter by employee & date'],
+    },
+    {
+        'key': 'quotations',
+        'name': 'Quotations & Estimates',
+        'category': 'Billing & Finance',
+        'description': 'Generate branded customer quotations directly from leads with custom templates.',
+        'highlights': ['Lead-linked quotations', 'PDF export & sharing', 'Status tracking'],
+    },
+    {
+        'key': 'billing',
+        'name': 'Invoices & Receipt Vouchers',
+        'category': 'Billing & Finance',
+        'description': 'Create GST/tax invoices, record payments, and issue receipt vouchers.',
+        'highlights': ['Invoice generation', 'Payment & receipt tracking', 'Partial payment support'],
+    },
+    {
+        'key': 'templates',
+        'name': 'Document Templates',
+        'category': 'Billing & Finance',
+        'description': 'Design custom quotation, invoice, and receipt templates with branch logos.',
+        'highlights': ['Visual template designer', 'Branch logo selection'],
+    },
+    {
+        'key': 'reports',
+        'name': 'Advanced Reports',
+        'category': 'Analytics',
+        'description': 'Exportable performance, conversion, and revenue reports across branches and staff.',
+        'highlights': ['Branch & staff breakdown', 'Date-range exports'],
+    },
+    {
+        'key': 'analytics',
+        'name': 'Analytics Dashboard',
+        'category': 'Analytics',
+        'description': 'Real-time KPIs, call conversion funnels, and team productivity charts.',
+        'highlights': ['Live KPI dashboard', 'Team conversion metrics'],
+    },
+]
+
+
+class FeatureRequest(TimeStampedModel):
+    REQUEST_TYPE_CHOICES = [
+        ('COMPANY_FEATURE', 'Company Feature'),
+        ('USER_PERMISSION', 'User Permission'),
+    ]
+    STATUS_CHOICES = [
+        ('PENDING', 'Pending'),
+        ('APPROVED', 'Approved'),
+        ('REJECTED', 'Rejected'),
+    ]
+
+    company = models.ForeignKey(
+        Company,
+        on_delete=models.CASCADE,
+        related_name='feature_requests'
+    )
+    requested_by = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.CASCADE,
+        related_name='submitted_feature_requests'
+    )
+    request_type = models.CharField(
+        max_length=25,
+        choices=REQUEST_TYPE_CHOICES,
+        default='COMPANY_FEATURE',
+        db_index=True
+    )
+    feature_key = models.CharField(max_length=100, db_index=True)
+    feature_name = models.CharField(max_length=150)
+    note = models.TextField(blank=True)
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='PENDING',
+        db_index=True
+    )
+    reviewed_by = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='reviewed_feature_requests'
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    review_note = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.company.name}: {self.feature_name} ({self.request_type} - {self.status})"
 

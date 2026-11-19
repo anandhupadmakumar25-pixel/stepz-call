@@ -13,21 +13,27 @@ from apps.leads.models import (
 class BranchSerializer(serializers.ModelSerializer):
     lead_count = serializers.SerializerMethodField()
     employee_count = serializers.SerializerMethodField()
+    effective_logo = serializers.SerializerMethodField()
 
     class Meta:
         model = Branch
         fields = [
-            'id', 'name', 'code', 'address', 'latitude', 'longitude',
-            'radius_meters', 'geofence_enabled', 'is_active',
-            'lead_count', 'employee_count', 'created_at'
+            'id', 'name', 'code', 'address', 'logo', 'effective_logo',
+            'latitude', 'longitude', 'radius_meters', 'geofence_enabled',
+            'is_active', 'lead_count', 'employee_count', 'created_at'
         ]
-        read_only_fields = ['id', 'created_at', 'lead_count', 'employee_count']
+        read_only_fields = ['id', 'created_at', 'lead_count', 'employee_count', 'effective_logo']
 
     def get_lead_count(self, obj):
         return obj.leads.count()
 
     def get_employee_count(self, obj):
         return obj.employees.count()
+
+    def get_effective_logo(self, obj):
+        if obj.logo:
+            return obj.logo
+        return obj.company.logo if obj.company else ''
 
 class LeadCategorySerializer(serializers.ModelSerializer):
     lead_count = serializers.SerializerMethodField()
@@ -45,6 +51,7 @@ class CallingTaskSerializer(serializers.ModelSerializer):
     category_name = serializers.CharField(source='category.name', read_only=True)
     category_color = serializers.CharField(source='category.color_code', read_only=True)
     assigned_to_name = serializers.CharField(source='assigned_to.full_name', read_only=True)
+    assigned_to_role = serializers.SerializerMethodField()
     created_by_name = serializers.CharField(source='created_by.full_name', read_only=True)
     total_leads_count = serializers.SerializerMethodField()
     completed_leads_count = serializers.SerializerMethodField()
@@ -54,14 +61,27 @@ class CallingTaskSerializer(serializers.ModelSerializer):
     class Meta:
         model = CallingTask
         fields = [
-            'id', 'title', 'description', 'branch', 'branch_name',
-            'category', 'category_name', 'category_color',
-            'assigned_to', 'assigned_to_name', 'created_by', 'created_by_name',
+            'id', 'title', 'description', 'task_type', 'target_role',
+            'branch', 'branch_name', 'category', 'category_name', 'category_color',
+            'assigned_to', 'assigned_to_name', 'assigned_to_role',
+            'created_by', 'created_by_name',
             'priority', 'status', 'due_date', 'target_count',
+            'completion_report', 'report_submitted_at',
             'total_leads_count', 'completed_leads_count', 'in_progress_leads_count',
             'progress_percent', 'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'report_submitted_at']
+
+    def get_assigned_to_role(self, obj):
+        if obj.target_role:
+            return obj.target_role
+        u = obj.assigned_to
+        if not u:
+            return ''
+        profile = getattr(u, 'employee_profile', None)
+        if profile and getattr(profile, 'custom_role', None):
+            return profile.custom_role.name
+        return u.role or ''
 
     def get_total_leads_count(self, obj):
         return obj.leads.count()
@@ -75,6 +95,10 @@ class CallingTaskSerializer(serializers.ModelSerializer):
     def get_progress_percent(self, obj):
         total = obj.leads.count()
         if total == 0:
+            if obj.status == 'COMPLETED':
+                return 100
+            if obj.status == 'IN_PROGRESS':
+                return 50
             return 0
         done = obj.leads.filter(status__in=['COMPLETED', 'QUALIFIED', 'NOT_INTERESTED']).count()
         return round((done / total) * 100, 1)

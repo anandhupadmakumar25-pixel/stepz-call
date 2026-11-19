@@ -15,6 +15,7 @@ import 'providers/department_provider.dart';
 import 'providers/attendance_provider.dart';
 import 'providers/role_provider.dart';
 import 'providers/billing_provider.dart';
+import 'providers/hr_payroll_provider.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/layout/main_layout.dart';
 import 'routes/app_routes.dart';
@@ -44,6 +45,7 @@ class TelecallerCrmApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => AttendanceProvider()),
         ChangeNotifierProvider(create: (_) => RoleProvider()),
         ChangeNotifierProvider(create: (_) => BillingProvider()),
+        ChangeNotifierProvider(create: (_) => HrPayrollProvider()),
       ],
       child: ScreenUtilInit(
         designSize: const Size(1440, 900),

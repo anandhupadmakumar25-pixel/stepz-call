@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../core/widgets/glass/glass_card.dart';
 import '../../core/widgets/glass/gradient_button.dart';
 import '../../models/invoice_model.dart';
+import '../../models/document_template_model.dart';
 import '../../providers/billing_provider.dart';
 import 'receipt_voucher_dialog.dart';
 
@@ -25,6 +26,13 @@ class _RecordPaymentDialogState extends State<RecordPaymentDialog> {
   String _paymentMode = 'UPI';
   bool _isSaving = false;
   String? _errorMessage;
+  String? _selectedReceiptTemplateId;
+  Map<String, dynamic> _selectedReceiptTemplateSnapshot = {};
+  final Map<String, TextEditingController> _customFieldCtrls = {};
+  final TextEditingController _podDriverCtrl = TextEditingController();
+  final TextEditingController _podReceiverCtrl = TextEditingController();
+  final TextEditingController _podPhoneCtrl = TextEditingController();
+  final TextEditingController _podCommodityCtrl = TextEditingController();
 
   final List<String> _paymentModes = [
     'UPI',
@@ -44,6 +52,19 @@ class _RecordPaymentDialogState extends State<RecordPaymentDialog> {
     );
     _refController = TextEditingController();
     _notesController = TextEditingController();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      final bp = context.read<BillingProvider>();
+      await bp.fetchTemplates(docType: 'RECEIPT');
+      if (!mounted) return;
+      final def = bp.defaultTemplateFor('RECEIPT');
+      if (def != null) {
+        setState(() {
+          _selectedReceiptTemplateId = def.id;
+          _selectedReceiptTemplateSnapshot = def.layout.toJson();
+        });
+      }
+    });
   }
 
   @override
@@ -66,12 +87,30 @@ class _RecordPaymentDialogState extends State<RecordPaymentDialog> {
 
     setState(() => _isSaving = true);
     final provider = context.read<BillingProvider>();
+    final tplLayout = TemplateLayoutConfig.fromJson(_selectedReceiptTemplateSnapshot, docType: 'RECEIPT');
+    final includePod = tplLayout.includePodSlip || tplLayout.isBlockVisible('pod_slip');
+    final finalSnap = Map<String, dynamic>.from(_selectedReceiptTemplateSnapshot);
+    if (_customFieldCtrls.isNotEmpty) {
+      final filled = <String, String>{};
+      for (final e in _customFieldCtrls.entries) {
+        if (e.value.text.trim().isNotEmpty) filled[e.key] = e.value.text.trim();
+      }
+      if (filled.isNotEmpty) finalSnap['filled_fields'] = filled;
+    }
+
     final success = await provider.recordPayment(
       invoiceId: widget.invoice.id,
       amount: amount,
       paymentMode: _paymentMode,
       paymentReference: _refController.text.trim(),
       notes: _notesController.text.trim(),
+      includePodSlip: includePod,
+      podDriverName: _podDriverCtrl.text.trim(),
+      podReceiverName: _podReceiverCtrl.text.trim(),
+      podReceiverPhone: _podPhoneCtrl.text.trim(),
+      podCommodity: _podCommodityCtrl.text.trim(),
+      templateId: _selectedReceiptTemplateId,
+      templateSnapshot: finalSnap,
     );
     setState(() => _isSaving = false);
 
@@ -421,6 +460,113 @@ class _RecordPaymentDialogState extends State<RecordPaymentDialog> {
                   ),
                 ),
                 const SizedBox(height: 14),
+
+                // Receipt Voucher Template Picker
+                Builder(
+                  builder: (ctx) {
+                    final receiptTemplates = ctx.watch<BillingProvider>().templatesForType('RECEIPT');
+                    if (receiptTemplates.isEmpty) return const SizedBox.shrink();
+                    final currentId = receiptTemplates.any((t) => t.id == _selectedReceiptTemplateId)
+                        ? _selectedReceiptTemplateId
+                        : null;
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 14),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Receipt Voucher Template',
+                            style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF475569)),
+                          ),
+                          const SizedBox(height: 6),
+                          DropdownButtonFormField<String?>(
+                            initialValue: currentId,
+                            decoration: InputDecoration(
+                              isDense: true,
+                              filled: true,
+                              fillColor: Colors.white,
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                            items: [
+                              const DropdownMenuItem<String?>(value: null, child: Text('Standard System Receipt')),
+                              ...receiptTemplates.map((t) => DropdownMenuItem<String?>(
+                                    value: t.id,
+                                    child: Text('${t.name}${t.isDefault ? " (Default)" : ""}'),
+                                  )),
+                            ],
+                            onChanged: (val) {
+                              setState(() {
+                                _selectedReceiptTemplateId = val;
+                                if (val == null) {
+                                  _selectedReceiptTemplateSnapshot = {};
+                                } else {
+                                  _selectedReceiptTemplateSnapshot =
+                                      receiptTemplates.firstWhere((t) => t.id == val).layout.toJson();
+                                }
+                              });
+                            },
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+
+                // Dynamic Receipt Template Fields (Custom Fields & POD Slip)
+                Builder(
+                  builder: (ctx) {
+                    final tplLayout = TemplateLayoutConfig.fromJson(_selectedReceiptTemplateSnapshot, docType: 'RECEIPT');
+                    final showPod = tplLayout.includePodSlip || tplLayout.isBlockVisible('pod_slip');
+                    if (tplLayout.customHeaderFields.isEmpty && !showPod) return const SizedBox.shrink();
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 14),
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Template Fields', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF475569))),
+                          ...tplLayout.customHeaderFields.map((fld) {
+                            final ctrl = _customFieldCtrls.putIfAbsent(fld, () => TextEditingController());
+                            return Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: TextFormField(
+                                controller: ctrl,
+                                decoration: InputDecoration(
+                                  isDense: true,
+                                  labelText: fld,
+                                  filled: true,
+                                  fillColor: Colors.white,
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                ),
+                              ),
+                            );
+                          }),
+                          if (showPod) ...[
+                            const SizedBox(height: 8),
+                            Text('Proof of Delivery (POD)', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A))),
+                            const SizedBox(height: 6),
+                            TextFormField(controller: _podDriverCtrl, decoration: InputDecoration(isDense: true, labelText: 'Driver Name', filled: true, fillColor: Colors.white, border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)))),
+                            const SizedBox(height: 6),
+                            TextFormField(controller: _podCommodityCtrl, decoration: InputDecoration(isDense: true, labelText: 'Commodity', filled: true, fillColor: Colors.white, border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)))),
+                            const SizedBox(height: 6),
+                            Row(
+                              children: [
+                                Expanded(child: TextFormField(controller: _podReceiverCtrl, decoration: InputDecoration(isDense: true, labelText: 'Receiver Name', filled: true, fillColor: Colors.white, border: OutlineInputBorder(borderRadius: BorderRadius.circular(8))))),
+                                const SizedBox(width: 8),
+                                Expanded(child: TextFormField(controller: _podPhoneCtrl, decoration: InputDecoration(isDense: true, labelText: 'Receiver Mob', filled: true, fillColor: Colors.white, border: OutlineInputBorder(borderRadius: BorderRadius.circular(8))))),
+                              ],
+                            ),
+                          ],
+                        ],
+                      ),
+                    );
+                  },
+                ),
 
                 // Payment Notes
                 Text(

@@ -25,6 +25,8 @@ import '../admin/plan_management_screen.dart';
 import '../admin/platform_billing_screen.dart';
 import '../admin/master_super_admin_screen.dart';
 import '../billing/invoice_list_screen.dart';
+import '../reports/reports_center_screen.dart';
+import '../hr/hr_payroll_screen.dart';
 import '../auth/login_screen.dart';
 import '../notifications/notification_drawer.dart';
 import '../../core/widgets/brand_logo.dart';
@@ -50,6 +52,7 @@ class MainLayout extends StatefulWidget {
 class _MainLayoutState extends State<MainLayout> {
   int _selectedIndex = 0;
   bool _initialRouteApplied = false;
+  bool _isSidebarCollapsed = false;
   String? _lastUserId;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final TextEditingController _searchController = TextEditingController();
@@ -151,14 +154,6 @@ class _MainLayoutState extends State<MainLayout> {
             screen: const CompanyDirectoryScreen(),
           ),
           _NavItem(
-            section: 'PLATFORM CONTROL',
-            title: 'Platform Analytics',
-            icon: Icons.analytics_outlined,
-            activeIcon: Icons.analytics_rounded,
-            routeKey: 'platform_hub',
-            screen: const AdminDashboardScreen(),
-          ),
-          _NavItem(
             section: 'SUBSCRIPTION & BILLING',
             title: 'Subscription Plans',
             icon: Icons.workspace_premium_outlined,
@@ -231,58 +226,86 @@ class _MainLayoutState extends State<MainLayout> {
         ),
       );
 
-      // Multi-Branch Management (Strictly checked against permission!)
-      if (user.hasMenuPermission('branches') && !isTelecaller) {
+      // Employee, Roles & Delegation Management
+      if (user.hasMenuPermission('employees') &&
+          user.hasAnyPermission([
+            'employees.view',
+            'employees.create',
+            'employees.edit',
+            'roles.manage',
+            'delegation.manage',
+          ])) {
+        final delegated = user.isDelegatedFor('employees') ||
+            user.isDelegatedFor('roles') ||
+            user.isDelegatedFor('delegation');
         navItems.add(
           _NavItem(
-            section: 'ORGANIZATION',
-            title: 'Branches & Divisions',
-            icon: Icons.storefront_outlined,
-            activeIcon: Icons.storefront_rounded,
-            routeKey: 'branches',
-            screen: const BranchManagementScreen(),
-          ),
-        );
-      }
-
-      // Telecaller Team
-      if (user.hasMenuPermission('employees') && !isTelecaller) {
-        navItems.add(
-          _NavItem(
-            section: 'ORGANIZATION',
-            title: 'Telecaller Team',
+            section: 'HR & ORGANIZATION',
+            title: 'Employees & Roles',
             icon: Icons.people_outline_rounded,
             activeIcon: Icons.people_rounded,
+            badge: delegated ? 'Delegated' : null,
+            badgeColor: delegated ? const Color(0xFF7C3AED) : null,
             routeKey: 'employees',
             screen: const EmployeeManagementScreen(),
           ),
         );
       }
 
-      // Stepz Attendance & Geofencing
-      if (user.hasMenuPermission('attendance')) {
+      // Attendance & Geofencing
+      if (user.hasMenuPermission('attendance') &&
+          user.hasAnyPermission(['attendance.mark_own', 'attendance.view_team', 'attendance.approve_corrections'])) {
+        final delegated = user.isDelegatedFor('attendance_leave') || user.isDelegatedFor('attendance');
         navItems.add(
           _NavItem(
-            section: 'ORGANIZATION',
-            title: isTelecaller ? 'My Attendance & Punch' : 'Attendance & Geofencing',
+            section: 'HR & ORGANIZATION',
+            title: user.hasPermission('attendance.view_team') ? 'Attendance & Geofencing' : 'My Attendance & Punch',
             icon: Icons.fingerprint_outlined,
             activeIcon: Icons.fingerprint_rounded,
-            badge: 'GPS',
-            badgeColor: AppColors.neonCyan,
+            badge: delegated ? 'Delegated' : 'GPS',
+            badgeColor: delegated ? const Color(0xFF7C3AED) : AppColors.neonCyan,
             routeKey: 'attendance',
             screen: const AttendanceScreen(),
           ),
         );
       }
 
-      // Lead Workspace
-      if (user.hasMenuPermission('leads')) {
+      // Leave, Holidays, Regularization & Payroll
+      if (user.hasAnyPermission([
+        'leave.apply_own',
+        'leave.approve',
+        'leave.manage_types',
+        'payroll.view_own_payslip',
+        'payroll.manage_rules',
+        'payroll.process_salary',
+      ])) {
+        final delegated = user.isDelegatedFor('attendance_leave') || user.isDelegatedFor('payroll');
         navItems.add(
           _NavItem(
-            section: 'LEAD WORKSPACE',
-            title: isTelecaller ? 'My Assigned Leads' : 'Company Leads',
+            section: 'HR & ORGANIZATION',
+            title: 'Leave & Payroll',
+            icon: Icons.payments_outlined,
+            activeIcon: Icons.payments_rounded,
+            badge: delegated ? 'Delegated' : null,
+            badgeColor: delegated ? const Color(0xFF7C3AED) : null,
+            routeKey: 'hr_payroll',
+            screen: const HrPayrollScreen(),
+          ),
+        );
+      }
+
+      // Lead Workspace
+      if (user.hasMenuPermission('leads') &&
+          user.hasAnyPermission(['leads.view_own', 'leads.view_all', 'leads.create'])) {
+        final delegated = user.isDelegatedFor('leads');
+        navItems.add(
+          _NavItem(
+            section: 'CRM & PIPELINE',
+            title: user.hasPermission('leads.view_all') ? 'Company Leads' : 'My Assigned Leads',
             icon: Icons.contact_phone_outlined,
             activeIcon: Icons.contact_phone_rounded,
+            badge: delegated ? 'Delegated' : null,
+            badgeColor: delegated ? const Color(0xFF7C3AED) : null,
             routeKey: 'leads',
             screen: const LeadDirectoryScreen(),
           ),
@@ -290,56 +313,70 @@ class _MainLayoutState extends State<MainLayout> {
       }
 
       // Calling Tasks
-      if (user.hasMenuPermission('tasks')) {
+      if (user.hasMenuPermission('tasks') &&
+          user.hasAnyPermission(['tasks.view_own', 'tasks.manage_team'])) {
+        final delegated = user.isDelegatedFor('tasks');
         navItems.add(
           _NavItem(
-            section: 'LEAD WORKSPACE',
-            title: isTelecaller ? 'My Calling Tasks' : 'Calling Tasks',
+            section: 'CRM & PIPELINE',
+            title: user.hasPermission('tasks.manage_team') ? 'Employee Tasks' : 'My Assigned Tasks',
             icon: Icons.task_alt_outlined,
             activeIcon: Icons.task_alt_rounded,
+            badge: delegated ? 'Delegated' : null,
+            badgeColor: delegated ? const Color(0xFF7C3AED) : null,
             routeKey: 'tasks',
             screen: const CallingTasksScreen(),
           ),
         );
       }
 
-      // Sales & Billing (Quotations, Tax Invoices, Receipts)
-      navItems.add(
-        _NavItem(
-          section: 'SALES & BILLING',
-          title: 'Quotations & Estimates',
-          icon: Icons.request_quote_outlined,
-          activeIcon: Icons.request_quote_rounded,
-          badge: 'Estimate',
-          badgeColor: const Color(0xFFD97706),
-          routeKey: 'quotations',
-          screen: const InvoiceListScreen(initialTab: 1),
-        ),
-      );
+      // Sales & Billing: Quotations
+      if (user.hasMenuPermission('quotations') &&
+          user.hasAnyPermission(['quotations.view', 'quotations.create'])) {
+        final delegated = user.isDelegatedFor('quotations');
+        navItems.add(
+          _NavItem(
+            section: 'SALES & BILLING',
+            title: 'Quotations & Estimates',
+            icon: Icons.request_quote_outlined,
+            activeIcon: Icons.request_quote_rounded,
+            badge: delegated ? 'Delegated' : null,
+            badgeColor: delegated ? const Color(0xFF7C3AED) : null,
+            routeKey: 'quotations',
+            screen: const InvoiceListScreen(initialTab: 1),
+          ),
+        );
+      }
 
-      navItems.add(
-        _NavItem(
-          section: 'SALES & BILLING',
-          title: isTelecaller ? 'Bills & Invoices' : 'Bills & Tax Invoices',
-          icon: Icons.receipt_long_outlined,
-          activeIcon: Icons.receipt_long_rounded,
-          badge: 'Fixed',
-          badgeColor: const Color(0xFF10B981),
-          routeKey: 'billing',
-          screen: const InvoiceListScreen(initialTab: 0),
-        ),
-      );
+      // Sales & Billing: Invoices & Receipts
+      if (user.hasMenuPermission('billing') &&
+          user.hasAnyPermission(['invoices.view', 'invoices.create', 'receipts.view_print'])) {
+        final delegated = user.isDelegatedFor('billing');
+        navItems.add(
+          _NavItem(
+            section: 'SALES & BILLING',
+            title: 'Bills & Receipts',
+            icon: Icons.receipt_long_outlined,
+            activeIcon: Icons.receipt_long_rounded,
+            badge: delegated ? 'Delegated' : null,
+            badgeColor: delegated ? const Color(0xFF7C3AED) : null,
+            routeKey: 'billing',
+            screen: const InvoiceListScreen(initialTab: 0),
+          ),
+        );
+      }
 
       // Telephony Hub: Audio Recordings
-      if (user.hasMenuPermission('recordings')) {
+      if (user.hasMenuPermission('recordings') && user.hasPermission('recordings.listen')) {
+        final delegated = user.isDelegatedFor('calls') || user.isDelegatedFor('recordings');
         navItems.add(
           _NavItem(
             section: 'TELEPHONY HUB',
-            title: isTelecaller ? 'My Call Recordings' : 'Call Recordings',
+            title: user.hasPermission('calls.view_all') ? 'Call Recordings' : 'My Call Recordings',
             icon: Icons.graphic_eq_outlined,
             activeIcon: Icons.graphic_eq_rounded,
-            badge: 'Audio',
-            badgeColor: AppColors.emerald,
+            badge: delegated ? 'Delegated' : 'Audio',
+            badgeColor: delegated ? const Color(0xFF7C3AED) : AppColors.emerald,
             routeKey: 'recordings',
             screen: const CallRecordingsScreen(),
           ),
@@ -347,15 +384,13 @@ class _MainLayoutState extends State<MainLayout> {
       }
 
       // Priority Callbacks
-      if (user.hasMenuPermission('callbacks')) {
+      if (user.hasMenuPermission('callbacks') && user.hasPermission('callbacks.manage')) {
         navItems.add(
           _NavItem(
             section: 'TELEPHONY HUB',
             title: isTelecaller ? 'My Callbacks' : 'Scheduled Callbacks',
             icon: Icons.alarm_on_outlined,
             activeIcon: Icons.alarm_on_rounded,
-            badge: 'Priority',
-            badgeColor: AppColors.goldLuxury,
             routeKey: 'callbacks',
             screen: const CallbackScreen(),
           ),
@@ -363,11 +398,12 @@ class _MainLayoutState extends State<MainLayout> {
       }
 
       // Call History Logs
-      if (user.hasMenuPermission('call_history')) {
+      if (user.hasMenuPermission('call_history') &&
+          user.hasAnyPermission(['calls.view_own', 'calls.view_all'])) {
         navItems.add(
           _NavItem(
             section: 'TELEPHONY HUB',
-            title: isTelecaller ? 'My Call History' : 'Call History Logs',
+            title: user.hasPermission('calls.view_all') ? 'Call History Logs' : 'My Call History',
             icon: Icons.history_toggle_off_rounded,
             activeIcon: Icons.history_rounded,
             routeKey: 'call_history',
@@ -376,14 +412,42 @@ class _MainLayoutState extends State<MainLayout> {
         );
       }
 
-      if (!isTelecaller) {
+      // Reports & Analytics Center
+      if (user.hasMenuPermission('reports') &&
+          user.hasAnyPermission([
+            'reports.sales_billing',
+            'reports.calls_telecaller',
+            'reports.leads_conversion',
+            'reports.hr_attendance',
+          ])) {
+        final delegated = user.isDelegatedFor('reports');
         navItems.add(
           _NavItem(
-            section: 'ADMINISTRATION',
+            section: 'REPORTS & ANALYTICS',
+            title: 'Reports Center',
+            icon: Icons.bar_chart_outlined,
+            activeIcon: Icons.bar_chart_rounded,
+            badge: delegated ? 'Delegated' : null,
+            badgeColor: delegated ? const Color(0xFF7C3AED) : null,
+            routeKey: 'reports',
+            screen: const ReportsCenterScreen(),
+          ),
+        );
+      }
+
+      // Company Settings (Branches, Divisions & Templates)
+      if (user.hasMenuPermission('branches') &&
+          user.hasAnyPermission(['branches.manage', 'templates.manage'])) {
+        final delegated = user.isDelegatedFor('branches') || user.isDelegatedFor('employees');
+        navItems.add(
+          _NavItem(
+            section: 'SETTINGS',
             title: 'Company Settings',
-            icon: Icons.tune_rounded,
-            activeIcon: Icons.tune_rounded,
-            routeKey: 'settings',
+            icon: Icons.settings_outlined,
+            activeIcon: Icons.settings_rounded,
+            badge: delegated ? 'Delegated' : null,
+            badgeColor: delegated ? const Color(0xFF7C3AED) : null,
+            routeKey: 'branches',
             screen: const BranchManagementScreen(),
           ),
         );
@@ -452,6 +516,35 @@ class _MainLayoutState extends State<MainLayout> {
                     isCompanyAdmin,
                   ),
 
+                  if (user.hasActiveDelegations)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [Color(0xFFF5F3FF), Color(0xFFEDE9FE)],
+                        ),
+                        border: Border(bottom: BorderSide(color: Color(0xFFDDD6FE))),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.assignment_ind_rounded, size: 16, color: Color(0xFF6D28D9)),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Acting In-Charge: ${user.activeDelegations.map((d) => "${d.title} (for ${d.delegatorName} until ${d.endDate})").join(" · ")}',
+                              style: GoogleFonts.inter(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: const Color(0xFF5B21B6),
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
                   // Active Screen Body (strip already-consumed status/nav bar padding & viewPadding)
                   Expanded(
                     child: MediaQuery.removePadding(
@@ -471,7 +564,7 @@ class _MainLayoutState extends State<MainLayout> {
             ),
           ],
         ),
-        bottomNavigationBar: isMobile
+        bottomNavigationBar: (isMobile && navItems.length >= 2)
             ? _buildMobileLuxuryBottomBar(navItems)
             : null,
       ),
@@ -491,9 +584,11 @@ class _MainLayoutState extends State<MainLayout> {
   }) {
     String currentSection = '';
     final isCompanyAdmin = (user?.isCompanyAdmin ?? false) || (user?.isManager ?? false);
+    final collapsed = !isDrawer && _isSidebarCollapsed;
 
-    return Container(
-      width: 270,
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      width: collapsed ? 74 : 256,
       decoration: BoxDecoration(
         color: Colors.white,
         border: const Border(
@@ -513,17 +608,41 @@ class _MainLayoutState extends State<MainLayout> {
           children: [
             // 1. Enterprise Brand Header
             Container(
-              padding: const EdgeInsets.fromLTRB(20, 14, 18, 16),
+              padding: EdgeInsets.fromLTRB(collapsed ? 10 : 18, 14, collapsed ? 10 : 14, 14),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: collapsed ? CrossAxisAlignment.center : CrossAxisAlignment.start,
               children: [
-                const TelecallerLogo(
-                  isDark: false,
-                  iconSize: 22,
-                  titleSize: 16,
-                  showSubtitle: true,
+                Row(
+                  mainAxisAlignment: collapsed ? MainAxisAlignment.center : MainAxisAlignment.spaceBetween,
+                  children: [
+                    if (!collapsed)
+                      const Expanded(
+                        child: TelecallerLogo(
+                          isDark: false,
+                          iconSize: 22,
+                          titleSize: 16,
+                          showSubtitle: true,
+                        ),
+                      ),
+                    if (!isDrawer)
+                      IconButton(
+                        icon: Icon(
+                          collapsed ? Icons.menu_open_rounded : Icons.chevron_left_rounded,
+                          size: 20,
+                          color: const Color(0xFF475569),
+                        ),
+                        tooltip: collapsed ? 'Expand Menu' : 'Collapse Menu',
+                        onPressed: () => setState(() => _isSidebarCollapsed = !_isSidebarCollapsed),
+                        style: IconButton.styleFrom(
+                          backgroundColor: const Color(0xFFF1F5F9),
+                          padding: const EdgeInsets.all(6),
+                          minimumSize: const Size(32, 32),
+                        ),
+                      ),
+                  ],
                 ),
-                const SizedBox(height: 14),
+                if (!collapsed) ...[
+                  const SizedBox(height: 14),
 
                 // Active Workspace Card with Champagne Gold & Emerald Accents
                 Container(
@@ -585,30 +704,10 @@ class _MainLayoutState extends State<MainLayout> {
                           ],
                         ),
                       ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 5.5,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFECFDF5),
-                          borderRadius: BorderRadius.circular(5),
-                          border: Border.all(
-                            color: const Color(0xFF047857).withValues(alpha: 0.35),
-                          ),
-                        ),
-                        child: Text(
-                          'ACTIVE',
-                          style: GoogleFonts.inter(
-                            fontSize: 8,
-                            fontWeight: FontWeight.w800,
-                            color: const Color(0xFF047857),
-                          ),
-                        ),
-                      ),
                     ],
                   ),
                 ),
+                ],
               ],
             ),
           ),
@@ -635,7 +734,7 @@ class _MainLayoutState extends State<MainLayout> {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (showSectionHeader) ...[
+                    if (showSectionHeader && !collapsed) ...[
                       Padding(
                         padding: EdgeInsets.fromLTRB(10, index == 0 ? 4 : 16, 10, 6),
                         child: Text(
@@ -651,115 +750,100 @@ class _MainLayoutState extends State<MainLayout> {
                     ],
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 2.5),
-                      child: InkWell(
-                        onTap: () {
-                          setState(() => _selectedIndex = index);
-                          if (isDrawer) {
-                            Navigator.of(context).pop();
-                          }
-                        },
-                        borderRadius: BorderRadius.circular(12),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 10,
-                          ),
-                          decoration: BoxDecoration(
-                            gradient: isActive
-                                ? const LinearGradient(
-                                    colors: [
-                                      Color(0xFF064E3B),
-                                      Color(0xFF047857),
+                      child: Tooltip(
+                        message: collapsed ? item.title : '',
+                        child: InkWell(
+                          onTap: () {
+                            setState(() => _selectedIndex = index);
+                            if (isDrawer) {
+                              Navigator.of(context).pop();
+                            }
+                          },
+                          borderRadius: BorderRadius.circular(12),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            padding: EdgeInsets.symmetric(
+                              horizontal: collapsed ? 0 : 12,
+                              vertical: 10,
+                            ),
+                            decoration: BoxDecoration(
+                              gradient: isActive
+                                  ? const LinearGradient(
+                                      colors: [
+                                        Color(0xFF064E3B),
+                                        Color(0xFF047857),
+                                      ],
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                    )
+                                  : null,
+                              color: isActive
+                                  ? null
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(12),
+                              border: isActive
+                                  ? Border.all(
+                                      color: const Color(0xFFD4AF37),
+                                      width: 1.0,
+                                    )
+                                  : Border.all(
+                                      color: Colors.transparent,
+                                      width: 1.0,
+                                    ),
+                              boxShadow: isActive
+                                  ? [
+                                      BoxShadow(
+                                        color: const Color(0xFF047857).withValues(alpha: 0.32),
+                                        blurRadius: 10,
+                                        offset: const Offset(0, 3),
+                                      ),
+                                    ]
+                                  : null,
+                            ),
+                            child: collapsed
+                                ? Center(
+                                    child: Icon(
+                                      isActive ? item.activeIcon : item.icon,
+                                      size: 20,
+                                      color: isActive ? Colors.white : const Color(0xFF475569),
+                                    ),
+                                  )
+                                : Row(
+                                    children: [
+                                      Icon(
+                                        isActive ? item.activeIcon : item.icon,
+                                        size: 18,
+                                        color: isActive
+                                            ? Colors.white
+                                            : const Color(0xFF475569),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Text(
+                                          item.title,
+                                          style: GoogleFonts.inter(
+                                            fontSize: 12.8,
+                                            fontWeight: isActive
+                                                ? FontWeight.w700
+                                                : FontWeight.w500,
+                                            color: isActive
+                                                ? Colors.white
+                                                : const Color(0xFF1E293B),
+                                          ),
+                                        ),
+                                      ),
+                                      if (isActive)
+                                        Container(
+                                          width: 4,
+                                          height: 14,
+                                          margin: const EdgeInsets.only(left: 6),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFD4AF37),
+                                            borderRadius: BorderRadius.circular(2),
+                                          ),
+                                        ),
                                     ],
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                  )
-                                : null,
-                            color: isActive
-                                ? null
-                                : Colors.transparent,
-                            borderRadius: BorderRadius.circular(12),
-                            border: isActive
-                                ? Border.all(
-                                    color: const Color(0xFFD4AF37),
-                                    width: 1.0,
-                                  )
-                                : Border.all(
-                                    color: Colors.transparent,
-                                    width: 1.0,
                                   ),
-                            boxShadow: isActive
-                                ? [
-                                    BoxShadow(
-                                      color: const Color(0xFF047857).withValues(alpha: 0.32),
-                                      blurRadius: 10,
-                                      offset: const Offset(0, 3),
-                                    ),
-                                  ]
-                                : null,
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(
-                                isActive ? item.activeIcon : item.icon,
-                                size: 18,
-                                color: isActive
-                                    ? Colors.white
-                                    : const Color(0xFF475569),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Text(
-                                  item.title,
-                                  style: GoogleFonts.inter(
-                                    fontSize: 12.8,
-                                    fontWeight: isActive
-                                        ? FontWeight.w700
-                                        : FontWeight.w500,
-                                    color: isActive
-                                        ? Colors.white
-                                        : const Color(0xFF1E293B),
-                                  ),
-                                ),
-                              ),
-                              if (item.badge != null)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 6.5,
-                                    vertical: 2,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: (item.badgeColor ?? AppColors.goldLuxury)
-                                        .withValues(alpha: 0.18),
-                                    borderRadius: BorderRadius.circular(6),
-                                    border: Border.all(
-                                      color: (item.badgeColor ?? AppColors.goldLuxury)
-                                          .withValues(alpha: 0.45),
-                                      width: 0.8,
-                                    ),
-                                  ),
-                                  child: Text(
-                                    item.badge!,
-                                    style: GoogleFonts.inter(
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.w800,
-                                      color: item.badgeColor ?? const Color(0xFFB45309),
-                                      letterSpacing: 0.2,
-                                    ),
-                                  ),
-                                ),
-                              if (isActive)
-                                Container(
-                                  width: 4,
-                                  height: 14,
-                                  margin: const EdgeInsets.only(left: 6),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFD4AF37),
-                                    borderRadius: BorderRadius.circular(2),
-                                  ),
-                                ),
-                            ],
                           ),
                         ),
                       ),
@@ -838,6 +922,7 @@ class _MainLayoutState extends State<MainLayout> {
                   ],
                 ),
                 const SizedBox(width: 10),
+                if (!collapsed) ...[
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -884,6 +969,7 @@ class _MainLayoutState extends State<MainLayout> {
                     padding: const EdgeInsets.all(8),
                   ),
                 ),
+                ],
               ],
             ),
           ),
@@ -965,41 +1051,6 @@ class _MainLayoutState extends State<MainLayout> {
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                          if (!isMobile) ...[
-                            const SizedBox(width: 10),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFECFDF5),
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(
-                                  color: const Color(0xFF047857).withValues(alpha: 0.35),
-                                ),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Container(
-                                    width: 5.5,
-                                    height: 5.5,
-                                    decoration: const BoxDecoration(
-                                      color: Color(0xFF047857),
-                                      shape: BoxShape.circle,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 5),
-                                  Text(
-                                    '99.98% SLA',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w700,
-                                      color: const Color(0xFF047857),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
                         ],
                       ),
                       if (!isMobile)
@@ -1021,66 +1072,53 @@ class _MainLayoutState extends State<MainLayout> {
           ),
           const SizedBox(width: 8),
 
-          // Center: Global Search Bar (Desktop)
-          if (!isMobile)
-            Container(
-              width: 320,
-              height: 38,
-              decoration: BoxDecoration(
-                color: const Color(0xFFF1F5F9),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: const Color(0xFFE2E8F0),
-                  width: 1.0,
-                ),
-              ),
-              child: Row(
-                children: [
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 10),
-                    child: Icon(
-                      Icons.search_rounded,
-                      size: 17,
-                      color: Color(0xFF64748B),
+          // Center: Global Search Bar (Hidden for Master Admin & Super Admin)
+          if (!isMobile && !(user?.isSuperAdmin ?? false))
+            Flexible(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 300, minWidth: 140),
+                child: Container(
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: const Color(0xFFE2E8F0),
+                      width: 1.0,
                     ),
                   ),
-                  Expanded(
-                    child: TextField(
-                      controller: _searchController,
-                      style: GoogleFonts.inter(
-                        fontSize: 12.5,
-                        color: const Color(0xFF0F172A),
-                      ),
-                      decoration: InputDecoration(
-                        hintText: 'Quick search leads, calls, reps...',
-                        hintStyle: GoogleFonts.inter(
-                          fontSize: 12,
-                          color: const Color(0xFF94A3B8),
+                  child: Row(
+                    children: [
+                      const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 10),
+                        child: Icon(
+                          Icons.search_rounded,
+                          size: 17,
+                          color: Color(0xFF64748B),
                         ),
-                        border: InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(vertical: 9),
-                        isDense: true,
                       ),
-                    ),
-                  ),
-                  Container(
-                    margin: const EdgeInsets.only(right: 8),
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(5),
-                      border: Border.all(color: const Color(0xFFD4AF37).withValues(alpha: 0.40)),
-                    ),
-                    child: Text(
-                      'Ctrl + K',
-                      style: GoogleFonts.inter(
-                        fontSize: 9.5,
-                        fontWeight: FontWeight.w700,
-                        color: const Color(0xFFB45309),
+                      Expanded(
+                        child: TextField(
+                          controller: _searchController,
+                          style: GoogleFonts.inter(
+                            fontSize: 12.5,
+                            color: const Color(0xFF0F172A),
+                          ),
+                          decoration: InputDecoration(
+                            hintText: 'Quick search leads, calls, reps...',
+                            hintStyle: GoogleFonts.inter(
+                              fontSize: 12,
+                              color: const Color(0xFF94A3B8),
+                            ),
+                            border: InputBorder.none,
+                            contentPadding: const EdgeInsets.symmetric(vertical: 9),
+                            isDense: true,
+                          ),
+                        ),
                       ),
-                    ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
 

@@ -420,7 +420,7 @@ class _QuotationDetailDialogState extends State<QuotationDetailDialog> {
                         child: Column(
                           children: [
                             _buildAmountRow('Subtotal', '${q.currency.isNotEmpty ? q.currency : "₹"} ${q.subtotal.toStringAsFixed(2)}'),
-                            if (q.totalCost > 0) ...[
+                            if (q.totalCost > 0 && (context.read<AuthProvider>().currentUser?.hasPermission('quotations.view_cost_cst') ?? false)) ...[
                               _buildAmountRow('Total Cost (CST)', '${q.currency.isNotEmpty ? q.currency : "₹"} ${q.totalCost.toStringAsFixed(2)}', textColor: const Color(0xFFD97706)),
                               _buildAmountRow(
                                 'Gross Margin',

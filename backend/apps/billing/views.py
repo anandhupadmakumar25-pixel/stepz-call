@@ -1,18 +1,71 @@
 import datetime
 from django.utils import timezone
+from django.db import transaction
 from django.db.models import Sum, Count, Q
 from rest_framework import views, status, generics
 from rest_framework.response import Response
-from apps.billing.models import Quotation, Invoice, ReceiptVoucher, Product
+from apps.billing.models import Quotation, Invoice, ReceiptVoucher, Product, DocumentTemplate
 from apps.billing.serializers import (
     QuotationSerializer,
     InvoiceSerializer,
     ReceiptVoucherSerializer,
     RecordPaymentSerializer,
     ProductSerializer,
+    DocumentTemplateSerializer,
 )
+
+
+def _attach_template_snapshot(data, company, doc_type):
+    """
+    Resolves the selected DocumentTemplate (or company default for doc_type)
+    and snapshots its layout_json onto the document payload.
+    """
+    if not company:
+        return
+    tpl_id = data.get('template')
+    tpl = None
+    if tpl_id:
+        tpl = DocumentTemplate.objects.filter(id=tpl_id, company=company, is_active=True).first()
+    if not tpl and not data.get('template_snapshot'):
+        tpl = DocumentTemplate.objects.filter(company=company, doc_type=doc_type, is_default=True, is_active=True).first()
+    if tpl:
+        data['template'] = str(tpl.id)
+        if not data.get('template_snapshot'):
+            data['template_snapshot'] = tpl.layout_json or {}
 from apps.billing.utils.number_to_words import amount_to_words_en, amount_to_words_ar
-from apps.core.permissions import IsEmployee, IsCompanyAdmin
+from apps.core.permissions import IsEmployee, IsCompanyAdmin, require_permission, require_any_permission
+
+
+def _redact_cost_fields(payload, user):
+    """
+    Server-side security guard: strips internal CST cost and gross margin
+    fields from Quotation/Invoice JSON if user lacks 'quotations.view_cost_cst'.
+    """
+    if user and user.has_permission('quotations.view_cost_cst'):
+        return payload
+
+    def _clean_doc(doc):
+        if not isinstance(doc, dict):
+            return doc
+        doc.pop('total_cost', None)
+        doc.pop('gross_margin', None)
+        if isinstance(doc.get('items'), list):
+            cleaned_items = []
+            for item in doc['items']:
+                if isinstance(item, dict):
+                    item = dict(item)
+                    item.pop('cst', None)
+                    item.pop('cost_price', None)
+                    item.pop('cost_sum', None)
+                cleaned_items.append(item)
+            doc['items'] = cleaned_items
+        return doc
+
+    if isinstance(payload, list):
+        return [_clean_doc(dict(d)) for d in payload]
+    if isinstance(payload, dict):
+        return _clean_doc(dict(payload))
+    return payload
 
 def generate_quotation_number(company):
     year = datetime.date.today().year
@@ -67,7 +120,10 @@ def generate_receipt_voucher_number(company):
 
 
 class ProductListCreateView(views.APIView):
-    permission_classes = [IsEmployee]
+    def get_permissions(self):
+        if self.request.method == 'GET':
+            return [require_any_permission('quotations.view', 'quotations.create', 'invoices.view', 'invoices.create')()]
+        return [require_any_permission('quotations.create', 'invoices.create')()]
 
     def get(self, request):
         company = request.user.company
@@ -108,7 +164,7 @@ class ProductListCreateView(views.APIView):
 
 
 class ProductDetailView(views.APIView):
-    permission_classes = [IsEmployee]
+    permission_classes = [require_any_permission('quotations.edit', 'invoices.edit')]
 
     def delete(self, request, pk):
         company = request.user.company
@@ -121,7 +177,10 @@ class ProductDetailView(views.APIView):
 
 
 class QuotationListCreateView(views.APIView):
-    permission_classes = [IsEmployee]
+    def get_permissions(self):
+        if self.request.method == 'GET':
+            return [require_permission('quotations.view')()]
+        return [require_permission('quotations.create')()]
 
     def get(self, request):
         user = request.user
@@ -145,7 +204,13 @@ class QuotationListCreateView(views.APIView):
         stat = request.query_params.get('status')
         if stat and stat != 'ALL':
             qs = qs.filter(status=stat)
-        return Response(QuotationSerializer(qs.order_by('-created_at'), many=True).data)
+        date_from = request.query_params.get('date_from')
+        date_to = request.query_params.get('date_to')
+        if date_from:
+            qs = qs.filter(date__gte=date_from)
+        if date_to:
+            qs = qs.filter(date__lte=date_to)
+        return Response(_redact_cost_fields(QuotationSerializer(qs.order_by('-created_at'), many=True).data, request.user))
 
     def post(self, request):
         company = request.user.company
@@ -157,6 +222,7 @@ class QuotationListCreateView(views.APIView):
             data['quotation_number'] = generate_quotation_number(company)
         if not data.get('currency'):
             data['currency'] = getattr(company, 'currency', 'INR') or 'INR'
+        _attach_template_snapshot(data, company, 'QUOTATION')
 
         items = data.get('items', [])
         if isinstance(items, list):
@@ -207,7 +273,12 @@ class QuotationListCreateView(views.APIView):
 
 
 class QuotationDetailView(views.APIView):
-    permission_classes = [IsEmployee]
+    def get_permissions(self):
+        if self.request.method == 'GET':
+            return [require_permission('quotations.view')()]
+        if self.request.method == 'DELETE':
+            return [require_permission('quotations.delete')()]
+        return [require_permission('quotations.edit')()]
 
     def get(self, request, pk):
         user = request.user
@@ -222,7 +293,7 @@ class QuotationDetailView(views.APIView):
         if user.role == 'EMPLOYEE' and quote.created_by_id != user.id and (not quote.lead or quote.lead.assigned_to_id != user.id):
             return Response({"error": "Unauthorized. You can only view quotations created by you or for your leads."}, status=status.HTTP_403_FORBIDDEN)
 
-        return Response(QuotationSerializer(quote).data)
+        return Response(_redact_cost_fields(QuotationSerializer(quote).data, request.user))
 
     def patch(self, request, pk):
         user = request.user
@@ -237,7 +308,10 @@ class QuotationDetailView(views.APIView):
         if user.role == 'EMPLOYEE' and quote.created_by_id != user.id and (not quote.lead or quote.lead.assigned_to_id != user.id):
             return Response({"error": "Unauthorized. You can only edit quotations created by you."}, status=status.HTTP_403_FORBIDDEN)
 
-        serializer = QuotationSerializer(quote, data=request.data, partial=True)
+        data = request.data.copy()
+        if data.get('template') and not data.get('template_snapshot'):
+            _attach_template_snapshot(data, quote.company, 'QUOTATION')
+        serializer = QuotationSerializer(quote, data=data, partial=True)
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data)
@@ -261,7 +335,7 @@ class QuotationDetailView(views.APIView):
 
 
 class QuotationConvertToInvoiceView(views.APIView):
-    permission_classes = [IsEmployee]
+    permission_classes = [require_permission('quotations.convert_to_invoice')]
 
     def post(self, request, pk):
         user = request.user
@@ -286,6 +360,9 @@ class QuotationConvertToInvoiceView(views.APIView):
         notes = request.data.get('notes', quote.notes)
 
         invoice_num = generate_invoice_number(company)
+        default_inv_tpl = DocumentTemplate.objects.filter(
+            company=company, doc_type='INVOICE', is_default=True, is_active=True
+        ).first()
         invoice = Invoice.objects.create(
             company=company,
             quotation=quote,
@@ -295,6 +372,13 @@ class QuotationConvertToInvoiceView(views.APIView):
             customer_phone=quote.customer_phone,
             customer_email=quote.customer_email,
             customer_address=quote.customer_address,
+            client_code=quote.client_code,
+            sales_rep_name=quote.sales_rep_name,
+            incoterms=quote.incoterms,
+            location=quote.location,
+            contact_person=quote.contact_person,
+            cr_number=quote.cr_number,
+            currency=quote.currency,
             created_by=request.user,
             due_date=due_date,
             items=items,
@@ -303,9 +387,14 @@ class QuotationConvertToInvoiceView(views.APIView):
             tax_amount=tax_amount,
             discount_amount=discount_amount,
             grand_total=grand_total,
+            total_cost=quote.total_cost,
+            gross_margin=quote.gross_margin,
+            hide_cost_in_pdf=quote.hide_cost_in_pdf,
             payment_status='PENDING',
             notes=notes,
             terms_and_conditions=quote.terms_and_conditions,
+            template=default_inv_tpl,
+            template_snapshot=default_inv_tpl.layout_json if default_inv_tpl else {},
         )
         quote.status = 'CONVERTED'
         quote.save(update_fields=['status'])
@@ -314,7 +403,10 @@ class QuotationConvertToInvoiceView(views.APIView):
 
 
 class InvoiceListCreateView(views.APIView):
-    permission_classes = [IsEmployee]
+    def get_permissions(self):
+        if self.request.method == 'GET':
+            return [require_permission('invoices.view')()]
+        return [require_permission('invoices.create')()]
 
     def get(self, request):
         user = request.user
@@ -338,7 +430,13 @@ class InvoiceListCreateView(views.APIView):
         stat = request.query_params.get('status')
         if stat and stat != 'ALL':
             qs = qs.filter(payment_status=stat)
-        return Response(InvoiceSerializer(qs.order_by('-created_at'), many=True).data)
+        date_from = request.query_params.get('date_from')
+        date_to = request.query_params.get('date_to')
+        if date_from:
+            qs = qs.filter(date__gte=date_from)
+        if date_to:
+            qs = qs.filter(date__lte=date_to)
+        return Response(_redact_cost_fields(InvoiceSerializer(qs.order_by('-created_at'), many=True).data, request.user))
 
     def post(self, request):
         company = request.user.company
@@ -350,6 +448,7 @@ class InvoiceListCreateView(views.APIView):
             data['invoice_number'] = generate_invoice_number(company)
         curr = data.get('currency') or getattr(company, 'currency', 'INR') or 'INR'
         data['currency'] = curr
+        _attach_template_snapshot(data, company, 'INVOICE')
 
         gt = float(data.get('grand_total') or 0.0)
         if not data.get('amount_in_words_en') and gt:
@@ -405,7 +504,12 @@ class InvoiceListCreateView(views.APIView):
 
 
 class InvoiceDetailView(views.APIView):
-    permission_classes = [IsEmployee]
+    def get_permissions(self):
+        if self.request.method == 'GET':
+            return [require_permission('invoices.view')()]
+        if self.request.method == 'DELETE':
+            return [require_permission('invoices.delete')()]
+        return [require_permission('invoices.edit')()]
 
     def get(self, request, pk):
         user = request.user
@@ -420,7 +524,7 @@ class InvoiceDetailView(views.APIView):
         if user.role == 'EMPLOYEE' and inv.created_by_id != user.id and (not inv.lead or inv.lead.assigned_to_id != user.id):
             return Response({"error": "Unauthorized. You can only view invoices created by you or for your leads."}, status=status.HTTP_403_FORBIDDEN)
 
-        return Response(InvoiceSerializer(inv).data)
+        return Response(_redact_cost_fields(InvoiceSerializer(inv).data, request.user))
 
     def patch(self, request, pk):
         user = request.user
@@ -435,7 +539,10 @@ class InvoiceDetailView(views.APIView):
         if user.role == 'EMPLOYEE' and inv.created_by_id != user.id and (not inv.lead or inv.lead.assigned_to_id != user.id):
             return Response({"error": "Unauthorized. You can only edit invoices created by you."}, status=status.HTTP_403_FORBIDDEN)
 
-        serializer = InvoiceSerializer(inv, data=request.data, partial=True)
+        data = request.data.copy()
+        if data.get('template') and not data.get('template_snapshot'):
+            _attach_template_snapshot(data, inv.company, 'INVOICE')
+        serializer = InvoiceSerializer(inv, data=data, partial=True)
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data)
@@ -462,7 +569,7 @@ class InvoiceDetailView(views.APIView):
 
 
 class InvoiceRecordPaymentView(views.APIView):
-    permission_classes = [IsEmployee]
+    permission_classes = [require_permission('invoices.record_payment')]
 
     def post(self, request, pk):
         user = request.user
@@ -525,10 +632,21 @@ class InvoiceRecordPaymentView(views.APIView):
             if p_notes:
                 being_text += f" ({p_notes})"
 
+            tpl_id = serializer.validated_data.get('template')
+            rv_tpl = None
+            if tpl_id:
+                rv_tpl = DocumentTemplate.objects.filter(id=tpl_id, company=company, is_active=True).first()
+            if not rv_tpl:
+                rv_tpl = DocumentTemplate.objects.filter(
+                    company=company, doc_type='RECEIPT', is_default=True, is_active=True
+                ).first()
+            rv_snap = serializer.validated_data.get('template_snapshot') or (rv_tpl.layout_json if rv_tpl else {})
             rv = ReceiptVoucher.objects.create(
                 company=company,
                 created_by=user,
                 invoice=inv,
+                template=rv_tpl,
+                template_snapshot=rv_snap,
                 quotation=inv.quotation,
                 voucher_number=v_num,
                 customer_name=inv.customer_name,
@@ -567,7 +685,10 @@ class InvoiceRecordPaymentView(views.APIView):
 
 
 class ReceiptVoucherListCreateView(views.APIView):
-    permission_classes = [IsEmployee]
+    def get_permissions(self):
+        if self.request.method == 'GET':
+            return [require_permission('receipts.view_print')()]
+        return [require_permission('receipts.create')()]
 
     def get(self, request):
         user = request.user
@@ -597,6 +718,12 @@ class ReceiptVoucherListCreateView(views.APIView):
                 Q(customer_name__icontains=search.strip()) |
                 Q(being__icontains=search.strip())
             )
+        date_from = request.query_params.get('date_from')
+        date_to = request.query_params.get('date_to')
+        if date_from:
+            qs = qs.filter(date__gte=date_from)
+        if date_to:
+            qs = qs.filter(date__lte=date_to)
         return Response(ReceiptVoucherSerializer(qs.order_by('-created_at'), many=True).data)
 
     def post(self, request):
@@ -610,6 +737,7 @@ class ReceiptVoucherListCreateView(views.APIView):
 
         curr = data.get('currency') or getattr(company, 'currency', 'INR') or 'INR'
         data['currency'] = curr
+        _attach_template_snapshot(data, company, 'INVOICE')
         amt = data.get('amount', 0.00)
         if not data.get('amount_in_words_en') and amt:
             data['amount_in_words_en'] = amount_to_words_en(amt, curr)
@@ -627,7 +755,12 @@ class ReceiptVoucherListCreateView(views.APIView):
 
 
 class ReceiptVoucherDetailView(views.APIView):
-    permission_classes = [IsEmployee]
+    def get_permissions(self):
+        if self.request.method == 'GET':
+            return [require_permission('receipts.view_print')()]
+        if self.request.method == 'DELETE':
+            return [require_permission('invoices.delete')()]
+        return [require_permission('receipts.create')()]
 
     def get(self, request, pk):
         user = request.user
@@ -675,7 +808,7 @@ class ReceiptVoucherDetailView(views.APIView):
 
 
 class BillingOverviewKPIView(views.APIView):
-    permission_classes = [IsEmployee]
+    permission_classes = [require_any_permission('quotations.view', 'invoices.view', 'receipts.view_print')]
 
     def get(self, request):
         user = request.user
@@ -734,3 +867,97 @@ class BillingOverviewKPIView(views.APIView):
             "paid_invoice_count": paid_inv_count,
             "pending_invoice_count": pending_inv_count,
         })
+
+
+class DocumentTemplateListCreateView(views.APIView):
+    def get_permissions(self):
+        if self.request.method == 'GET':
+            return [require_any_permission(
+                'templates.manage',
+                'quotations.view', 'quotations.create',
+                'invoices.view', 'invoices.create',
+                'receipts.view_print', 'receipts.create',
+            )()]
+        return [require_permission('templates.manage')()]
+
+    def get(self, request):
+        company = request.user.company
+        if not company:
+            return Response([], status=status.HTTP_200_OK)
+        qs = DocumentTemplate.objects.filter(company=company, is_active=True)
+        doc_type = request.query_params.get('doc_type')
+        if doc_type:
+            qs = qs.filter(doc_type=doc_type.upper())
+        return Response(DocumentTemplateSerializer(qs, many=True).data)
+
+    def post(self, request):
+        company = request.user.company
+        if not company:
+            return Response({"error": "No company associated."}, status=status.HTTP_400_BAD_REQUEST)
+        serializer = DocumentTemplateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        with transaction.atomic():
+            is_default = serializer.validated_data.get('is_default', False)
+            doc_type = serializer.validated_data['doc_type']
+            if is_default:
+                DocumentTemplate.objects.filter(company=company, doc_type=doc_type, is_default=True).update(is_default=False)
+            tpl = serializer.save(company=company, created_by=request.user)
+        return Response(DocumentTemplateSerializer(tpl).data, status=status.HTTP_201_CREATED)
+
+
+class DocumentTemplateDetailView(views.APIView):
+    def get_permissions(self):
+        if self.request.method == 'GET':
+            return [require_any_permission(
+                'templates.manage',
+                'quotations.view', 'quotations.create',
+                'invoices.view', 'invoices.create',
+                'receipts.view_print', 'receipts.create',
+            )()]
+        return [require_permission('templates.manage')()]
+
+    def _get_obj(self, request, pk):
+        return DocumentTemplate.objects.filter(id=pk, company=request.user.company).first()
+
+    def get(self, request, pk):
+        tpl = self._get_obj(request, pk)
+        if not tpl:
+            return Response({"error": "Template not found."}, status=status.HTTP_404_NOT_FOUND)
+        return Response(DocumentTemplateSerializer(tpl).data)
+
+    def patch(self, request, pk):
+        tpl = self._get_obj(request, pk)
+        if not tpl:
+            return Response({"error": "Template not found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = DocumentTemplateSerializer(tpl, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        with transaction.atomic():
+            if serializer.validated_data.get('is_default') is True:
+                doc_type = serializer.validated_data.get('doc_type', tpl.doc_type)
+                DocumentTemplate.objects.filter(company=request.user.company, doc_type=doc_type, is_default=True).exclude(id=tpl.id).update(is_default=False)
+            tpl = serializer.save()
+        return Response(DocumentTemplateSerializer(tpl).data)
+
+    def put(self, request, pk):
+        return self.patch(request, pk)
+
+    def delete(self, request, pk):
+        tpl = self._get_obj(request, pk)
+        if not tpl:
+            return Response({"error": "Template not found."}, status=status.HTTP_404_NOT_FOUND)
+        tpl.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class DocumentTemplateSetDefaultView(views.APIView):
+    permission_classes = [require_permission('templates.manage')]
+
+    def post(self, request, pk):
+        tpl = DocumentTemplate.objects.filter(id=pk, company=request.user.company, is_active=True).first()
+        if not tpl:
+            return Response({"error": "Template not found."}, status=status.HTTP_404_NOT_FOUND)
+        with transaction.atomic():
+            DocumentTemplate.objects.filter(company=request.user.company, doc_type=tpl.doc_type, is_default=True).update(is_default=False)
+            tpl.is_default = True
+            tpl.save(update_fields=['is_default', 'updated_at'])
+        return Response(DocumentTemplateSerializer(tpl).data)

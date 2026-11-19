@@ -46,6 +46,7 @@ class LeadProvider extends ChangeNotifier {
     required String name,
     String code = '',
     String address = '',
+    String logo = '',
     double? latitude,
     double? longitude,
     int radiusMeters = 100,
@@ -56,6 +57,7 @@ class LeadProvider extends ChangeNotifier {
         'name': name.trim(),
         'code': code.trim(),
         'address': address.trim(),
+        if (logo.trim().isNotEmpty) 'logo': logo.trim(),
         'latitude': latitude,
         'longitude': longitude,
         'radius_meters': radiusMeters,
@@ -77,6 +79,7 @@ class LeadProvider extends ChangeNotifier {
     String? name,
     String? code,
     String? address,
+    String? logo,
     double? latitude,
     double? longitude,
     int? radiusMeters,
@@ -87,6 +90,7 @@ class LeadProvider extends ChangeNotifier {
       if (name != null) payload['name'] = name.trim();
       if (code != null) payload['code'] = code.trim();
       if (address != null) payload['address'] = address.trim();
+      if (logo != null) payload['logo'] = logo.trim();
       if (latitude != null) payload['latitude'] = latitude;
       if (longitude != null) payload['longitude'] = longitude;
       if (radiusMeters != null) payload['radius_meters'] = radiusMeters;
@@ -158,7 +162,14 @@ class LeadProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> fetchLeads({String? status, String? search, String? branchId, String? categoryId}) async {
+  Future<void> fetchLeads({
+    String? status,
+    String? search,
+    String? branchId,
+    String? categoryId,
+    String? dateFrom,
+    String? dateTo,
+  }) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
@@ -177,6 +188,12 @@ class LeadProvider extends ChangeNotifier {
       }
       if (search != null && search.isNotEmpty) {
         params.add('search=${Uri.encodeComponent(search)}');
+      }
+      if (dateFrom != null && dateFrom.isNotEmpty) {
+        params.add('date_from=$dateFrom');
+      }
+      if (dateTo != null && dateTo.isNotEmpty) {
+        params.add('date_to=$dateTo');
       }
       if (params.isNotEmpty) {
         query = '?${params.join('&')}';
@@ -311,6 +328,38 @@ class LeadProvider extends ChangeNotifier {
     }
   }
 
+  Future<Map<String, dynamic>?> reassignLeads({
+    required List<String> leadIds,
+    required String targetEmployeeId,
+    String notes = '',
+  }) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final res = await ApiClient.post('/leads/reassign/', {
+        'lead_ids': leadIds,
+        'target_employee_id': targetEmployeeId,
+        if (notes.trim().isNotEmpty) 'notes': notes.trim(),
+      });
+      await fetchLeads();
+      _isLoading = false;
+      notifyListeners();
+      return res;
+    } on ApiException catch (e) {
+      _errorMessage = e.message;
+      _isLoading = false;
+      notifyListeners();
+      return null;
+    } catch (e) {
+      _errorMessage = e.toString();
+      _isLoading = false;
+      notifyListeners();
+      return null;
+    }
+  }
+
   Future<void> fetchTasks({String? branchId, String? categoryId, String? assignedToId, String? status, String? search}) async {
     _isLoading = true;
     _errorMessage = null;
@@ -370,6 +419,8 @@ class LeadProvider extends ChangeNotifier {
   Future<bool> createTask({
     String? title,
     String description = '',
+    String taskType = 'GENERAL',
+    String targetRole = '',
     String priority = 'MEDIUM',
     String? branchId,
     String? categoryId,
@@ -386,6 +437,8 @@ class LeadProvider extends ChangeNotifier {
       final payload = data ?? {
         if (title != null) 'title': title,
         'description': description,
+        'task_type': taskType,
+        if (targetRole.isNotEmpty) 'target_role': targetRole,
         'priority': priority,
         if (branchId != null) 'branch_id': branchId,
         if (branchId != null) 'branch': branchId,
@@ -416,8 +469,20 @@ class LeadProvider extends ChangeNotifier {
   }
 
   Future<bool> updateTaskStatus(String taskId, String status) async {
+    return submitTaskReport(taskId: taskId, status: status);
+  }
+
+  Future<bool> submitTaskReport({
+    required String taskId,
+    required String status,
+    String? completionReport,
+  }) async {
     try {
-      final res = await ApiClient.patch('/leads/tasks/$taskId/', {'status': status});
+      final payload = <String, dynamic>{'status': status};
+      if (completionReport != null) {
+        payload['completion_report'] = completionReport.trim();
+      }
+      final res = await ApiClient.patch('/leads/tasks/$taskId/', payload);
       final updated = CallingTaskModel.fromJson(res);
       final idx = _tasks.indexWhere((t) => t.id == taskId);
       if (idx != -1) {

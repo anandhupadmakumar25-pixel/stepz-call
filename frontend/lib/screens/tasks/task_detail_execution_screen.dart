@@ -469,16 +469,6 @@ class _TaskDetailExecutionScreenState extends State<TaskDetailExecutionScreen> {
                                     ],
                                   ),
                                 ),
-                              if (task.categoryName != null)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: catColor.withValues(alpha: 0.12),
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(color: catColor.withValues(alpha: 0.3)),
-                                  ),
-                                  child: Text(task.categoryName!, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: catColor)),
-                                ),
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                 decoration: BoxDecoration(

@@ -1,18 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import '../../core/theme/app_theme.dart';
-import '../../core/widgets/glass/glass_scaffold.dart';
-import '../../core/widgets/glass/glass_card.dart';
-import '../../core/widgets/glass/gradient_button.dart';
-import '../../core/widgets/glass/animated_status_badge.dart';
-import '../../core/widgets/app_back_button.dart';
 import '../../core/responsive/responsive_layout.dart';
-import '../../routes/app_routes.dart';
-import '../../providers/auth_provider.dart';
-import '../../providers/lead_provider.dart';
-import '../../providers/employee_provider.dart';
+import '../../core/theme/app_theme.dart';
+import '../../core/widgets/app_back_button.dart';
+import '../../core/widgets/date_range_filter_bar.dart';
+import '../../core/widgets/glass/animated_status_badge.dart';
+import '../../core/widgets/glass/glass_card.dart';
+import '../../core/widgets/glass/glass_scaffold.dart';
+import '../../core/widgets/glass/gradient_button.dart';
 import '../../models/lead_model.dart';
+import '../../providers/auth_provider.dart';
+import '../../providers/employee_provider.dart';
+import '../../providers/lead_provider.dart';
+import '../../routes/app_routes.dart';
 import 'create_calling_task_screen.dart';
 import 'task_detail_execution_screen.dart';
 
@@ -20,7 +21,11 @@ class CallingTasksScreen extends StatefulWidget {
   final String? initialEmployeeId;
   final String? employeeName;
 
-  const CallingTasksScreen({super.key, this.initialEmployeeId, this.employeeName});
+  const CallingTasksScreen({
+    super.key,
+    this.initialEmployeeId,
+    this.employeeName,
+  });
 
   @override
   State<CallingTasksScreen> createState() => _CallingTasksScreenState();
@@ -28,9 +33,11 @@ class CallingTasksScreen extends StatefulWidget {
 
 class _CallingTasksScreenState extends State<CallingTasksScreen> {
   String _selectedBranch = 'ALL';
-  String _selectedCategory = 'ALL';
+  String _selectedRole = 'ALL';
   String _selectedStatus = 'ALL';
   String? _selectedEmployeeId;
+  String? _dateFrom;
+  String? _dateTo;
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
 
@@ -46,10 +53,8 @@ class _CallingTasksScreenState extends State<CallingTasksScreen> {
   void _loadData() {
     final leadProvider = context.read<LeadProvider>();
     leadProvider.fetchBranches();
-    leadProvider.fetchCategories();
     leadProvider.fetchTasks(
       branchId: _selectedBranch,
-      categoryId: _selectedCategory,
       assignedToId: _selectedEmployeeId,
       status: _selectedStatus,
       search: _searchQuery,
@@ -63,26 +68,220 @@ class _CallingTasksScreenState extends State<CallingTasksScreen> {
     super.dispose();
   }
 
+  bool _matchesDateRange(CallingTaskModel task) {
+    if ((_dateFrom == null || _dateFrom!.isEmpty) &&
+        (_dateTo == null || _dateTo!.isEmpty)) {
+      return true;
+    }
+    final raw = (task.dueDate != null && task.dueDate!.isNotEmpty)
+        ? task.dueDate!
+        : task.createdAt;
+    if (raw.trim().isEmpty) return false;
+    final day = raw.trim().length >= 10
+        ? raw.trim().substring(0, 10)
+        : raw.trim();
+    if (_dateFrom != null &&
+        _dateFrom!.isNotEmpty &&
+        day.compareTo(_dateFrom!) < 0) {
+      return false;
+    }
+    if (_dateTo != null &&
+        _dateTo!.isNotEmpty &&
+        day.compareTo(_dateTo!) > 0) {
+      return false;
+    }
+    return true;
+  }
+
   Color _getPriorityColor(String priority) {
-    switch (priority) {
+    switch (priority.toUpperCase()) {
       case 'URGENT':
-        return AppColors.neonCoral;
+        return const Color(0xFFDC2626);
       case 'HIGH':
-        return AppColors.neonSunset;
+        return const Color(0xFFD97706);
       case 'LOW':
-        return AppColors.textSecondary;
+        return const Color(0xFF64748B);
       default:
-        return AppColors.neonCyan;
+        return const Color(0xFF0284C7);
     }
   }
 
-  Color _parseColor(String? hex) {
-    if (hex == null || hex.isEmpty) return AppColors.neonViolet;
-    final clean = hex.replaceAll('#', '');
-    if (clean.length == 6) {
-      return Color(int.parse('FF$clean', radix: 16));
+  Color _getStatusColor(String status) {
+    switch (status.toUpperCase()) {
+      case 'COMPLETED':
+        return const Color(0xFF059669);
+      case 'IN_PROGRESS':
+        return const Color(0xFF2563EB);
+      case 'CANCELLED':
+        return const Color(0xFFDC2626);
+      default:
+        return const Color(0xFFD97706);
     }
-    return AppColors.neonViolet;
+  }
+
+  String _formatTaskType(String raw) {
+    switch (raw.toUpperCase()) {
+      case 'CALLING':
+        return 'Calling';
+      case 'FIELD_VISIT':
+        return 'Field Visit';
+      case 'FOLLOW_UP':
+        return 'Follow-Up';
+      case 'SUPPORT':
+        return 'Support';
+      case 'ADMIN_WORK':
+        return 'Admin';
+      default:
+        return 'General';
+    }
+  }
+
+  void _showSubmitReportDialog(CallingTaskModel task) {
+    String selectedStatus =
+        task.status == 'PENDING' ? 'IN_PROGRESS' : task.status;
+    final reportCtrl = TextEditingController(text: task.completionReport);
+    bool isSaving = false;
+
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.65),
+      builder: (ctx) => StatefulBuilder(
+        builder: (dlgCtx, setDlgState) {
+          final isMobile = ResponsiveLayout.isMobile(dlgCtx);
+          return Dialog(
+            backgroundColor: Colors.transparent,
+            insetPadding: EdgeInsets.symmetric(
+              horizontal: isMobile ? 14 : 24,
+              vertical: 20,
+            ),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 480),
+              child: GlassCard(
+                blur: 22,
+                opacity: 0.97,
+                borderRadius: BorderRadius.circular(18),
+                padding: EdgeInsets.all(isMobile ? 16 : 22),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.assignment_turned_in_rounded,
+                            color: Color(0xFF047857), size: 22),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Task Report & Status',
+                            style: GoogleFonts.inter(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                              color: const Color(0xFF0F172A),
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close_rounded, size: 18),
+                          onPressed: () => Navigator.pop(ctx),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      task.title,
+                      style: GoogleFonts.inter(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF475569),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    DropdownButtonFormField<String>(
+                      initialValue: selectedStatus,
+                      decoration: InputDecoration(
+                        labelText: 'Task Status',
+                        isDense: true,
+                        filled: true,
+                        fillColor: const Color(0xFFF8FAFC),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                      ),
+                      items: const [
+                        DropdownMenuItem(
+                            value: 'PENDING', child: Text('Pending')),
+                        DropdownMenuItem(
+                            value: 'IN_PROGRESS', child: Text('In Progress')),
+                        DropdownMenuItem(
+                            value: 'COMPLETED', child: Text('Completed')),
+                      ],
+                      onChanged: (v) {
+                        if (v != null) setDlgState(() => selectedStatus = v);
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: reportCtrl,
+                      maxLines: 4,
+                      style: GoogleFonts.inter(fontSize: 12.5),
+                      decoration: InputDecoration(
+                        labelText: 'Completion / Work Report *',
+                        hintText:
+                            'Summarize work completed, findings, or follow-up notes...',
+                        filled: true,
+                        fillColor: const Color(0xFFF8FAFC),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        GlassSecondaryButton(
+                          text: 'Cancel',
+                          onPressed:
+                              isSaving ? null : () => Navigator.pop(ctx),
+                        ),
+                        const SizedBox(width: 10),
+                        GradientPrimaryButton(
+                          text: isSaving ? 'Saving...' : 'Submit Report',
+                          icon: Icons.check_rounded,
+                          height: 38,
+                          onPressed: isSaving
+                              ? null
+                              : () async {
+                                  setDlgState(() => isSaving = true);
+                                  final ok = await context
+                                      .read<LeadProvider>()
+                                      .submitTaskReport(
+                                        taskId: task.id,
+                                        status: selectedStatus,
+                                        completionReport: reportCtrl.text,
+                                      );
+                                  if (!mounted) return;
+                                  if (ctx.mounted) Navigator.pop(ctx);
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(ok
+                                          ? 'Task report saved!'
+                                          : 'Failed to save report.'),
+                                      backgroundColor: ok
+                                          ? AppColors.success
+                                          : AppColors.danger,
+                                    ),
+                                  );
+                                },
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
   }
 
   @override
@@ -91,348 +290,327 @@ class _CallingTasksScreenState extends State<CallingTasksScreen> {
     final leadProvider = context.watch<LeadProvider>();
     final user = auth.currentUser;
     final isSuperAdmin = user?.isSuperAdmin ?? false;
-    final canViewAll = isSuperAdmin || (user?.hasPermission('tasks.view_all') ?? false);
-    final isTelecaller = (user?.isEmployee ?? true) && !canViewAll;
-    final canCreateTask = isSuperAdmin || (user?.hasPermission('tasks.create') ?? false);
+    final canViewAll =
+        isSuperAdmin || (user?.hasPermission('tasks.view_all') ?? false);
+    final isEmployeeOnly = (user?.isEmployee ?? true) && !canViewAll;
+    final canManageTasks = !isEmployeeOnly ||
+        (user?.hasPermission('tasks.manage_team') ?? false) ||
+        (user?.isCompanyAdmin ?? false);
     final isMobile = ResponsiveLayout.isMobile(context);
 
+    final allTasks = leadProvider.tasks;
+    final availableRoles = allTasks
+        .map((t) => t.assignedToRole.trim())
+        .where((r) => r.isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort();
+
+    final tasks = allTasks.where((t) {
+      if (!_matchesDateRange(t)) return false;
+      if (_selectedRole != 'ALL' &&
+          t.assignedToRole.trim() != _selectedRole) {
+        return false;
+      }
+      return true;
+    }).toList();
+
     return GlassScaffold(
-      backgroundImage: 'assets/images/telecaller_calling_bg.jpg',
       body: Padding(
         padding: EdgeInsets.fromLTRB(
           isMobile ? 12 : 24,
-          isMobile ? 6 : 16,
+          isMobile ? 8 : 16,
           isMobile ? 12 : 24,
-          isMobile ? 10 : 20,
+          16,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // Header
-            // Header with Back Button
-            isMobile
-                ? Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Row(
+            LayoutBuilder(
+              builder: (ctx, headerConstraints) {
+                final titleBlock = Row(
+                  children: [
+                    const AppBackButton(fallbackRoute: AppRoutes.dashboard),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const AppBackButton(fallbackRoute: AppRoutes.dashboard),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Flexible(
-                                      child: Text(
-                                        isTelecaller ? 'My Calling Tasks' : 'Calling Tasks',
-                                        style: GoogleFonts.inter(
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.w800,
-                                          color: const Color(0xFF0F172A),
-                                          letterSpacing: -0.3,
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    AnimatedStatusBadge(
-                                      label: '${leadProvider.tasks.length} Batches',
-                                      statusColor: const Color(0xFF2563EB),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  isTelecaller
-                                      ? 'Your assigned lead queues, targets & pacing'
-                                      : 'Organize leads into actionable calling tasks',
-                                  style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  widget.employeeName != null
+                                      ? '${widget.employeeName} — Tasks'
+                                      : (isEmployeeOnly
+                                          ? 'My Assigned Tasks'
+                                          : 'Employee Tasks'),
+                                  style: GoogleFonts.inter(
+                                    fontSize: isMobile ? 18 : 22,
+                                    fontWeight: FontWeight.w800,
+                                    color: const Color(0xFF0F172A),
+                                    letterSpacing: -0.3,
+                                  ),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
-                                if (widget.employeeName != null && _selectedEmployeeId != null) ...[
-                                  const SizedBox(height: 4),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFEFF6FF),
-                                      borderRadius: BorderRadius.circular(6),
-                                      border: Border.all(color: const Color(0xFF93C5FD)),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        const Icon(Icons.person_rounded, size: 12, color: Color(0xFF1D4ED8)),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          'Staff: ${widget.employeeName}',
-                                          style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w700, color: const Color(0xFF1D4ED8)),
-                                        ),
-                                        const SizedBox(width: 4),
-                                        InkWell(
-                                          onTap: () {
-                                            setState(() => _selectedEmployeeId = null);
-                                            _loadData();
-                                          },
-                                          child: const Icon(Icons.close_rounded, size: 12, color: Color(0xFF1D4ED8)),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
+                              ),
+                              const SizedBox(width: 8),
+                              AnimatedStatusBadge(
+                                label: '${tasks.length} Tasks',
+                                statusColor: AppColors.neonCyan,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            isEmployeeOnly
+                                ? 'View assigned tasks, complete work, and submit your reports'
+                                : 'Assign tasks across employee roles and review submitted reports',
+                            style: GoogleFonts.inter(
+                                fontSize: 12, color: const Color(0xFF64748B)),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ],
                       ),
-                      if (canCreateTask) ...[
-                        const SizedBox(height: 10),
-                        GradientPrimaryButton(
-                          text: 'Create Task',
-                          icon: Icons.add_task_rounded,
-                          onPressed: () async {
-                            await Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (_) => const CreateCallingTaskScreen()),
-                            );
-                            _loadData();
-                          },
-                        ),
-                      ],
-                    ],
-                  )
-                : Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Row(
-                          children: [
-                            const AppBackButton(fallbackRoute: AppRoutes.dashboard),
-                            const SizedBox(width: 14),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Flexible(
-                                        child: Text(
-                                          isTelecaller ? 'My Calling Tasks' : 'Calling Tasks & Assignments',
-                                          style: GoogleFonts.inter(
-                                            fontSize: 22,
-                                            fontWeight: FontWeight.w800,
-                                            color: const Color(0xFF0F172A),
-                                            letterSpacing: -0.3,
-                                          ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 10),
-                                      AnimatedStatusBadge(
-                                        label: '${leadProvider.tasks.length} Batches',
-                                        statusColor: const Color(0xFF2563EB),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    isTelecaller
-                                        ? 'Your assigned lead queues, live calling targets, and follow-ups'
-                                        : 'Organize leads into actionable calling tasks with target branches, categories, and deadlines',
-                                    style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  if (widget.employeeName != null && _selectedEmployeeId != null) ...[
-                                    const SizedBox(height: 6),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFEFF6FF),
-                                        borderRadius: BorderRadius.circular(6),
-                                        border: Border.all(color: const Color(0xFF93C5FD)),
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          const Icon(Icons.person_rounded, size: 14, color: Color(0xFF1D4ED8)),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            'Filtered by Staff: ${widget.employeeName}',
-                                            style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF1D4ED8)),
-                                          ),
-                                          const SizedBox(width: 6),
-                                          InkWell(
-                                            onTap: () {
-                                              setState(() => _selectedEmployeeId = null);
-                                              _loadData();
-                                            },
-                                            child: const Icon(Icons.close_rounded, size: 14, color: Color(0xFF1D4ED8)),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      if (canCreateTask) ...[
-                        const SizedBox(width: 12),
-                        GradientPrimaryButton(
-                          text: 'Create Task',
-                          icon: Icons.add_task_rounded,
-                          onPressed: () async {
-                            await Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (_) => const CreateCallingTaskScreen()),
-                            );
-                            _loadData();
-                          },
-                        ),
-                      ],
-                    ],
-                  ),
-            const SizedBox(height: 18),
-
-            // Frosted Glass Toolbar
-            GlassCard(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Wrap(
-                spacing: 12,
-                runSpacing: 10,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  SizedBox(
-                    width: isMobile ? double.infinity : 220,
-                    height: 40,
-                    child: TextField(
-                      controller: _searchController,
-                      style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF0F172A), fontWeight: FontWeight.w500),
-                      decoration: InputDecoration(
-                        hintText: 'Search tasks...',
-                        hintStyle: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF94A3B8)),
-                        prefixIcon: const Icon(Icons.search_rounded, size: 18, color: Color(0xFF94A3B8)),
-                        filled: true,
-                        fillColor: Colors.white,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: const BorderSide(color: Color(0xFF6366F1), width: 1.5),
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 10),
-                        isDense: true,
-                        suffixIcon: _searchQuery.isNotEmpty
-                            ? IconButton(
-                                icon: const Icon(Icons.clear, size: 14, color: Color(0xFF94A3B8)),
-                                onPressed: () {
-                                  _searchController.clear();
-                                  setState(() => _searchQuery = '');
-                                  _loadData();
-                                },
-                              )
-                            : null,
-                      ),
-                      onChanged: (val) {
-                        setState(() => _searchQuery = val.trim());
-                        _loadData();
-                      },
                     ),
-                  ),
-                  _buildDropdownFilter(
-                    width: isMobile ? double.infinity : 160,
-                    value: _selectedBranch,
-                    items: [
-                      const DropdownMenuItem(value: 'ALL', child: Text('All Branches')),
-                      ...leadProvider.branches.map((b) => DropdownMenuItem(value: b.id, child: Text(b.name, overflow: TextOverflow.ellipsis))),
+                  ],
+                );
+
+                final assignBtn = canManageTasks
+                    ? GradientPrimaryButton(
+                        text: 'Assign Task',
+                        icon: Icons.add_task_rounded,
+                        height: 36,
+                        borderRadius: 10,
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const CreateCallingTaskScreen(),
+                            ),
+                          ).then((_) => _loadData());
+                        },
+                      )
+                    : null;
+
+                if (!isMobile && headerConstraints.maxWidth >= 680) {
+                  return Row(
+                    children: [
+                      Expanded(child: titleBlock),
+                      if (assignBtn != null) ...[
+                        const SizedBox(width: 16),
+                        assignBtn,
+                      ],
                     ],
-                    onChanged: (v) {
-                      setState(() => _selectedBranch = v ?? 'ALL');
-                      _loadData();
+                  );
+                }
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    titleBlock,
+                    if (assignBtn != null) ...[
+                      const SizedBox(height: 10),
+                      assignBtn,
+                    ],
+                  ],
+                );
+              },
+            ),
+            const SizedBox(height: 14),
+
+            // Filter Toolbar
+            GlassCard(
+              blur: 18,
+              opacity: 0.96,
+              borderRadius: BorderRadius.circular(16),
+              borderColor: const Color(0xFFE2E8F0),
+              padding: EdgeInsets.all(isMobile ? 12 : 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  DateRangeFilterBar(
+                    onChanged: (from, to) {
+                      setState(() {
+                        _dateFrom = from;
+                        _dateTo = to;
+                      });
                     },
                   ),
-                  _buildDropdownFilter(
-                    width: isMobile ? double.infinity : 160,
-                    value: _selectedCategory,
-                    items: [
-                      const DropdownMenuItem(value: 'ALL', child: Text('All Categories')),
-                      ...leadProvider.categories.map((c) => DropdownMenuItem(value: c.id, child: Text(c.name, overflow: TextOverflow.ellipsis))),
-                    ],
-                    onChanged: (v) {
-                      setState(() => _selectedCategory = v ?? 'ALL');
-                      _loadData();
-                    },
-                  ),
-                  _buildDropdownFilter(
-                    width: isMobile ? double.infinity : 150,
-                    value: _selectedStatus,
-                    items: const [
-                      DropdownMenuItem(value: 'ALL', child: Text('All Statuses')),
-                      DropdownMenuItem(value: 'PENDING', child: Text('Pending')),
-                      DropdownMenuItem(value: 'IN_PROGRESS', child: Text('In Progress')),
-                      DropdownMenuItem(value: 'COMPLETED', child: Text('Completed')),
-                    ],
-                    onChanged: (v) {
-                      setState(() => _selectedStatus = v ?? 'ALL');
-                      _loadData();
+                  const SizedBox(height: 10),
+                  LayoutBuilder(
+                    builder: (ctx, c) {
+                      final searchBox = SizedBox(
+                        height: 38,
+                        child: TextField(
+                          controller: _searchController,
+                          onChanged: (v) {
+                            _searchQuery = v.trim();
+                            _loadData();
+                          },
+                          style: GoogleFonts.inter(fontSize: 12.5),
+                          decoration: InputDecoration(
+                            hintText: 'Search task title, instructions...',
+                            hintStyle: GoogleFonts.inter(
+                                fontSize: 12, color: const Color(0xFF94A3B8)),
+                            prefixIcon: const Icon(Icons.search_rounded,
+                                size: 17, color: Color(0xFF64748B)),
+                            filled: true,
+                            fillColor: const Color(0xFFF8FAFC),
+                            contentPadding:
+                                const EdgeInsets.symmetric(horizontal: 10),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide:
+                                  const BorderSide(color: Color(0xFFE2E8F0)),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide:
+                                  const BorderSide(color: Color(0xFFE2E8F0)),
+                            ),
+                          ),
+                        ),
+                      );
+
+                      final roleFilter = _buildDropdownFilter(
+                        value: availableRoles.contains(_selectedRole)
+                            ? _selectedRole
+                            : 'ALL',
+                        items: [
+                          const DropdownMenuItem(
+                              value: 'ALL', child: Text('All Roles')),
+                          ...availableRoles.map((r) => DropdownMenuItem(
+                              value: r,
+                              child: Text(r, overflow: TextOverflow.ellipsis))),
+                        ],
+                        onChanged: (v) =>
+                            setState(() => _selectedRole = v ?? 'ALL'),
+                      );
+
+                      final branchFilter = _buildDropdownFilter(
+                        value: _selectedBranch,
+                        items: [
+                          const DropdownMenuItem(
+                              value: 'ALL', child: Text('All Branches')),
+                          ...leadProvider.branches.map((b) => DropdownMenuItem(
+                              value: b.id,
+                              child:
+                                  Text(b.name, overflow: TextOverflow.ellipsis))),
+                        ],
+                        onChanged: (v) {
+                          setState(() => _selectedBranch = v ?? 'ALL');
+                          _loadData();
+                        },
+                      );
+
+                      final statusFilter = _buildDropdownFilter(
+                        value: _selectedStatus,
+                        items: const [
+                          DropdownMenuItem(
+                              value: 'ALL', child: Text('All Statuses')),
+                          DropdownMenuItem(
+                              value: 'PENDING', child: Text('Pending')),
+                          DropdownMenuItem(
+                              value: 'IN_PROGRESS', child: Text('In Progress')),
+                          DropdownMenuItem(
+                              value: 'COMPLETED', child: Text('Completed')),
+                        ],
+                        onChanged: (v) {
+                          setState(() => _selectedStatus = v ?? 'ALL');
+                          _loadData();
+                        },
+                      );
+
+                      if (!isMobile && c.maxWidth >= 740) {
+                        return Row(
+                          children: [
+                            Expanded(flex: 3, child: searchBox),
+                            const SizedBox(width: 8),
+                            Expanded(flex: 2, child: roleFilter),
+                            const SizedBox(width: 8),
+                            Expanded(flex: 2, child: branchFilter),
+                            const SizedBox(width: 8),
+                            Expanded(flex: 2, child: statusFilter),
+                          ],
+                        );
+                      }
+
+                      return Column(
+                        children: [
+                          searchBox,
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Expanded(child: roleFilter),
+                              const SizedBox(width: 8),
+                              Expanded(child: statusFilter),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          branchFilter,
+                        ],
+                      );
                     },
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
 
-            // Tasks List
+            // Tasks ExpansionTile List
             Expanded(
-              child: leadProvider.isLoading
+              child: leadProvider.isLoading && tasks.isEmpty
                   ? const Center(child: CircularProgressIndicator())
-                  : leadProvider.tasks.isEmpty
-                      ? Center(
-                          child: GlassCard(
-                            blur: 16,
-                            opacity: 0.12,
-                            padding: const EdgeInsets.all(36),
+                  : tasks.isEmpty
+                      ? GlassCard(
+                          opacity: 0.96,
+                          borderRadius: BorderRadius.circular(16),
+                          borderColor: const Color(0xFFE2E8F0),
+                          padding: const EdgeInsets.all(28),
+                          child: Center(
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(Icons.assignment_turned_in_rounded, size: 52, color: AppColors.neonCyan.withValues(alpha: 0.5)),
-                                const SizedBox(height: 14),
+                                const Icon(Icons.task_alt_rounded,
+                                    size: 46, color: Color(0xFF94A3B8)),
+                                const SizedBox(height: 10),
                                 Text(
-                                  'No Calling Tasks Found',
-                                  style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
+                                  'No Employee Tasks Found',
+                                  style: GoogleFonts.inter(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w700,
+                                      color: const Color(0xFF0F172A)),
                                 ),
-                                const SizedBox(height: 6),
+                                const SizedBox(height: 4),
                                 Text(
-                                  isTelecaller
-                                      ? 'No tasks assigned to your queue currently.'
-                                      : 'Click "Create Task" above to bundle leads into an active calling batch.',
-                                  style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
-                                  textAlign: TextAlign.center,
+                                  canManageTasks
+                                      ? 'Click "Assign Task" to assign work to an employee.'
+                                      : 'No tasks assigned to you in this filter.',
+                                  style: GoogleFonts.inter(
+                                      fontSize: 12,
+                                      color: const Color(0xFF64748B)),
                                 ),
                               ],
                             ),
                           ),
                         )
-                      : ListView.separated(
-                          itemCount: leadProvider.tasks.length,
-                          separatorBuilder: (_, __) => const SizedBox(height: 12),
-                          itemBuilder: (context, i) {
-                            final task = leadProvider.tasks[i];
-                            return _buildTaskGlassCard(task, isTelecaller);
-                          },
+                      : RefreshIndicator(
+                          onRefresh: () async => _loadData(),
+                          child: ListView.separated(
+                            itemCount: tasks.length,
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(height: 10),
+                            itemBuilder: (ctx, i) => _buildTaskExpansionTile(
+                              tasks[i],
+                              canManageTasks: canManageTasks,
+                              isMobile: isMobile,
+                            ),
+                          ),
                         ),
             ),
           ],
@@ -441,241 +619,275 @@ class _CallingTasksScreenState extends State<CallingTasksScreen> {
     );
   }
 
+  Widget _buildTaskExpansionTile(
+    CallingTaskModel task, {
+    required bool canManageTasks,
+    required bool isMobile,
+  }) {
+    final priorityColor = _getPriorityColor(task.priority);
+    final statusColor = _getStatusColor(task.status);
+    final hasReport = task.completionReport.trim().isNotEmpty;
+
+    return GlassCard(
+      opacity: 0.96,
+      borderRadius: BorderRadius.circular(14),
+      borderColor: const Color(0xFFE2E8F0),
+      padding: EdgeInsets.zero,
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          tilePadding: EdgeInsets.symmetric(
+              horizontal: isMobile ? 12 : 16, vertical: 4),
+          childrenPadding: EdgeInsets.fromLTRB(
+              isMobile ? 12 : 16, 0, isMobile ? 12 : 16, 14),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          collapsedShape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          leading: Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: statusColor.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(
+              task.status == 'COMPLETED'
+                  ? Icons.check_circle_rounded
+                  : Icons.assignment_outlined,
+              color: statusColor,
+              size: 20,
+            ),
+          ),
+          title: Wrap(
+            spacing: 6,
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Text(
+                task.title,
+                style: GoogleFonts.inter(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w800,
+                    color: const Color(0xFF0F172A)),
+              ),
+              _buildBadge(
+                  _formatTaskType(task.taskType),
+                  const Color(0xFF4338CA),
+                  const Color(0xFFEEF2FF)),
+              _buildBadge(
+                  task.status.replaceAll('_', ' '),
+                  statusColor,
+                  statusColor.withValues(alpha: 0.12)),
+              _buildBadge(
+                  task.priority,
+                  priorityColor,
+                  priorityColor.withValues(alpha: 0.12)),
+            ],
+          ),
+          subtitle: Padding(
+            padding: const EdgeInsets.only(top: 3),
+            child: Text(
+              '${task.assignedToName ?? "Employee"}'
+              '${task.assignedToRole.isNotEmpty ? " (${task.assignedToRole})" : ""}'
+              '${task.dueDate != null && task.dueDate!.isNotEmpty ? " · Due: ${task.dueDate}" : ""}'
+              '${hasReport ? " · Report Submitted" : " · Pending Report"}',
+              style: GoogleFonts.inter(
+                  fontSize: 11.5, color: const Color(0xFF64748B)),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          children: [
+            const Divider(color: Color(0xFFE2E8F0), height: 14),
+            if (task.description.isNotEmpty) ...[
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Instructions: ${task.description}',
+                  style: GoogleFonts.inter(
+                      fontSize: 12, color: const Color(0xFF334155)),
+                ),
+              ),
+              const SizedBox(height: 10),
+            ],
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: hasReport
+                    ? const Color(0xFFECFDF5)
+                    : const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: hasReport
+                      ? const Color(0xFFA7F3D0)
+                      : const Color(0xFFE2E8F0),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    hasReport ? 'Submitted Report' : 'Employee Report',
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: hasReport
+                          ? const Color(0xFF047857)
+                          : const Color(0xFF64748B),
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    hasReport
+                        ? task.completionReport
+                        : 'No report submitted yet.',
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      color: const Color(0xFF0F172A),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  SizedBox(
+                    height: 34,
+                    child: ElevatedButton.icon(
+                      onPressed: () => _showSubmitReportDialog(task),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF047857),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8)),
+                        elevation: 0,
+                      ),
+                      icon: const Icon(Icons.rate_review_outlined, size: 14.5),
+                      label: Text(
+                        hasReport ? 'Update Report' : 'Submit Report',
+                        style: GoogleFonts.inter(
+                            fontSize: 11.5, fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                  ),
+                  if (task.totalLeadsCount > 0)
+                    SizedBox(
+                      height: 34,
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  TaskDetailExecutionScreen(taskId: task.id),
+                            ),
+                          ).then((_) => _loadData());
+                        },
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: Color(0xFFBFDBFE)),
+                          backgroundColor: const Color(0xFFEFF6FF),
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8)),
+                        ),
+                        icon: const Icon(Icons.list_alt_rounded,
+                            size: 14.5, color: Color(0xFF1D4ED8)),
+                        label: Text(
+                          'Task Leads (${task.totalLeadsCount})',
+                          style: GoogleFonts.inter(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w700,
+                              color: const Color(0xFF1D4ED8)),
+                        ),
+                      ),
+                    ),
+                  if (canManageTasks)
+                    SizedBox(
+                      height: 34,
+                      child: OutlinedButton.icon(
+                        onPressed: () =>
+                            context.read<LeadProvider>().deleteTask(task.id),
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: Color(0xFFFECDD3)),
+                          backgroundColor: const Color(0xFFFFF1F2),
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8)),
+                        ),
+                        icon: const Icon(Icons.delete_outline_rounded,
+                            size: 14.5, color: Color(0xFFDC2626)),
+                        label: Text(
+                          'Delete',
+                          style: GoogleFonts.inter(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w700,
+                              color: const Color(0xFFDC2626)),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBadge(String label, Color color, Color bg) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(5),
+      ),
+      child: Text(
+        label,
+        style: GoogleFonts.inter(
+            fontSize: 9.5, fontWeight: FontWeight.w800, color: color),
+      ),
+    );
+  }
+
   Widget _buildDropdownFilter({
-    required double width,
     required String value,
     required List<DropdownMenuItem<String>> items,
-    required ValueChanged<String?> onChanged,
+    required void Function(String?) onChanged,
   }) {
     return Container(
-      width: width,
-      height: 40,
+      height: 38,
       padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: const Color(0xFFF8FAFC),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: const Color(0xFFE2E8F0)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 4,
-            offset: const Offset(0, 1),
-          ),
-        ],
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
           value: value,
           isExpanded: true,
           dropdownColor: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF0F172A), fontWeight: FontWeight.w600),
-          icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF64748B), size: 18),
+          style: GoogleFonts.inter(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: const Color(0xFF0F172A)),
           items: items,
           onChanged: onChanged,
         ),
-      ),
-    );
-  }
-
-  Widget _buildTaskGlassCard(CallingTaskModel task, bool isTelecaller) {
-    final catColor = _parseColor(task.categoryColor);
-    final priColor = _getPriorityColor(task.priority);
-
-    return GlassCard(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            task.title,
-                            style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: priColor.withValues(alpha: 0.18),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: priColor.withValues(alpha: 0.35)),
-                          ),
-                          child: Text(
-                            task.priority,
-                            style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w800, color: priColor),
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (task.description.isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      Text(
-                        task.description,
-                        style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B), height: 1.3),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              PopupMenuButton<String>(
-                icon: const Icon(Icons.more_vert_rounded, size: 20, color: Color(0xFF64748B)),
-                color: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                onSelected: (val) async {
-                  if (val == 'IN_PROGRESS' || val == 'COMPLETED' || val == 'PENDING') {
-                    await context.read<LeadProvider>().updateTaskStatus(task.id, val);
-                  } else if (val == 'DELETE') {
-                    await context.read<LeadProvider>().deleteTask(task.id);
-                  }
-                },
-                itemBuilder: (ctx) => [
-                  const PopupMenuItem(value: 'IN_PROGRESS', child: Text('Mark In Progress', style: TextStyle(color: Color(0xFF0F172A)))),
-                  const PopupMenuItem(value: 'COMPLETED', child: Text('Mark Completed', style: TextStyle(color: Color(0xFF0F172A)))),
-                  if (!isTelecaller)
-                    const PopupMenuItem(value: 'DELETE', child: Text('Cancel Task', style: TextStyle(color: AppColors.neonCoral))),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-
-          // Chips Row
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              if (task.branchName != null)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF1F5F9),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: const Color(0xFFE2E8F0)),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.storefront_rounded, size: 13, color: AppColors.neonViolet),
-                      const SizedBox(width: 5),
-                      Text(task.branchName!, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF0F172A))),
-                    ],
-                  ),
-                ),
-              if (task.categoryName != null)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: catColor.withValues(alpha: 0.18),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: catColor.withValues(alpha: 0.35)),
-                  ),
-                  child: Text(
-                    task.categoryName!,
-                    style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: catColor),
-                  ),
-                ),
-              if (task.assignedToName != null)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF1F5F9),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: const Color(0xFFE2E8F0)),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.person_outline_rounded, size: 13, color: Color(0xFF64748B)),
-                      const SizedBox(width: 5),
-                      Text('Assigned: ${task.assignedToName!}', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF0F172A))),
-                    ],
-                  ),
-                ),
-              if (task.dueDate != null)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF1F5F9),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: const Color(0xFFE2E8F0)),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.event_outlined, size: 13, color: Color(0xFF64748B)),
-                      const SizedBox(width: 5),
-                      Text('Due: ${task.dueDate}', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF0F172A))),
-                    ],
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 16),
-
-          // Progress & Action Row
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Wrap(
-                spacing: 12,
-                runSpacing: 10,
-                alignment: WrapAlignment.spaceBetween,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  Text(
-                    '${task.completedLeadsCount} of ${task.totalLeadsCount} leads completed (${task.progressPercent}%)',
-                    style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
-                  ),
-                  GradientPrimaryButton(
-                    text: isTelecaller ? 'Start Calling (View Numbers)' : 'Open Task & Numbers',
-                    icon: Icons.phone_in_talk_rounded,
-                    onPressed: () async {
-                      await Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => TaskDetailExecutionScreen(taskId: task.id)),
-                      );
-                      _loadData();
-                    },
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(6),
-                child: Container(
-                  height: 6,
-                  color: const Color(0xFFE2E8F0),
-                  child: FractionallySizedBox(
-                    alignment: Alignment.centerLeft,
-                    widthFactor: task.totalLeadsCount > 0 ? (task.completedLeadsCount / task.totalLeadsCount).clamp(0.0, 1.0) : 0.0,
-                    child: Container(
-                      decoration: const BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [Color(0xFF06B6D4), Color(0xFF6366F1), Color(0xFF8B5CF6)],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
       ),
     );
   }

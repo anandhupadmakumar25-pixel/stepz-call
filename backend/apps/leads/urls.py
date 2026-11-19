@@ -10,6 +10,7 @@ from apps.leads.views import (
     LeadImportConfirmView,
     ImportBatchListView,
     LeadBulkAssignView,
+    LeadReassignView,
     PermanentRegistryListView,
     CallingTaskListCreateView,
     CallingTaskDetailView
@@ -28,5 +29,6 @@ urlpatterns = [
     path('import/confirm/<uuid:pk>/', LeadImportConfirmView.as_view(), name='lead_import_confirm'),
     path('import/batches/', ImportBatchListView.as_view(), name='import_batch_list'),
     path('bulk-assign/', LeadBulkAssignView.as_view(), name='lead_bulk_assign'),
+    path('reassign/', LeadReassignView.as_view(), name='lead_reassign'),
     path('permanent-registry/', PermanentRegistryListView.as_view(), name='permanent_registry_list'),
 ]

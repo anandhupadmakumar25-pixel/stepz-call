@@ -40,8 +40,8 @@ class _PlanManagementScreenState extends State<PlanManagementScreen> {
   }
 
   void _showCreatePlanDialog() {
+    final compProv = context.read<CompanyProvider>();
     final nameCtrl = TextEditingController();
-    final codeCtrl = TextEditingController();
     String selectedCurrency = 'INR';
     final priceMonthlyCtrl = TextEditingController(text: '999.00');
     final priceYearlyCtrl = TextEditingController(text: '11988.00');
@@ -136,43 +136,12 @@ class _PlanManagementScreenState extends State<PlanManagementScreen> {
                         ),
                       ],
 
-                      if (isMobile) ...[
-                        GlassTextField(
-                          label: 'Plan Name *',
-                          hintText: 'e.g. Growth Pro',
-                          controller: nameCtrl,
-                          validator: (v) => v == null || v.trim().isEmpty ? 'Plan Name is required' : null,
-                        ),
-                        const SizedBox(height: 12),
-                        GlassTextField(
-                          label: 'Plan Code / Slug *',
-                          hintText: 'growth_pro',
-                          controller: codeCtrl,
-                          validator: (v) => v == null || v.trim().isEmpty ? 'Plan Code is required' : null,
-                        ),
-                      ] else
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              child: GlassTextField(
-                                label: 'Plan Name *',
-                                hintText: 'e.g. Growth Pro',
-                                controller: nameCtrl,
-                                validator: (v) => v == null || v.trim().isEmpty ? 'Plan Name is required' : null,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: GlassTextField(
-                                label: 'Plan Code / Slug *',
-                                hintText: 'growth_pro',
-                                controller: codeCtrl,
-                                validator: (v) => v == null || v.trim().isEmpty ? 'Plan Code is required' : null,
-                              ),
-                            ),
-                          ],
-                        ),
+                      GlassTextField(
+                        label: 'Plan Name *',
+                        hintText: 'e.g. Growth Pro',
+                        controller: nameCtrl,
+                        validator: (v) => v == null || v.trim().isEmpty ? 'Plan Name is required' : null,
+                      ),
                       const SizedBox(height: 12),
 
                       // Currency Selector
@@ -394,7 +363,22 @@ class _PlanManagementScreenState extends State<PlanManagementScreen> {
                                 }
 
                                 final name = nameCtrl.text.trim();
-                                final code = codeCtrl.text.trim().toLowerCase().replaceAll(' ', '_');
+                                final existingCodes = compProv.plans.map((p) => p.code.toLowerCase()).toSet();
+                                final baseSlug = name
+                                    .toLowerCase()
+                                    .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
+                                    .replaceAll(RegExp(r'^_+|_+$'), '');
+                                String code = baseSlug.isEmpty
+                                    ? 'plan_${DateTime.now().millisecondsSinceEpoch}'
+                                    : baseSlug;
+                                if (code.length > 44) code = code.substring(0, 44);
+                                if (existingCodes.contains(code)) {
+                                  int suffix = 2;
+                                  while (existingCodes.contains('${code}_$suffix')) {
+                                    suffix++;
+                                  }
+                                  code = '${code}_$suffix';
+                                }
 
                                 setDlgState(() => localError = null);
                                 final messenger = ScaffoldMessenger.of(context);
@@ -517,12 +501,15 @@ class _PlanManagementScreenState extends State<PlanManagementScreen> {
                     text: 'Create Plan',
                     icon: Icons.add_rounded,
                     onPressed: _showCreatePlanDialog,
+                    height: isMobile ? 36 : 38,
+                    borderRadius: 10,
+                    padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 14),
                   ),
                 ],
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
 
-              // Plans Grid / List
+              // Plans ExpansionTile List
               Expanded(
                 child: plans.isEmpty
                     ? Center(
@@ -535,22 +522,11 @@ class _PlanManagementScreenState extends State<PlanManagementScreen> {
                           ),
                         ),
                       )
-                    : isMobile
-                        ? ListView.separated(
-                            itemCount: plans.length,
-                            separatorBuilder: (_, __) => const SizedBox(height: 14),
-                            itemBuilder: (ctx, i) => _buildPlanCard(plans[i], isMobile: true),
-                          )
-                        : GridView.builder(
-                            itemCount: plans.length,
-                            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: plans.length > 2 ? 3 : 2,
-                              crossAxisSpacing: 16,
-                              mainAxisSpacing: 16,
-                              childAspectRatio: 0.88,
-                            ),
-                            itemBuilder: (ctx, i) => _buildPlanCard(plans[i], isMobile: false),
-                          ),
+                    : ListView.separated(
+                        itemCount: plans.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 10),
+                        itemBuilder: (ctx, i) => _buildPlanCard(plans[i], isMobile: isMobile),
+                      ),
               ),
             ],
           ),
@@ -563,13 +539,23 @@ class _PlanManagementScreenState extends State<PlanManagementScreen> {
     final isEnterprise = p.code.toLowerCase().contains('enterprise');
     final isGrowth = p.code.toLowerCase().contains('growth') || p.code.toLowerCase().contains('pro');
 
+    final accentColor = isEnterprise
+        ? const Color(0xFF92400E)
+        : (isGrowth ? const Color(0xFF047857) : const Color(0xFF1D4ED8));
+    final badgeBg = isEnterprise
+        ? const Color(0xFFFEF3C7)
+        : (isGrowth ? const Color(0xFFECFDF5) : const Color(0xFFEFF6FF));
+    final badgeBorder = isEnterprise
+        ? const Color(0xFFD4AF37)
+        : (isGrowth ? const Color(0xFF10B981) : const Color(0xFF3B82F6));
+
     final modulesWrap = Wrap(
       spacing: 6,
       runSpacing: 6,
       children: p.allowedMenus.map<Widget>((key) {
         final label = _availableMenus[key] ?? key;
         return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
           decoration: BoxDecoration(
             color: const Color(0xFFF1F5F9),
             borderRadius: BorderRadius.circular(6),
@@ -577,108 +563,129 @@ class _PlanManagementScreenState extends State<PlanManagementScreen> {
           ),
           child: Text(
             label,
-            style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w600, color: const Color(0xFF334155)),
+            style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w600, color: const Color(0xFF334155)),
           ),
         );
       }).toList(),
     );
 
     return GlassCard(
-      opacity: 0.95,
-      borderRadius: BorderRadius.circular(20),
-      padding: EdgeInsets.all(isMobile ? 18 : 22),
+      opacity: 0.96,
+      borderRadius: BorderRadius.circular(14),
+      padding: EdgeInsets.zero,
       borderColor: isEnterprise ? const Color(0xFFD4AF37) : const Color(0xFFE2E8F0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: isMobile ? MainAxisSize.min : MainAxisSize.max,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          tilePadding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 16, vertical: 4),
+          childrenPadding: EdgeInsets.fromLTRB(isMobile ? 12 : 16, 0, isMobile ? 12 : 16, 14),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          collapsedShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          leading: Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: badgeBg,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: badgeBorder.withValues(alpha: 0.5)),
+            ),
+            child: Icon(Icons.workspace_premium_rounded, size: 19, color: accentColor),
+          ),
+          title: Row(
             children: [
+              Flexible(
+                child: Text(
+                  p.name,
+                  style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 8),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
-                  color: isEnterprise
-                      ? const Color(0xFFFEF3C7)
-                      : (isGrowth ? const Color(0xFFECFDF5) : const Color(0xFFEFF6FF)),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: isEnterprise
-                        ? const Color(0xFFD4AF37)
-                        : (isGrowth ? const Color(0xFF10B981) : const Color(0xFF3B82F6)),
-                  ),
+                  color: badgeBg,
+                  borderRadius: BorderRadius.circular(5),
+                  border: Border.all(color: badgeBorder),
                 ),
                 child: Text(
                   p.code.toUpperCase(),
-                  style: GoogleFonts.inter(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                    color: isEnterprise
-                        ? const Color(0xFF92400E)
-                        : (isGrowth ? const Color(0xFF047857) : const Color(0xFF1D4ED8)),
-                  ),
+                  style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w800, color: accentColor),
                 ),
               ),
-              Text(
-                '${p.companyCount} Active Tenants',
-                style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF64748B)),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            p.name,
-            style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
-          ),
-          const SizedBox(height: 6),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              Text(
-                '${p.currencySymbol}${p.priceMonthly.toStringAsFixed(0)}',
-                style: GoogleFonts.inter(fontSize: 26, fontWeight: FontWeight.w900, color: const Color(0xFF0F172A)),
-              ),
-              Text(' / month', style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B))),
-              const Spacer(),
-              Text(
-                '${p.currencySymbol}${p.priceYearly.toStringAsFixed(0)}/yr',
-                style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF047857)),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          const Divider(color: Color(0xFFE2E8F0), height: 1),
-          const SizedBox(height: 14),
-
-          // Limits
-          Row(
-            children: [
-              const Icon(Icons.people_outline_rounded, size: 16, color: Color(0xFF2563EB)),
               const SizedBox(width: 8),
-              Text('Up to ${p.maxUsers} Users', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF334155))),
+              Text(
+                '${p.currencySymbol}${p.priceMonthly.toStringAsFixed(0)}/mo',
+                style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w800, color: const Color(0xFF047857)),
+              ),
             ],
           ),
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              const Icon(Icons.storage_rounded, size: 16, color: Color(0xFF10B981)),
-              const SizedBox(width: 8),
-              Text('Up to ${p.maxLeads} Leads', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF334155))),
-            ],
+          subtitle: Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(
+              '${p.currencySymbol}${p.priceYearly.toStringAsFixed(0)}/yr · Up to ${p.maxUsers} Users · ${p.maxLeads} Leads · ${p.companyCount} Tenants',
+              style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B)),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
-          const SizedBox(height: 12),
-
-          Text('Permitted Modules:', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF64748B))),
-          const SizedBox(height: 6),
-          if (isMobile)
-            modulesWrap
-          else
-            Expanded(
-              child: SingleChildScrollView(
-                child: modulesWrap,
+          children: [
+            const Divider(color: Color(0xFFE2E8F0), height: 14),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _buildInfoChip(Icons.payments_outlined, 'Monthly: ${p.currencySymbol}${p.priceMonthly.toStringAsFixed(0)}', const Color(0xFF047857), const Color(0xFFECFDF5)),
+                _buildInfoChip(Icons.calendar_today_outlined, 'Yearly: ${p.currencySymbol}${p.priceYearly.toStringAsFixed(0)}', const Color(0xFF4338CA), const Color(0xFFEEF2FF)),
+                _buildInfoChip(Icons.people_outline_rounded, 'Up to ${p.maxUsers} Users', const Color(0xFF0284C7), const Color(0xFFF0F9FF)),
+                _buildInfoChip(Icons.storage_rounded, 'Up to ${p.maxLeads} Leads', const Color(0xFF7C3AED), const Color(0xFFF5F3FF)),
+                _buildInfoChip(Icons.apartment_rounded, '${p.companyCount} Active Tenants', const Color(0xFFD97706), const Color(0xFFFFFBEB)),
+              ],
+            ),
+            if (p.description != null && p.description.toString().trim().isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  p.description.toString(),
+                  style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF475569)),
+                ),
+              ),
+            ],
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Permitted Modules (${p.allowedMenus.length})',
+                style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF64748B)),
               ),
             ),
+            const SizedBox(height: 6),
+            Align(alignment: Alignment.centerLeft, child: modulesWrap),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInfoChip(IconData icon, String label, Color color, Color bg) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13.5, color: color),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: color),
+          ),
         ],
       ),
     );

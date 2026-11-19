@@ -7,8 +7,19 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../models/quotation_model.dart';
 import '../../models/invoice_model.dart';
 import '../../models/receipt_voucher_model.dart';
+import '../../models/document_template_model.dart';
 
 class PdfInvoiceService {
+  static PdfColor _pdfColorFromHex(String? hex, PdfColor fallback) {
+    if (hex == null || hex.isEmpty) return fallback;
+    try {
+      final clean = hex.replaceAll('#', '');
+      if (clean.length == 6) {
+        return PdfColor.fromInt(int.parse('FF$clean', radix: 16));
+      }
+    } catch (_) {}
+    return fallback;
+  }
   static pw.MemoryImage? _decodeLogo(String? logo) {
     if (logo == null || logo.trim().isEmpty) return null;
     try {
@@ -36,8 +47,14 @@ class PdfInvoiceService {
     bool includeCst = false,
   }) async {
     final pdf = pw.Document();
-    final logoImage = _decodeLogo(companyLogo);
     final curr = quotation.currency.isNotEmpty ? quotation.currency : 'INR';
+    final hasCustomTpl = quotation.templateSnapshot.isNotEmpty;
+    final tpl = TemplateLayoutConfig.fromJson(quotation.templateSnapshot, docType: 'QUOTATION');
+    final logoImage = _decodeLogo(tpl.logoOverride.trim().isNotEmpty ? tpl.logoOverride : companyLogo);
+    final tplColor = _pdfColorFromHex(tpl.primaryColorHex, PdfColors.indigo800);
+    final tplAccent = _pdfColorFromHex(tpl.accentColorHex, PdfColors.green800);
+    final borderRadius = tpl.borderStyle == 'rounded' ? 10.0 : 4.0;
+    final hasPageBorder = hasCustomTpl && tpl.borderStyle != 'none';
 
     pdf.addPage(
       pw.Page(
@@ -81,7 +98,7 @@ class PdfInvoiceService {
                                 style: pw.TextStyle(
                                   fontSize: 18,
                                   fontWeight: pw.FontWeight.bold,
-                                  color: PdfColors.indigo900,
+                                  color: tplColor,
                                 ),
                               ),
                               if (companyGstin != null && companyGstin.isNotEmpty) ...[
@@ -118,16 +135,18 @@ class PdfInvoiceService {
                       pw.Container(
                         padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                         decoration: pw.BoxDecoration(
-                          color: includeCst ? PdfColors.amber50 : PdfColors.indigo50,
-                          borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
-                          border: pw.Border.all(color: includeCst ? PdfColors.amber300 : PdfColors.indigo200),
+                          color: includeCst ? PdfColors.amber50 : tplColor,
+                          borderRadius: pw.BorderRadius.all(pw.Radius.circular(borderRadius)),
+                          border: pw.Border.all(color: includeCst ? PdfColors.amber300 : tplColor),
                         ),
                         child: pw.Text(
-                          includeCst ? 'INTERNAL CST & MARGIN QUOTATION' : 'SALES QUOTATION',
+                          includeCst
+                              ? 'INTERNAL CST & MARGIN QUOTATION'
+                              : (tpl.titleOverride.isNotEmpty ? tpl.titleOverride.toUpperCase() : 'SALES QUOTATION'),
                           style: pw.TextStyle(
                             fontSize: 11,
                             fontWeight: pw.FontWeight.bold,
-                            color: includeCst ? PdfColors.amber900 : PdfColors.indigo800,
+                            color: includeCst ? PdfColors.amber900 : PdfColors.white,
                           ),
                         ),
                       ),
@@ -140,7 +159,7 @@ class PdfInvoiceService {
                   ),
                 ],
               ),
-              pw.Divider(color: PdfColors.grey300, thickness: 1, height: 24),
+              pw.Divider(color: tplColor, thickness: 1.5, height: 22),
 
               // Customer Info
               pw.Row(
@@ -158,6 +177,13 @@ class PdfInvoiceService {
                         pw.Text('Email: ${quotation.customerEmail}', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey800)),
                       if (quotation.customerAddress.isNotEmpty)
                         pw.Text(quotation.customerAddress, style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
+                      if (tpl.filledFields.isNotEmpty) ...[
+                        pw.SizedBox(height: 4),
+                        ...tpl.filledFields.entries.map((e) => pw.Text(
+                              '${e.key}: ${e.value}',
+                              style: pw.TextStyle(fontSize: 9.5, fontWeight: pw.FontWeight.bold, color: tplColor),
+                            )),
+                      ],
                     ],
                   ),
                   pw.Column(
@@ -209,23 +235,23 @@ class PdfInvoiceService {
                   children: [
                     // Table Header
                     pw.TableRow(
-                      decoration: pw.BoxDecoration(color: includeCst ? PdfColors.amber50 : PdfColors.indigo50),
+                      decoration: pw.BoxDecoration(color: includeCst ? PdfColors.amber50 : tplColor),
                       children: [
-                        pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('#', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5))),
-                        pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Item Description', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5))),
+                        pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('#', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5, color: includeCst ? PdfColors.black : PdfColors.white))),
+                        pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Item Description', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5, color: includeCst ? PdfColors.black : PdfColors.white))),
                         for (final col in customCols)
-                          pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(col, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5))),
+                          pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(col, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5, color: includeCst ? PdfColors.black : PdfColors.white))),
                         if (showQty)
-                          pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Qty', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5))),
+                          pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Qty', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5, color: includeCst ? PdfColors.black : PdfColors.white))),
                         if (includeCst) ...[
                           pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('CST', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5, color: PdfColors.amber900))),
                           pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('SUM', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5, color: PdfColors.amber900))),
                         ],
                         if (showPrice)
-                          pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Rate', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5))),
+                          pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Rate', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5, color: includeCst ? PdfColors.black : PdfColors.white))),
                         if (showTax && !includeCst)
-                          pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Tax %', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5))),
-                        pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Total', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5))),
+                          pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Tax %', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5, color: PdfColors.white))),
+                        pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Total', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5, color: includeCst ? PdfColors.black : PdfColors.white))),
                         if (includeCst)
                           pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Margin', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5, color: PdfColors.green900))),
                       ],
@@ -348,7 +374,7 @@ class PdfInvoiceService {
                             '$curr ${quotation.grandTotal.toStringAsFixed(2)}',
                             isBold: true,
                             fontSize: 12,
-                            textColor: PdfColors.indigo900,
+                            textColor: tplColor,
                           ),
                         ],
                       ),
@@ -356,6 +382,32 @@ class PdfInvoiceService {
                   ),
                 ],
               ),
+              if (tpl.bankDetailsText.isNotEmpty) ...[
+                pw.SizedBox(height: 12),
+                pw.Container(
+                  width: double.infinity,
+                  padding: const pw.EdgeInsets.all(10),
+                  decoration: pw.BoxDecoration(
+                    color: PdfColors.grey50,
+                    border: pw.Border.all(color: tplColor, width: 0.7),
+                    borderRadius: pw.BorderRadius.all(pw.Radius.circular(borderRadius)),
+                  ),
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text('BANK / PAYMENT DETAILS', style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold, color: tplColor)),
+                      pw.SizedBox(height: 3),
+                      pw.Text(tpl.bankDetailsText, style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.grey800)),
+                    ],
+                  ),
+                ),
+              ],
+              if (hasPageBorder)
+                pw.Container(
+                  margin: const pw.EdgeInsets.only(top: 8),
+                  height: 2,
+                  color: tplAccent,
+                ),
               pw.Spacer(),
 
               // Footer
@@ -385,8 +437,11 @@ class PdfInvoiceService {
     String? companyLogo,
   }) async {
     final pdf = pw.Document();
-    final logoImage = _decodeLogo(companyLogo);
     final curr = invoice.currency.isNotEmpty ? invoice.currency : 'INR';
+    final tpl = TemplateLayoutConfig.fromJson(invoice.templateSnapshot, docType: 'INVOICE');
+    final logoImage = _decodeLogo(tpl.logoOverride.trim().isNotEmpty ? tpl.logoOverride : companyLogo);
+    final tplColor = _pdfColorFromHex(tpl.primaryColorHex, PdfColors.indigo800);
+    final borderRadius = tpl.borderStyle == 'rounded' ? 10.0 : 4.0;
 
     pdf.addPage(
       pw.Page(
@@ -438,7 +493,7 @@ class PdfInvoiceService {
                                 style: pw.TextStyle(
                                   fontSize: 18,
                                   fontWeight: pw.FontWeight.bold,
-                                  color: PdfColors.indigo900,
+                                  color: tplColor,
                                 ),
                               ),
                               if (companyGstin != null && companyGstin.isNotEmpty) ...[
@@ -475,16 +530,16 @@ class PdfInvoiceService {
                       pw.Container(
                         padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                         decoration: pw.BoxDecoration(
-                          color: isPaid ? PdfColors.green50 : PdfColors.amber50,
-                          borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
-                          border: pw.Border.all(color: statusColor),
+                          color: invoice.templateSnapshot.isNotEmpty ? tplColor : (isPaid ? PdfColors.green50 : PdfColors.amber50),
+                          borderRadius: pw.BorderRadius.all(pw.Radius.circular(borderRadius)),
+                          border: pw.Border.all(color: invoice.templateSnapshot.isNotEmpty ? tplColor : statusColor),
                         ),
                         child: pw.Text(
-                          'TAX INVOICE (FIXED PRICE BILL)',
+                          tpl.titleOverride.isNotEmpty ? tpl.titleOverride.toUpperCase() : 'TAX INVOICE (FIXED PRICE BILL)',
                           style: pw.TextStyle(
                             fontSize: 12,
                             fontWeight: pw.FontWeight.bold,
-                            color: statusColor,
+                            color: invoice.templateSnapshot.isNotEmpty ? PdfColors.white : statusColor,
                           ),
                         ),
                       ),
@@ -499,7 +554,7 @@ class PdfInvoiceService {
                   ),
                 ],
               ),
-              pw.Divider(color: PdfColors.grey300, thickness: 1, height: 24),
+              pw.Divider(color: tplColor, thickness: 1.5, height: 22),
 
               // Customer Info & Status
               pw.Row(
@@ -517,6 +572,13 @@ class PdfInvoiceService {
                         pw.Text('Email: ${invoice.customerEmail}', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey800)),
                       if (invoice.customerAddress.isNotEmpty)
                         pw.Text(invoice.customerAddress, style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
+                      if (tpl.filledFields.isNotEmpty) ...[
+                        pw.SizedBox(height: 4),
+                        ...tpl.filledFields.entries.map((e) => pw.Text(
+                              '${e.key}: ${e.value}',
+                              style: pw.TextStyle(fontSize: 9.5, fontWeight: pw.FontWeight.bold, color: tplColor),
+                            )),
+                      ],
                     ],
                   ),
                   pw.Column(
@@ -577,19 +639,19 @@ class PdfInvoiceService {
                   columnWidths: colWidths,
                   children: [
                     pw.TableRow(
-                      decoration: const pw.BoxDecoration(color: PdfColors.indigo50),
+                      decoration: pw.BoxDecoration(color: invoice.templateSnapshot.isNotEmpty ? tplColor : PdfColors.indigo50),
                       children: [
-                        pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('#', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9))),
-                        pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Item Description', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9))),
+                        pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('#', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9, color: invoice.templateSnapshot.isNotEmpty ? PdfColors.white : PdfColors.black))),
+                        pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Item Description', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9, color: invoice.templateSnapshot.isNotEmpty ? PdfColors.white : PdfColors.black))),
                         for (final col in customCols)
-                          pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(col, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9))),
+                          pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(col, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9, color: invoice.templateSnapshot.isNotEmpty ? PdfColors.white : PdfColors.black))),
                         if (showQty)
-                          pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Qty', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9))),
+                          pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Qty', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9, color: invoice.templateSnapshot.isNotEmpty ? PdfColors.white : PdfColors.black))),
                         if (showPrice)
-                          pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Rate', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9))),
+                          pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Rate', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9, color: invoice.templateSnapshot.isNotEmpty ? PdfColors.white : PdfColors.black))),
                         if (showTax)
-                          pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Tax %', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9))),
-                        pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Total', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9))),
+                          pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Tax %', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9, color: invoice.templateSnapshot.isNotEmpty ? PdfColors.white : PdfColors.black))),
+                        pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Total', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9, color: invoice.templateSnapshot.isNotEmpty ? PdfColors.white : PdfColors.black))),
                       ],
                     ),
                     ...invoice.items.asMap().entries.map((entry) {
@@ -689,7 +751,7 @@ class PdfInvoiceService {
                             '$curr ${invoice.grandTotal.toStringAsFixed(2)}',
                             isBold: true,
                             fontSize: 11,
-                            textColor: PdfColors.indigo900,
+                            textColor: invoice.templateSnapshot.isNotEmpty ? tplColor : PdfColors.indigo900,
                           ),
                           _buildPdfAmountRow(
                             'Amount Paid',
@@ -711,6 +773,32 @@ class PdfInvoiceService {
                   ),
                 ],
               ),
+              if (tpl.bankDetailsText.isNotEmpty) ...[
+                pw.SizedBox(height: 12),
+                pw.Container(
+                  width: double.infinity,
+                  padding: const pw.EdgeInsets.all(10),
+                  decoration: pw.BoxDecoration(
+                    color: PdfColors.grey50,
+                    border: pw.Border.all(color: tplColor, width: 0.7),
+                    borderRadius: pw.BorderRadius.all(pw.Radius.circular(borderRadius)),
+                  ),
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text('BANK / PAYMENT DETAILS', style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold, color: tplColor)),
+                      pw.SizedBox(height: 3),
+                      pw.Text(tpl.bankDetailsText, style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.grey800)),
+                    ],
+                  ),
+                ),
+              ],
+              if (invoice.templateSnapshot.isNotEmpty && tpl.borderStyle != 'none')
+                pw.Container(
+                  margin: const pw.EdgeInsets.only(top: 8),
+                  height: 2,
+                  color: tplColor,
+                ),
               pw.Spacer(),
 
               // Footer
@@ -939,8 +1027,10 @@ For any support, feel free to reply directly to this message.''';
     String? companyLogo,
   }) async {
     final pdf = pw.Document();
-    final logoImage = _decodeLogo(companyLogo);
     final curr = voucher.currency.isNotEmpty ? voucher.currency : 'INR';
+    final tpl = TemplateLayoutConfig.fromJson(voucher.templateSnapshot, docType: 'RECEIPT');
+    final logoImage = _decodeLogo(tpl.logoOverride.trim().isNotEmpty ? tpl.logoOverride : companyLogo);
+    final tplColor = _pdfColorFromHex(tpl.primaryColorHex, PdfColors.blue900);
 
     pdf.addPage(
       pw.Page(
@@ -954,7 +1044,7 @@ For any support, feel free to reply directly to this message.''';
               pw.Container(
                 padding: const pw.EdgeInsets.all(16),
                 decoration: pw.BoxDecoration(
-                  border: pw.Border.all(color: PdfColors.blue900, width: 2),
+                  border: pw.Border.all(color: tplColor, width: tpl.borderStyle == 'double' ? 2.5 : 1.5),
                   borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
                 ),
                 child: pw.Stack(
@@ -983,7 +1073,7 @@ For any support, feel free to reply directly to this message.''';
                                     style: pw.TextStyle(
                                       fontSize: 15,
                                       fontWeight: pw.FontWeight.bold,
-                                      color: PdfColors.blue900,
+                                      color: tplColor,
                                     ),
                                   ),
                                   if (companyAddress != null && companyAddress.isNotEmpty)
@@ -1007,11 +1097,18 @@ For any support, feel free to reply directly to this message.''';
                                 pw.Container(
                                   padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                                   decoration: pw.BoxDecoration(
-                                    color: PdfColors.blue50,
+                                    color: voucher.templateSnapshot.isNotEmpty ? tplColor : PdfColors.blue50,
                                     borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
-                                    border: pw.Border.all(color: PdfColors.blue800, width: 1),
+                                    border: pw.Border.all(color: tplColor, width: 1),
                                   ),
-                                  child: pw.Text('RECEIPT VOUCHER', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900)),
+                                  child: pw.Text(
+                                    tpl.titleOverride.isNotEmpty ? tpl.titleOverride.toUpperCase() : 'RECEIPT VOUCHER',
+                                    style: pw.TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: pw.FontWeight.bold,
+                                      color: voucher.templateSnapshot.isNotEmpty ? PdfColors.white : PdfColors.blue900,
+                                    ),
+                                  ),
                                 ),
                                 pw.SizedBox(height: 4),
                                 pw.Text('NO. ${voucher.voucherNumber}', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.red800)),
@@ -1020,7 +1117,7 @@ For any support, feel free to reply directly to this message.''';
                             ),
                           ],
                         ),
-                        pw.Divider(color: PdfColors.blue800, thickness: 1, height: 16),
+                        pw.Divider(color: tplColor, thickness: 1, height: 16),
 
                         // Amount Box
                         pw.Row(
@@ -1243,41 +1340,43 @@ For any support, feel free to reply directly to this message.''';
                       ],
                     ),
 
-                    // Overlay Rubber Stamp (unclipped, genuine stamp position)
-                    if (voucher.hasWatermarkStamp)
+                    // Overlay Rubber Stamp (unclipped, template-driven position & label)
+                    if (voucher.hasWatermarkStamp && tpl.stamp.enabled)
                       pw.Positioned(
-                        right: 70,
-                        bottom: 12,
+                        left: voucher.templateSnapshot.isNotEmpty ? (tpl.stamp.xRatio.clamp(0.05, 0.72) * 480) : null,
+                        top: voucher.templateSnapshot.isNotEmpty ? (tpl.stamp.yRatio.clamp(0.05, 0.85) * 420) : null,
+                        right: voucher.templateSnapshot.isNotEmpty ? null : 70,
+                        bottom: voucher.templateSnapshot.isNotEmpty ? null : 12,
                         child: pw.Transform.rotate(
-                          angle: -0.14,
+                          angle: tpl.stamp.rotationDeg * 3.14159265 / 180.0,
                           child: pw.Container(
                             padding: const pw.EdgeInsets.all(2),
                             decoration: pw.BoxDecoration(
-                              border: pw.Border.all(color: PdfColors.blue800, width: 2),
+                              border: pw.Border.all(color: tplColor, width: 2),
                               borderRadius: const pw.BorderRadius.all(pw.Radius.circular(5)),
                             ),
                             child: pw.Container(
                               padding: const pw.EdgeInsets.symmetric(horizontal: 14, vertical: 5),
                               decoration: pw.BoxDecoration(
-                                border: pw.Border.all(color: PdfColors.blue800, width: 0.8),
+                                border: pw.Border.all(color: tplColor, width: 0.8),
                                 borderRadius: const pw.BorderRadius.all(pw.Radius.circular(3)),
                               ),
                               child: pw.Column(
                                 mainAxisSize: pw.MainAxisSize.min,
                                 children: [
                                   pw.Text(
-                                    'RECEIVED',
+                                    tpl.stamp.label.isNotEmpty ? tpl.stamp.label.toUpperCase() : 'RECEIVED',
                                     style: pw.TextStyle(
                                       fontSize: 16,
                                       fontWeight: pw.FontWeight.bold,
-                                      color: PdfColors.blue800,
+                                      color: tplColor,
                                       letterSpacing: 2,
                                     ),
                                   ),
                                   pw.SizedBox(height: 1),
                                   pw.Text(
                                     'VERIFIED PAYMENT • ${voucher.date}',
-                                    style: pw.TextStyle(fontSize: 6.5, fontWeight: pw.FontWeight.bold, color: PdfColors.blue800),
+                                    style: pw.TextStyle(fontSize: 6.5, fontWeight: pw.FontWeight.bold, color: tplColor),
                                   ),
                                 ],
                               ),

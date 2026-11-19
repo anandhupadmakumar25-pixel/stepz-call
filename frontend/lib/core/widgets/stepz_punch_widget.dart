@@ -137,24 +137,24 @@ class _StepzPunchWidgetState extends State<StepzPunchWidget> {
       return;
     }
 
-    // Geofence validation for office employees
+    // Strict geofence validation for office employees (cannot check in outside radius)
     if (!isFieldStaff && !_isInsideGeofence && _closestBranch != null) {
       final distStr = '${_distanceToClosestBranchMeters?.toStringAsFixed(0) ?? '?'} m';
-      final allowedRadiusStr = '${_closestBranch!.radiusMeters} m';
+      final allowedRadiusStr = '${_closestBranch!.radiusMeters > 0 ? _closestBranch!.radiusMeters : 100} m';
 
-      final proceed = await showDialog<bool>(
+      await showDialog<void>(
         context: context,
         builder: (ctx) => AlertDialog(
-          backgroundColor: const Color(0xFF1E293B),
+          backgroundColor: Colors.white,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: Row(
             children: [
-              const Icon(Icons.warning_amber_rounded, color: Color(0xFFF59E0B), size: 24),
+              const Icon(Icons.location_off_rounded, color: Color(0xFFDC2626), size: 22),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'Outside Office Geofence',
-                  style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16),
+                  'Outside Location Radius',
+                  style: GoogleFonts.inter(color: const Color(0xFF0F172A), fontWeight: FontWeight.w800, fontSize: 16),
                 ),
               ),
             ],
@@ -165,37 +165,37 @@ class _StepzPunchWidgetState extends State<StepzPunchWidget> {
             children: [
               Text(
                 'You are currently $distStr away from "${_closestBranch!.name}".',
-                style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13),
+                style: GoogleFonts.inter(color: const Color(0xFF0F172A), fontWeight: FontWeight.w600, fontSize: 13),
               ),
               const SizedBox(height: 8),
               Text(
-                'Company policy requires check-in within the $allowedRadiusStr office perimeter.\n\n'
-                'If you punch in now, your record will be marked as "OUT_OF_FENCE" with your exact GPS coordinates visible to your supervisor.',
-                style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 12, height: 1.4),
+                'Check-in is strictly allowed only within the $allowedRadiusStr office perimeter. Please move inside the allowed radius and refresh GPS.',
+                style: GoogleFonts.inter(color: const Color(0xFF475569), fontSize: 12.5, height: 1.45),
               ),
             ],
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: Text('Cancel', style: GoogleFonts.inter(color: AppColors.textSecondary)),
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Close'),
             ),
-            ElevatedButton(
+            ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFF59E0B),
+                backgroundColor: AppColors.neonCyan,
+                foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               ),
-              onPressed: () => Navigator.pop(ctx, true),
-              child: Text(
-                'Punch Anyway (Out of Fence)',
-                style: GoogleFonts.inter(color: Colors.black, fontWeight: FontWeight.w700, fontSize: 12),
-              ),
+              icon: const Icon(Icons.my_location_rounded, size: 16),
+              label: const Text('Refresh GPS'),
+              onPressed: () async {
+                Navigator.pop(ctx);
+                await _detectLocation();
+              },
             ),
           ],
         ),
       );
-
-      if (proceed != true || !mounted) return;
+      return;
     }
 
     if (!mounted) return;
@@ -236,19 +236,34 @@ class _StepzPunchWidgetState extends State<StepzPunchWidget> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('End Shift & Punch Out?', style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w700)),
+        title: Row(
+          children: [
+            const Icon(Icons.logout_rounded, color: AppColors.neonCoral, size: 22),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Confirm Check Out?',
+                style: GoogleFonts.inter(color: const Color(0xFF0F172A), fontWeight: FontWeight.w800, fontSize: 16),
+              ),
+            ),
+          ],
+        ),
         content: Text(
-          'Your final working hours will be logged based on your live GPS timestamp.',
-          style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 13),
+          'Are you sure you want to check out for today? Your working hours will be calculated using your current timestamp.',
+          style: GoogleFonts.inter(color: const Color(0xFF475569), fontSize: 13, height: 1.4),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.neonCoral),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.neonCoral,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Confirm Punch Out', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            child: const Text('Confirm Check Out', style: TextStyle(fontWeight: FontWeight.w700)),
           ),
         ],
       ),
@@ -284,7 +299,6 @@ class _StepzPunchWidgetState extends State<StepzPunchWidget> {
     final isFieldStaff = today?.isFieldStaffMode ?? false;
 
     final timeStr = DateFormat('hh:mm:ss a').format(_currentTime);
-    final dateStr = DateFormat('EEEE, MMM d, yyyy').format(_currentTime);
 
     return GlassCard(
       blur: 20,
@@ -301,71 +315,80 @@ class _StepzPunchWidgetState extends State<StepzPunchWidget> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      gradient: isCheckedIn && !isCheckedOut
-                          ? AppColors.emeraldGradient
-                          : AppColors.primaryGradient,
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: [
-                        BoxShadow(
-                          color: (isCheckedIn && !isCheckedOut ? const Color(0xFF10B981) : AppColors.neonViolet)
-                              .withValues(alpha: 0.35),
-                          blurRadius: 10,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Icon(
-                      isCheckedIn && !isCheckedOut
-                          ? Icons.fingerprint_rounded
-                          : Icons.how_to_reg_rounded,
-                      color: Colors.white,
-                      size: 20,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Stepz Attendance',
-                        style: GoogleFonts.inter(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w800,
-                          color: const Color(0xFF0F172A),
-                        ),
+              Expanded(
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        gradient: isCheckedIn && !isCheckedOut
+                            ? AppColors.emeraldGradient
+                            : AppColors.primaryGradient,
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: (isCheckedIn && !isCheckedOut ? const Color(0xFF10B981) : AppColors.neonViolet)
+                                .withValues(alpha: 0.35),
+                            blurRadius: 10,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
                       ),
-                      Text(
-                        isFieldStaff ? 'Field Staff Track Mode' : 'Office Geofence (100m Perimeter)',
-                        style: GoogleFonts.inter(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w500,
-                          color: const Color(0xFF64748B),
-                        ),
+                      child: Icon(
+                        isCheckedIn && !isCheckedOut
+                            ? Icons.fingerprint_rounded
+                            : Icons.how_to_reg_rounded,
+                        color: Colors.white,
+                        size: 20,
                       ),
-                    ],
-                  ),
-                ],
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Stepz Attendance',
+                            style: GoogleFonts.inter(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800,
+                              color: const Color(0xFF0F172A),
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            isFieldStaff ? 'Field Staff Track Mode' : 'Office Geofence (100m Perimeter)',
+                            style: GoogleFonts.inter(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                              color: const Color(0xFF64748B),
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
+              const SizedBox(width: 8),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
                     timeStr,
                     style: GoogleFonts.robotoMono(
-                      fontSize: 15,
+                      fontSize: 13.5,
                       fontWeight: FontWeight.w800,
                       color: const Color(0xFF0F172A),
                       letterSpacing: -0.5,
                     ),
                   ),
                   Text(
-                    dateStr,
-                    style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
+                    DateFormat('EEE, MMM d').format(_currentTime),
+                    style: GoogleFonts.inter(fontSize: 10.5, color: const Color(0xFF64748B)),
                   ),
                 ],
               ),
@@ -499,11 +522,12 @@ class _StepzPunchWidgetState extends State<StepzPunchWidget> {
                   child: attP.isLoading
                       ? const Center(child: CircularProgressIndicator())
                       : GradientPrimaryButton(
-                          text: 'PUNCH IN',
+                          text: 'Check In',
                           icon: Icons.fingerprint_rounded,
+                          height: 40,
                           gradient: _isInsideGeofence || isFieldStaff
                               ? AppColors.primaryGradient
-                              : const LinearGradient(colors: [Color(0xFFF59E0B), Color(0xFFD97706)]),
+                              : const LinearGradient(colors: [Color(0xFF94A3B8), Color(0xFF64748B)]),
                           onPressed: () => _handlePunchIn(isFieldStaff),
                         ),
                 ),
@@ -568,8 +592,9 @@ class _StepzPunchWidgetState extends State<StepzPunchWidget> {
                 attP.isLoading
                     ? const CircularProgressIndicator()
                     : GlassSecondaryButton(
-                        text: 'PUNCH OUT',
+                        text: 'Check Out',
                         icon: Icons.logout_rounded,
+                        height: 38,
                         onPressed: _handlePunchOut,
                       ),
               ],

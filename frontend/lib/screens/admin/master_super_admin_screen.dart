@@ -245,70 +245,104 @@ class _MasterSuperAdminScreenState extends State<MasterSuperAdminScreen> {
   }) {
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: [
-            const Icon(Icons.check_circle_rounded, color: Color(0xFF059669), size: 24),
-            const SizedBox(width: 10),
-            Text(title, style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 16)),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Login credentials for $fullName:', style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF64748B))),
-            const SizedBox(height: 14),
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF1F5F9),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFCBD5E1)),
+      builder: (ctx) {
+        final isMobile = ResponsiveLayout.isMobile(ctx);
+        return AlertDialog(
+          insetPadding: EdgeInsets.symmetric(horizontal: isMobile ? 16 : 24, vertical: 24),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: [
+              const Icon(Icons.check_circle_rounded, color: Color(0xFF059669), size: 24),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  title,
+                  style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
               ),
+            ],
+          ),
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 440, minWidth: 280),
+            child: SingleChildScrollView(
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Row(
-                    children: [
-                      Text('Email:', style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B))),
-                      const SizedBox(width: 8),
-                      Text(email, style: GoogleFonts.robotoMono(fontWeight: FontWeight.bold, fontSize: 13, color: const Color(0xFF0F172A))),
-                    ],
+                  Text(
+                    'Login credentials for $fullName:',
+                    style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF64748B)),
                   ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Text('Password:', style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B))),
-                      const SizedBox(width: 8),
-                      Text(tempPassword, style: GoogleFonts.robotoMono(fontWeight: FontWeight.bold, color: const Color(0xFF4F46E5), fontSize: 13)),
-                    ],
+                  const SizedBox(height: 14),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFCBD5E1)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SizedBox(
+                              width: 72,
+                              child: Text('Email:', style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B), fontWeight: FontWeight.w600)),
+                            ),
+                            Expanded(
+                              child: SelectableText(
+                                email,
+                                style: GoogleFonts.robotoMono(fontWeight: FontWeight.bold, fontSize: 13, color: const Color(0xFF0F172A)),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SizedBox(
+                              width: 72,
+                              child: Text('Password:', style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B), fontWeight: FontWeight.w600)),
+                            ),
+                            Expanded(
+                              child: SelectableText(
+                                tempPassword,
+                                style: GoogleFonts.robotoMono(fontWeight: FontWeight.bold, color: const Color(0xFF4F46E5), fontSize: 13),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
             ),
-          ],
-        ),
-        actions: [
-          TextButton.icon(
-            icon: const Icon(Icons.copy_rounded, size: 16),
-            label: const Text('Copy Credentials'),
-            onPressed: () {
-              Clipboard.setData(ClipboardData(text: 'Stepz CRM Super Admin Login\nEmail: $email\nPassword: $tempPassword'));
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Credentials copied to clipboard!')));
-            },
           ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF0F172A),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          actions: [
+            TextButton.icon(
+              icon: const Icon(Icons.copy_rounded, size: 16),
+              label: const Text('Copy Credentials'),
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: 'Stepz CRM Super Admin Login\nEmail: $email\nPassword: $tempPassword'));
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Credentials copied to clipboard!')));
+              },
             ),
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Done', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0F172A),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Done', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -642,10 +676,15 @@ class _MasterSuperAdminScreenState extends State<MasterSuperAdminScreen> {
     }).toList();
 
     final totalAdmins = compProv.totalSuperAdmins;
-    final totalTenants = compProv.totalPlatformTenants;
-    final totalStaff = compProv.superAdmins.fold<int>(0, (sum, a) => sum + (a['total_users'] as int? ?? 0));
-    final activeTenants = compProv.superAdmins.fold<int>(0, (sum, a) => sum + (a['active_tenants'] as int? ?? 0));
-    final healthPercent = totalTenants > 0 ? ((activeTenants / totalTenants) * 100).toInt() : 100;
+    final hasCompaniesLoaded = compProv.companies.isNotEmpty;
+    final totalCompanies = hasCompaniesLoaded ? compProv.companies.length : compProv.totalPlatformTenants;
+    final activeCompaniesFromAdmins = compProv.superAdmins.fold<int>(0, (sum, a) => sum + (a['active_tenants'] as int? ?? 0));
+    final activeCompanies = hasCompaniesLoaded
+        ? compProv.companies.where((c) => c.isActive).length
+        : activeCompaniesFromAdmins;
+    final suspendedCompanies = hasCompaniesLoaded
+        ? compProv.companies.where((c) => c.isSuspended).length
+        : (totalCompanies - activeCompanies).clamp(0, totalCompanies);
 
     return SafeArea(
       top: false,
@@ -660,50 +699,26 @@ class _MasterSuperAdminScreenState extends State<MasterSuperAdminScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // Top Header Bar
-            Wrap(
-              spacing: 12,
-              runSpacing: 10,
-              alignment: WrapAlignment.spaceBetween,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                Row(
-                  mainAxisSize: MainAxisSize.min,
+            LayoutBuilder(
+              builder: (context, headerConstraints) {
+                final headerLeft = Row(
                   children: [
                     const AppBackButton(fallbackRoute: AppRoutes.dashboard),
                     const SizedBox(width: 10),
-                    Flexible(
+                    Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(
-                            children: [
-                              Text(
-                                'Master Super Admin',
-                                style: GoogleFonts.inter(
-                                  fontSize: isMobile ? 18 : 24,
-                                  fontWeight: FontWeight.w800,
-                                  color: const Color(0xFF0F172A),
-                                  letterSpacing: -0.5,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFEEF2FF),
-                                  borderRadius: BorderRadius.circular(6),
-                                  border: Border.all(color: const Color(0xFF818CF8)),
-                                ),
-                                child: Text(
-                                  'Root Command',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 10.5,
-                                    fontWeight: FontWeight.w700,
-                                    color: const Color(0xFF4338CA),
-                                  ),
-                                ),
-                              ),
-                            ],
+                          Text(
+                            'Master Super Admin',
+                            style: GoogleFonts.inter(
+                              fontSize: isMobile ? 18 : 24,
+                              fontWeight: FontWeight.w800,
+                              color: const Color(0xFF0F172A),
+                              letterSpacing: -0.5,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                           const SizedBox(height: 2),
                           Text(
@@ -716,13 +731,37 @@ class _MasterSuperAdminScreenState extends State<MasterSuperAdminScreen> {
                       ),
                     ),
                   ],
-                ),
-                GradientPrimaryButton(
+                );
+
+                final provisionButton = GradientPrimaryButton(
                   icon: Icons.person_add_alt_1_rounded,
                   text: 'Provision Super Admin',
                   onPressed: _showProvisionSuperAdminDialog,
-                ),
-              ],
+                );
+
+                if (!isMobile && headerConstraints.maxWidth >= 680) {
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Expanded(child: headerLeft),
+                      const SizedBox(width: 16),
+                      provisionButton,
+                    ],
+                  );
+                }
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    headerLeft,
+                    const SizedBox(height: 10),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: provisionButton,
+                    ),
+                  ],
+                );
+              },
             ),
             SizedBox(height: isMobile ? 12 : 18),
 
@@ -730,9 +769,9 @@ class _MasterSuperAdminScreenState extends State<MasterSuperAdminScreen> {
             _buildResponsiveKpiGrid(
               isMobile: isMobile,
               totalAdmins: totalAdmins,
-              totalTenants: totalTenants,
-              totalStaff: totalStaff,
-              healthPercent: healthPercent,
+              totalCompanies: totalCompanies,
+              activeCompanies: activeCompanies,
+              suspendedCompanies: suspendedCompanies,
             ),
             SizedBox(height: isMobile ? 12 : 18),
 
@@ -743,16 +782,14 @@ class _MasterSuperAdminScreenState extends State<MasterSuperAdminScreen> {
               alignment: WrapAlignment.spaceBetween,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                // Filter Tabs
-                Row(
-                  mainAxisSize: MainAxisSize.min,
+                // Filter Tabs (Responsive Wrap — never overflows!)
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
                   children: [
                     _buildTabChip('ALL', 'All Admins (${compProv.superAdmins.length})'),
-                    const SizedBox(width: 6),
                     _buildTabChip('ACTIVE', 'Active (${compProv.superAdmins.where((a) => a['is_active'] != false).length})'),
-                    const SizedBox(width: 6),
                     _buildTabChip('SUSPENDED', 'Suspended (${compProv.superAdmins.where((a) => a['is_active'] == false).length})'),
-                    const SizedBox(width: 6),
                     _buildTabChip('MASTER', 'Masters (${compProv.superAdmins.where((a) => a['is_master_admin'] == true || a['role'] == 'MASTER_ADMIN').length})'),
                   ],
                 ),
@@ -824,42 +861,47 @@ class _MasterSuperAdminScreenState extends State<MasterSuperAdminScreen> {
   Widget _buildResponsiveKpiGrid({
     required bool isMobile,
     required int totalAdmins,
-    required int totalTenants,
-    required int totalStaff,
-    required int healthPercent,
+    required int totalCompanies,
+    required int activeCompanies,
+    required int suspendedCompanies,
   }) {
-    if (isMobile) {
-      return Column(
-        children: [
-          Row(
+    return LayoutBuilder(
+      builder: (ctx, constraints) {
+        final isNarrow = isMobile || constraints.maxWidth < 760;
+        if (isNarrow) {
+          return Column(
             children: [
-              Expanded(child: _buildMetricTile(icon: Icons.shield_outlined, label: 'Super Admins', value: '$totalAdmins', color: const Color(0xFF4338CA), bg: const Color(0xFFEEF2FF))),
-              const SizedBox(width: 8),
-              Expanded(child: _buildMetricTile(icon: Icons.apartment_rounded, label: 'Platform Tenants', value: '$totalTenants', color: const Color(0xFF059669), bg: const Color(0xFFECFDF5))),
+              Row(
+                children: [
+                  Expanded(child: _buildMetricTile(icon: Icons.shield_outlined, label: 'Super Admins', value: '$totalAdmins', color: const Color(0xFF4338CA), bg: const Color(0xFFEEF2FF))),
+                  const SizedBox(width: 8),
+                  Expanded(child: _buildMetricTile(icon: Icons.apartment_rounded, label: 'Total Companies', value: '$totalCompanies', color: const Color(0xFF0284C7), bg: const Color(0xFFF0F9FF))),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(child: _buildMetricTile(icon: Icons.check_circle_outline_rounded, label: 'Active Companies', value: '$activeCompanies', color: const Color(0xFF059669), bg: const Color(0xFFECFDF5))),
+                  const SizedBox(width: 8),
+                  Expanded(child: _buildMetricTile(icon: Icons.pause_circle_outline_rounded, label: 'Suspended Companies', value: '$suspendedCompanies', color: const Color(0xFFDC2626), bg: const Color(0xFFFEF2F2))),
+                ],
+              ),
             ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(child: _buildMetricTile(icon: Icons.people_outline_rounded, label: 'Telecaller Staff', value: '$totalStaff', color: const Color(0xFF0284C7), bg: const Color(0xFFF0F9FF))),
-              const SizedBox(width: 8),
-              Expanded(child: _buildMetricTile(icon: Icons.health_and_safety_outlined, label: 'Portfolio Health', value: '$healthPercent%', color: const Color(0xFFD97706), bg: const Color(0xFFFFFBEB))),
-            ],
-          ),
-        ],
-      );
-    }
+          );
+        }
 
-    return Row(
-      children: [
-        Expanded(child: _buildMetricTile(icon: Icons.shield_outlined, label: 'Super Admins', value: '$totalAdmins', color: const Color(0xFF4338CA), bg: const Color(0xFFEEF2FF))),
-        const SizedBox(width: 12),
-        Expanded(child: _buildMetricTile(icon: Icons.apartment_rounded, label: 'Platform Tenants', value: '$totalTenants', color: const Color(0xFF059669), bg: const Color(0xFFECFDF5))),
-        const SizedBox(width: 12),
-        Expanded(child: _buildMetricTile(icon: Icons.people_outline_rounded, label: 'Telecaller Staff', value: '$totalStaff', color: const Color(0xFF0284C7), bg: const Color(0xFFF0F9FF))),
-        const SizedBox(width: 12),
-        Expanded(child: _buildMetricTile(icon: Icons.health_and_safety_outlined, label: 'Portfolio Health', value: '$healthPercent%', color: const Color(0xFFD97706), bg: const Color(0xFFFFFBEB))),
-      ],
+        return Row(
+          children: [
+            Expanded(child: _buildMetricTile(icon: Icons.shield_outlined, label: 'Super Admins', value: '$totalAdmins', color: const Color(0xFF4338CA), bg: const Color(0xFFEEF2FF))),
+            const SizedBox(width: 12),
+            Expanded(child: _buildMetricTile(icon: Icons.apartment_rounded, label: 'Total Companies', value: '$totalCompanies', color: const Color(0xFF0284C7), bg: const Color(0xFFF0F9FF))),
+            const SizedBox(width: 12),
+            Expanded(child: _buildMetricTile(icon: Icons.check_circle_outline_rounded, label: 'Active Companies', value: '$activeCompanies', color: const Color(0xFF059669), bg: const Color(0xFFECFDF5))),
+            const SizedBox(width: 12),
+            Expanded(child: _buildMetricTile(icon: Icons.pause_circle_outline_rounded, label: 'Suspended Companies', value: '$suspendedCompanies', color: const Color(0xFFDC2626), bg: const Color(0xFFFEF2F2))),
+          ],
+        );
+      },
     );
   }
 
@@ -871,7 +913,7 @@ class _MasterSuperAdminScreenState extends State<MasterSuperAdminScreen> {
     required Color bg,
   }) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(14),
@@ -880,20 +922,22 @@ class _MasterSuperAdminScreenState extends State<MasterSuperAdminScreen> {
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.all(7),
             decoration: BoxDecoration(
               color: Colors.white.withValues(alpha: 0.8),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(icon, size: 20, color: color),
+            child: Icon(icon, size: 18, color: color),
           ),
           const SizedBox(width: 10),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(value, style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.w800, color: color)),
-              Text(label, style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w600, color: color.withValues(alpha: 0.85))),
-            ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(value, style: GoogleFonts.inter(fontSize: 17, fontWeight: FontWeight.w800, color: color), maxLines: 1, overflow: TextOverflow.ellipsis),
+                Text(label, style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w600, color: color.withValues(alpha: 0.85)), maxLines: 1, overflow: TextOverflow.ellipsis),
+              ],
+            ),
           ),
         ],
       ),
@@ -938,81 +982,72 @@ class _MasterSuperAdminScreenState extends State<MasterSuperAdminScreen> {
     final companies = List<Map<String, dynamic>>.from(admin['companies'] ?? []);
 
     return Container(
-      padding: EdgeInsets.all(isMobile ? 12 : 16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: isMaster ? const Color(0xFFC7D2FE) : const Color(0xFFE2E8F0)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.02),
-            blurRadius: 8,
+            blurRadius: 6,
             offset: const Offset(0, 2),
           ),
         ],
       ),
-      child: Column(
-        children: [
-          Row(
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          tilePadding: EdgeInsets.symmetric(horizontal: isMobile ? 10 : 14, vertical: 4),
+          childrenPadding: EdgeInsets.fromLTRB(isMobile ? 10 : 14, 0, isMobile ? 10 : 14, 12),
+          leading: CircleAvatar(
+            radius: 17,
+            backgroundColor: isMaster ? const Color(0xFF4338CA) : const Color(0xFF0284C7),
+            child: Text(
+              (admin['first_name'] as String? ?? 'A').isNotEmpty ? (admin['first_name'] as String)[0].toUpperCase() : 'A',
+              style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white),
+            ),
+          ),
+          title: Wrap(
+            spacing: 6,
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              CircleAvatar(
-                radius: 22,
-                backgroundColor: isMaster ? const Color(0xFF4338CA) : const Color(0xFF0284C7),
-                child: Text(
-                  (admin['first_name'] as String? ?? 'A').isNotEmpty ? (admin['first_name'] as String)[0].toUpperCase() : 'A',
-                  style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
-                ),
+              Text(
+                admin['full_name'] ?? admin['email'],
+                style: GoogleFonts.inter(fontSize: 13.5, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
+                overflow: TextOverflow.ellipsis,
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            admin['full_name'] ?? admin['email'],
-                            style: GoogleFonts.inter(fontSize: 14.5, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        if (isSelf) ...[
-                          const SizedBox(width: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFDCFCE7),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text('You', style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.bold, color: const Color(0xFF166534))),
-                          ),
-                        ],
-                        const SizedBox(width: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: isMaster ? const Color(0xFFEEF2FF) : const Color(0xFFF0F9FF),
-                            borderRadius: BorderRadius.circular(4),
-                            border: Border.all(color: isMaster ? const Color(0xFFC7D2FE) : const Color(0xFFBAE6FD)),
-                          ),
-                          child: Text(
-                            isMaster ? 'Master Admin' : 'Super Admin',
-                            style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w700, color: isMaster ? const Color(0xFF4338CA) : const Color(0xFF0284C7)),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '${admin['email']}${admin['phone'] != null && (admin['phone'] as String).isNotEmpty ? " • ${admin['phone']}" : ""}',
-                      style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B)),
-                    ),
-                  ],
+              if (isSelf)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                  decoration: BoxDecoration(color: const Color(0xFFDCFCE7), borderRadius: BorderRadius.circular(4)),
+                  child: Text('You', style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold, color: const Color(0xFF166534))),
                 ),
-              ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                decoration: BoxDecoration(
+                  color: isMaster ? const Color(0xFFEEF2FF) : const Color(0xFFF0F9FF),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: isMaster ? const Color(0xFFC7D2FE) : const Color(0xFFBAE6FD)),
+                ),
+                child: Text(
+                  isMaster ? 'Master Admin' : 'Super Admin',
+                  style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w700, color: isMaster ? const Color(0xFF4338CA) : const Color(0xFF0284C7)),
+                ),
+              ),
+            ],
+          ),
+          subtitle: Text(
+            '${admin['email']} · $totalTenants Companies · $totalUsers Staff',
+            style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
                 decoration: BoxDecoration(
                   color: isActive ? const Color(0xFFECFDF5) : const Color(0xFFFEF2F2),
                   borderRadius: BorderRadius.circular(6),
@@ -1020,140 +1055,131 @@ class _MasterSuperAdminScreenState extends State<MasterSuperAdminScreen> {
                 child: Text(
                   isActive ? 'Active' : 'Suspended',
                   style: GoogleFonts.inter(
-                    fontSize: 10.5,
+                    fontSize: 10,
                     fontWeight: FontWeight.bold,
                     color: isActive ? const Color(0xFF059669) : const Color(0xFFDC2626),
                   ),
                 ),
               ),
+              const SizedBox(width: 4),
+              const Icon(Icons.expand_more_rounded, size: 20, color: Color(0xFF64748B)),
             ],
           ),
-          const SizedBox(height: 12),
-
-          // Mini Portfolio Stats Row
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF8FAFC),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildStatPill(Icons.apartment_rounded, '$totalTenants Companies', '$activeTenants active'),
-                Container(width: 1, height: 20, color: const Color(0xFFE2E8F0)),
-                _buildStatPill(Icons.people_outline_rounded, '$totalUsers Staff', 'telecallers'),
-              ],
-            ),
-          ),
-          if (companies.isNotEmpty) ...[
-            const SizedBox(height: 8),
+          children: [
             Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
-                color: const Color(0xFFF1F5F9),
+                color: const Color(0xFFF8FAFC),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.domain_verification_rounded, size: 13, color: Color(0xFF475569)),
-                      const SizedBox(width: 5),
-                      Text(
-                        'Assigned Tenants (${companies.length}):',
-                        style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF334155)),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 4,
-                    children: companies.take(4).map((c) {
-                      final isCompActive = c['status'] == 'ACTIVE';
-                      return Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: const Color(0xFFCBD5E1)),
-                        ),
-                        child: Text(
-                          '${c['name']} (${c['plan_name'] ?? "Starter"})',
-                          style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w600, color: isCompActive ? const Color(0xFF0F172A) : const Color(0xFFDC2626)),
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                  if (companies.length > 4)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: Text(
-                        '+${companies.length - 4} more tenants',
-                        style: GoogleFonts.inter(fontSize: 10, fontStyle: FontStyle.italic, color: const Color(0xFF64748B)),
-                      ),
-                    ),
+                  Flexible(child: _buildStatPill(Icons.apartment_rounded, '$totalTenants Companies', '$activeTenants active')),
+                  Container(width: 1, height: 20, color: const Color(0xFFE2E8F0)),
+                  Flexible(child: _buildStatPill(Icons.people_outline_rounded, '$totalUsers Staff', 'telecallers')),
                 ],
               ),
             ),
-          ],
-          const SizedBox(height: 10),
-
-          // Action Buttons Bar
-          Wrap(
-            spacing: 8,
-            runSpacing: 6,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  side: const BorderSide(color: Color(0xFFCBD5E1)),
+            if (companies.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                icon: const Icon(Icons.remove_red_eye_outlined, size: 14, color: Color(0xFF334155)),
-                label: Text('View Portfolio ($totalTenants)', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF334155))),
-                onPressed: () => _showPortfolioModal(admin),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.domain_verification_rounded, size: 13, color: Color(0xFF475569)),
+                        const SizedBox(width: 5),
+                        Text(
+                          'Assigned Tenants (${companies.length}):',
+                          style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF334155)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: companies.take(6).map((c) {
+                        final isCompActive = c['status'] == 'ACTIVE';
+                        return Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: const Color(0xFFCBD5E1)),
+                          ),
+                          child: Text(
+                            '${c['name']} (${c['plan_name'] ?? "Starter"})',
+                            style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w600, color: isCompActive ? const Color(0xFF0F172A) : const Color(0xFFDC2626)),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ),
               ),
-              if (totalTenants > 0)
+            ],
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
                 OutlinedButton.icon(
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    side: const BorderSide(color: Color(0xFF93C5FD)),
+                    side: const BorderSide(color: Color(0xFFCBD5E1)),
                   ),
-                  icon: const Icon(Icons.swap_horiz_rounded, size: 14, color: Color(0xFF2563EB)),
-                  label: Text('Reassign', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF2563EB))),
-                  onPressed: () => _showReassignModal(admin, allAdmins),
+                  icon: const Icon(Icons.remove_red_eye_outlined, size: 14, color: Color(0xFF334155)),
+                  label: Text('View Portfolio ($totalTenants)', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF334155))),
+                  onPressed: () => _showPortfolioModal(admin),
                 ),
-              OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  side: const BorderSide(color: Color(0xFFFDE68A)),
-                ),
-                icon: const Icon(Icons.key_rounded, size: 14, color: Color(0xFFD97706)),
-                label: Text('Reset Password', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFFD97706))),
-                onPressed: () => _showResetPasswordDialog(admin),
-              ),
-              if (!isSelf)
-                TextButton.icon(
-                  style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8)),
-                  icon: Icon(isActive ? Icons.block_rounded : Icons.check_circle_outline_rounded, size: 14, color: isActive ? const Color(0xFFDC2626) : const Color(0xFF059669)),
-                  label: Text(
-                    isActive ? 'Deactivate' : 'Activate',
-                    style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: isActive ? const Color(0xFFDC2626) : const Color(0xFF059669)),
+                if (totalTenants > 0)
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      side: const BorderSide(color: Color(0xFF93C5FD)),
+                    ),
+                    icon: const Icon(Icons.swap_horiz_rounded, size: 14, color: Color(0xFF2563EB)),
+                    label: Text('Reassign', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF2563EB))),
+                    onPressed: () => _showReassignModal(admin, allAdmins),
                   ),
-                  onPressed: () async {
-                    await context.read<CompanyProvider>().toggleSuperAdminStatus(admin['id']?.toString() ?? '');
-                  },
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    side: const BorderSide(color: Color(0xFFFDE68A)),
+                  ),
+                  icon: const Icon(Icons.key_rounded, size: 14, color: Color(0xFFD97706)),
+                  label: Text('Reset Password', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFFD97706))),
+                  onPressed: () => _showResetPasswordDialog(admin),
                 ),
-            ],
-          ),
-        ],
+                if (!isSelf)
+                  TextButton.icon(
+                    style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8)),
+                    icon: Icon(isActive ? Icons.block_rounded : Icons.check_circle_outline_rounded, size: 14, color: isActive ? const Color(0xFFDC2626) : const Color(0xFF059669)),
+                    label: Text(
+                      isActive ? 'Deactivate' : 'Activate',
+                      style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: isActive ? const Color(0xFFDC2626) : const Color(0xFF059669)),
+                    ),
+                    onPressed: () async {
+                      await context.read<CompanyProvider>().toggleSuperAdminStatus(admin['id']?.toString() ?? '');
+                    },
+                  ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

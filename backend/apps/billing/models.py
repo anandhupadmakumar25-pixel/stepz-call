@@ -5,6 +5,39 @@ from django.conf import settings
 from apps.core.models import TenantModel
 from apps.billing.utils.number_to_words import amount_to_words_en, amount_to_words_ar
 
+
+class DocumentTemplate(TenantModel):
+    """
+    Customizable, drag-and-drop document template per tenant company
+    for Quotations, Bills/Invoices, and Receipt Vouchers.
+    """
+    DOC_TYPE_CHOICES = [
+        ('QUOTATION', 'Quotation'),
+        ('INVOICE', 'Bill / Invoice'),
+        ('RECEIPT', 'Receipt Voucher'),
+    ]
+
+    name = models.CharField(max_length=120)
+    doc_type = models.CharField(max_length=20, choices=DOC_TYPE_CHOICES, db_index=True)
+    is_default = models.BooleanField(default=False, db_index=True)
+    is_active = models.BooleanField(default=True, db_index=True)
+    layout_json = models.JSONField(default=dict, blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_document_templates',
+    )
+
+    class Meta:
+        ordering = ['-is_default', 'name']
+        unique_together = ('company', 'doc_type', 'name')
+
+    def __str__(self):
+        return f"{self.name} ({self.doc_type})"
+
+
 class Quotation(TenantModel):
     STATUS_CHOICES = [
         ('DRAFT', 'Draft'),
@@ -61,6 +94,14 @@ class Quotation(TenantModel):
     notes = models.TextField(blank=True)
     terms_and_conditions = models.TextField(blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='DRAFT', db_index=True)
+    template = models.ForeignKey(
+        DocumentTemplate,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='quotations',
+    )
+    template_snapshot = models.JSONField(default=dict, blank=True)
 
     class Meta:
         ordering = ['-created_at']
@@ -138,6 +179,14 @@ class Invoice(TenantModel):
     payment_notes = models.TextField(blank=True)
     notes = models.TextField(blank=True)
     terms_and_conditions = models.TextField(blank=True)
+    template = models.ForeignKey(
+        DocumentTemplate,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='invoices',
+    )
+    template_snapshot = models.JSONField(default=dict, blank=True)
 
     class Meta:
         ordering = ['-created_at']
@@ -230,6 +279,14 @@ class ReceiptVoucher(TenantModel):
     pod_commodity = models.CharField(max_length=255, blank=True)
 
     notes = models.TextField(blank=True)
+    template = models.ForeignKey(
+        DocumentTemplate,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='receipt_vouchers',
+    )
+    template_snapshot = models.JSONField(default=dict, blank=True)
 
     class Meta:
         ordering = ['-created_at']

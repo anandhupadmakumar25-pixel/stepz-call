@@ -120,6 +120,8 @@ class QuotationModel {
   final String notes;
   final String termsAndConditions;
   final String status;
+  final String? templateId;
+  final Map<String, dynamic> templateSnapshot;
   final String createdAt;
   final String updatedAt;
 
@@ -158,6 +160,8 @@ class QuotationModel {
     this.notes = '',
     this.termsAndConditions = '',
     this.status = 'DRAFT',
+    this.templateId,
+    this.templateSnapshot = const {},
     required this.createdAt,
     this.updatedAt = '',
   });
@@ -313,6 +317,8 @@ class QuotationModel {
       notes: json['notes']?.toString() ?? '',
       termsAndConditions: json['terms_and_conditions']?.toString() ?? json['termsAndConditions']?.toString() ?? '',
       status: json['status']?.toString() ?? 'DRAFT',
+      templateId: json['template']?.toString(),
+      templateSnapshot: (json['template_snapshot'] as Map<String, dynamic>?) ?? const {},
       createdAt: json['created_at']?.toString() ?? json['createdAt']?.toString() ?? '',
       updatedAt: json['updated_at']?.toString() ?? json['updatedAt']?.toString() ?? '',
     );

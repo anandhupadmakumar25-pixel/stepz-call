@@ -51,6 +51,8 @@ class InvoiceModel {
   final String paymentNotes;
   final String notes;
   final String termsAndConditions;
+  final String? templateId;
+  final Map<String, dynamic> templateSnapshot;
   final String createdAt;
   final String updatedAt;
 
@@ -97,6 +99,8 @@ class InvoiceModel {
     this.paymentNotes = '',
     this.notes = '',
     this.termsAndConditions = '',
+    this.templateId,
+    this.templateSnapshot = const {},
     required this.createdAt,
     this.updatedAt = '',
   });
@@ -182,6 +186,8 @@ class InvoiceModel {
       paymentNotes: json['payment_notes']?.toString() ?? json['paymentNotes']?.toString() ?? '',
       notes: json['notes']?.toString() ?? '',
       termsAndConditions: json['terms_and_conditions']?.toString() ?? json['termsAndConditions']?.toString() ?? '',
+      templateId: json['template']?.toString(),
+      templateSnapshot: (json['template_snapshot'] as Map<String, dynamic>?) ?? const {},
       createdAt: json['created_at']?.toString() ?? json['createdAt']?.toString() ?? '',
       updatedAt: json['updated_at']?.toString() ?? json['updatedAt']?.toString() ?? '',
     );

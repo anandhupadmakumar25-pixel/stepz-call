@@ -30,14 +30,6 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  void _fillCredentials(String email, String password) {
-    setState(() {
-      _emailController.text = email;
-      _passwordController.text = password;
-      _errorMessage = null;
-    });
-  }
-
   void _showSubscriptionExpiredDialog({
     required String message,
     String? companyName,
@@ -732,41 +724,6 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ),
           ),
-          const SizedBox(height: 22),
-
-          // Quick Demo Credentials Fill
-          Row(
-            children: [
-              const Expanded(child: Divider(color: Color(0xFFE2E8F0))),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-                child: Text(
-                  'ONE-CLICK DEMO ACCESS',
-                  style: GoogleFonts.inter(
-                    fontSize: 9.5,
-                    fontWeight: FontWeight.w800,
-                    color: const Color(0xFFB45309),
-                    letterSpacing: 0.8,
-                  ),
-                ),
-              ),
-              const Expanded(child: Divider(color: Color(0xFFE2E8F0))),
-            ],
-          ),
-          const SizedBox(height: 12),
-
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            alignment: WrapAlignment.center,
-            children: [
-              _buildDemoChip('Master Admin', 'masteradmin@platform.com', 'masteradmin123', const Color(0xFF4338CA)),
-              _buildDemoChip('Super Admin (John)', 'superadmin@platform.com', 'superadmin123', const Color(0xFF0284C7)),
-              _buildDemoChip('Super Admin (Sarah)', 'partner.sarah@platform.com', 'superadmin123', const Color(0xFF0D9488)),
-              _buildDemoChip('Company Admin', 'admin@company.com', 'admin123', const Color(0xFF047857)),
-              _buildDemoChip('Telecaller', 'telecaller@company.com', 'telecaller123', const Color(0xFFB45309)),
-            ],
-          ),
         ],
       ),
     ),
@@ -847,40 +804,6 @@ class _LoginScreenState extends State<LoginScreen> {
           color: const Color(0xFFDC2626),
         ),
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
-      ),
-    );
-  }
-
-  Widget _buildDemoChip(String role, String email, String pwd, Color accent) {
-    return InkWell(
-      onTap: () => _fillCredentials(email, pwd),
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        decoration: BoxDecoration(
-          color: accent.withValues(alpha: 0.10),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: accent.withValues(alpha: 0.35)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 6,
-              height: 6,
-              decoration: BoxDecoration(color: accent, shape: BoxShape.circle),
-            ),
-            const SizedBox(width: 6),
-            Text(
-              role,
-              style: GoogleFonts.inter(
-                fontSize: 10.5,
-                fontWeight: FontWeight.w700,
-                color: accent,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

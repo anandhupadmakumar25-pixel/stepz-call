@@ -6,6 +6,7 @@ import '../../core/widgets/glass/glass_card.dart';
 import '../../core/widgets/glass/gradient_button.dart';
 import '../../core/services/pdf_invoice_service.dart';
 import '../../core/responsive/responsive_layout.dart';
+import '../../core/widgets/date_range_filter_bar.dart';
 import '../../models/invoice_model.dart';
 import '../../models/quotation_model.dart';
 import '../../providers/billing_provider.dart';
@@ -30,6 +31,8 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
   late int _selectedViewTab;
   String _selectedInvoiceStatus = 'ALL';
   String _selectedQuoteStatus = 'ALL';
+  String? _dateFrom;
+  String? _dateTo;
   final TextEditingController _searchController = TextEditingController();
 
   void _printInvoiceWithBranding(InvoiceModel invoice) {
@@ -87,8 +90,16 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
     final provider = context.read<BillingProvider>();
     await provider.fetchBillingOverview();
     await Future.wait([
-      provider.fetchInvoices(status: _selectedInvoiceStatus == 'ALL' ? null : _selectedInvoiceStatus),
-      provider.fetchQuotations(status: _selectedQuoteStatus == 'ALL' ? null : _selectedQuoteStatus),
+      provider.fetchInvoices(
+        status: _selectedInvoiceStatus == 'ALL' ? null : _selectedInvoiceStatus,
+        dateFrom: _dateFrom,
+        dateTo: _dateTo,
+      ),
+      provider.fetchQuotations(
+        status: _selectedQuoteStatus == 'ALL' ? null : _selectedQuoteStatus,
+        dateFrom: _dateFrom,
+        dateTo: _dateTo,
+      ),
     ]);
   }
 
@@ -105,8 +116,6 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
     );
 
     if (invoice != null && mounted) {
-      // Switch to Invoices view tab to show the new bill immediately!
-      setState(() => _selectedViewTab = 0);
       _loadData();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -177,7 +186,13 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                                     color: const Color(0xFF059669).withValues(alpha: 0.1),
                                     borderRadius: BorderRadius.circular(10),
                                   ),
-                                  child: const Icon(Icons.receipt_long_rounded, color: Color(0xFF059669), size: 20),
+                                  child: Icon(
+                                    _selectedViewTab == 1
+                                        ? Icons.request_quote_rounded
+                                        : Icons.receipt_long_rounded,
+                                    color: const Color(0xFF059669),
+                                    size: 20,
+                                  ),
                                 ),
                                 const SizedBox(width: 10),
                                 Expanded(
@@ -185,11 +200,15 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        'Billing & Invoices',
+                                        _selectedViewTab == 1
+                                            ? 'Quotations & Estimates'
+                                            : 'Billing & Invoices',
                                         style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
                                       ),
                                       Text(
-                                        'Customer bills, quotes & receipts',
+                                        _selectedViewTab == 1
+                                            ? 'Create, send & convert quotes'
+                                            : 'Customer bills, quotes & receipts',
                                         style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
@@ -204,340 +223,301 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 12),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: OutlinedButton.icon(
-                                    style: OutlinedButton.styleFrom(
-                                      foregroundColor: const Color(0xFF059669),
-                                      side: const BorderSide(color: Color(0xFF059669)),
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                            const SizedBox(height: 10),
+                            SizedBox(
+                              width: double.infinity,
+                              child: _selectedViewTab == 1
+                                  ? GradientPrimaryButton(
+                                      text: 'New Quotation',
+                                      icon: Icons.add_rounded,
+                                      height: 40,
+                                      gradient: const LinearGradient(colors: [Color(0xFF059669), Color(0xFF047857)]),
+                                      onPressed: () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (_) => const QuotationFormDialog(isBill: false, asPage: true),
+                                          ),
+                                        ).then((_) => _loadData());
+                                      },
+                                    )
+                                  : GradientPrimaryButton(
+                                      text: 'New Bill / Invoice',
+                                      icon: Icons.add_rounded,
+                                      height: 40,
+                                      gradient: const LinearGradient(colors: [Color(0xFF2563EB), Color(0xFF1D4ED8)]),
+                                      onPressed: () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (_) => const QuotationFormDialog(isBill: true, asPage: true),
+                                          ),
+                                        ).then((_) => _loadData());
+                                      },
                                     ),
-                                    icon: const Icon(Icons.request_quote_rounded, size: 14),
-                                    label: Text('+ Quotation', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 12)),
-                                    onPressed: () {
-                                      showDialog(
-                                        context: context,
-                                        builder: (_) => const QuotationFormDialog(isBill: false),
-                                      ).then((_) => _loadData());
-                                    },
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: GradientPrimaryButton(
-                                    text: '+ Bill / Invoice',
-                                    icon: Icons.add_rounded,
-                                    gradient: const LinearGradient(colors: [Color(0xFF2563EB), Color(0xFF1D4ED8)]),
-                                    onPressed: () {
-                                      showDialog(
-                                        context: context,
-                                        builder: (_) => const QuotationFormDialog(isBill: true),
-                                      ).then((_) {
-                                        setState(() => _selectedViewTab = 0);
-                                        _loadData();
-                                      });
-                                    },
-                                  ),
-                                ),
-                              ],
                             ),
                           ],
                         )
                       : Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(10),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF059669).withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(12),
+                            Expanded(
+                              child: Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF059669).withValues(alpha: 0.1),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Icon(
+                                      _selectedViewTab == 1
+                                          ? Icons.request_quote_rounded
+                                          : Icons.receipt_long_rounded,
+                                      color: const Color(0xFF059669),
+                                      size: 24,
+                                    ),
                                   ),
-                                  child: const Icon(Icons.receipt_long_rounded, color: Color(0xFF059669), size: 24),
-                                ),
-                                const SizedBox(width: 14),
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Billing & Invoices',
-                                      style: GoogleFonts.inter(fontSize: 24, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+                                  const SizedBox(width: 14),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          _selectedViewTab == 1
+                                              ? 'Quotations & Estimates'
+                                              : 'Billing & Invoices',
+                                          style: GoogleFonts.inter(fontSize: 22, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        Text(
+                                          _selectedViewTab == 1
+                                              ? 'Create, send, track, and convert customer quotations into invoices'
+                                              : 'Manage customer bills, invoices, receipts, and receivables',
+                                          style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ],
                                     ),
-                                    Text(
-                                      'Manage customer bills, invoices, quotations, receipts, and receivables',
-                                      style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
-                                    ),
-                                  ],
-                                ),
-                              ],
+                                  ),
+                                ],
+                              ),
                             ),
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
+                            const SizedBox(width: 12),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
                               children: [
-                                IconButton(
-                                  icon: const Icon(Icons.refresh_rounded, color: Color(0xFF2563EB)),
-                                  onPressed: _loadData,
-                                  tooltip: 'Refresh',
-                                ),
-                                OutlinedButton.icon(
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: const Color(0xFF059669),
-                                    side: const BorderSide(color: Color(0xFF059669)),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                SizedBox(
+                                  height: 40,
+                                  width: 40,
+                                  child: IconButton(
+                                    icon: const Icon(Icons.refresh_rounded, color: Color(0xFF2563EB)),
+                                    onPressed: _loadData,
+                                    tooltip: 'Refresh',
                                   ),
-                                  icon: const Icon(Icons.request_quote_rounded, size: 16),
-                                  label: Text('+ New Quotation', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 13)),
-                                  onPressed: () {
-                                    showDialog(
-                                      context: context,
-                                      builder: (_) => const QuotationFormDialog(isBill: false),
-                                    ).then((_) => _loadData());
-                                  },
                                 ),
-                                GradientPrimaryButton(
-                                  text: '+ New Bill / Invoice',
-                                  icon: Icons.add_rounded,
-                                  gradient: const LinearGradient(colors: [Color(0xFF2563EB), Color(0xFF1D4ED8)]),
-                                  onPressed: () {
-                                    showDialog(
-                                      context: context,
-                                      builder: (_) => const QuotationFormDialog(isBill: true),
-                                    ).then((_) {
-                                      setState(() => _selectedViewTab = 0);
-                                      _loadData();
-                                    });
-                                  },
-                                ),
+                                const SizedBox(width: 8),
+                                if (_selectedViewTab == 1)
+                                  GradientPrimaryButton(
+                                    text: 'New Quotation',
+                                    icon: Icons.add_rounded,
+                                    height: 40,
+                                    gradient: const LinearGradient(colors: [Color(0xFF059669), Color(0xFF047857)]),
+                                    onPressed: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => const QuotationFormDialog(isBill: false, asPage: true),
+                                        ),
+                                      ).then((_) => _loadData());
+                                    },
+                                  )
+                                else
+                                  GradientPrimaryButton(
+                                    text: 'New Bill / Invoice',
+                                    icon: Icons.add_rounded,
+                                    height: 40,
+                                    gradient: const LinearGradient(colors: [Color(0xFF2563EB), Color(0xFF1D4ED8)]),
+                                    onPressed: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => const QuotationFormDialog(isBill: true, asPage: true),
+                                        ),
+                                      ).then((_) => _loadData());
+                                    },
+                                  ),
                               ],
                             ),
                           ],
                         ),
                   const SizedBox(height: 20),
 
-                  // KPI Cards Row
-                  isMobile
-                      ? Column(
-                          children: [
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: _buildKpiCard(
-                                    title: isTelecaller ? 'My Invoiced' : 'Total Invoiced',
-                                    value: 'Rs. ${(kpi?.totalBilled ?? 0.0).toStringAsFixed(2)}',
-                                    subtitle: '${kpi?.invoiceCount ?? 0} invoices',
-                                    icon: Icons.receipt_rounded,
-                                    accentColor: const Color(0xFF2563EB),
-                                    isMobile: true,
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: _buildKpiCard(
-                                    title: isTelecaller ? 'My Collected' : 'Total Collected',
-                                    value: 'Rs. ${(kpi?.totalCollected ?? 0.0).toStringAsFixed(2)}',
-                                    subtitle: '${kpi?.paidInvoiceCount ?? 0} settled',
-                                    icon: Icons.check_circle_outline_rounded,
-                                    accentColor: const Color(0xFF10B981),
-                                    isMobile: true,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 10),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: _buildKpiCard(
-                                    title: isTelecaller ? 'Pending Due' : 'Pending Receivables',
-                                    value: 'Rs. ${(kpi?.pendingReceivables ?? 0.0).toStringAsFixed(2)}',
-                                    subtitle: '${kpi?.pendingInvoiceCount ?? 0} pending',
-                                    icon: Icons.pending_actions_rounded,
-                                    accentColor: const Color(0xFFDC2626),
-                                    isMobile: true,
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: _buildKpiCard(
-                                    title: isTelecaller ? 'Active Quotes' : 'Active Quotations',
-                                    value: 'Rs. ${(kpi?.totalQuotationValue ?? 0.0).toStringAsFixed(2)}',
-                                    subtitle: '${kpi?.quotationCount ?? 0} quotes sent',
-                                    icon: Icons.request_quote_rounded,
-                                    accentColor: const Color(0xFF8B5CF6),
-                                    isMobile: true,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        )
-                      : Wrap(
-                          spacing: 16,
-                          runSpacing: 14,
-                          children: [
-                            _buildKpiCard(
-                              title: isTelecaller ? 'My Invoiced Total' : 'Total Invoiced',
-                              value: 'Rs. ${(kpi?.totalBilled ?? 0.0).toStringAsFixed(2)}',
-                              subtitle: '${kpi?.invoiceCount ?? 0} invoices',
-                              icon: Icons.receipt_rounded,
-                              accentColor: const Color(0xFF2563EB),
-                            ),
-                            _buildKpiCard(
-                              title: isTelecaller ? 'My Collected Amount' : 'Total Collected',
-                              value: 'Rs. ${(kpi?.totalCollected ?? 0.0).toStringAsFixed(2)}',
-                              subtitle: '${kpi?.paidInvoiceCount ?? 0} settled',
-                              icon: Icons.check_circle_outline_rounded,
-                              accentColor: const Color(0xFF10B981),
-                            ),
-                            _buildKpiCard(
-                              title: isTelecaller ? 'My Pending Balance' : 'Pending Receivables',
-                              value: 'Rs. ${(kpi?.pendingReceivables ?? 0.0).toStringAsFixed(2)}',
-                              subtitle: '${kpi?.pendingInvoiceCount ?? 0} pending',
-                              icon: Icons.pending_actions_rounded,
-                              accentColor: const Color(0xFFDC2626),
-                            ),
-                            _buildKpiCard(
-                              title: isTelecaller ? 'My Active Quotes' : 'Active Quotations',
-                              value: 'Rs. ${(kpi?.totalQuotationValue ?? 0.0).toStringAsFixed(2)}',
-                              subtitle: '${kpi?.quotationCount ?? 0} quotes sent',
-                              icon: Icons.request_quote_rounded,
-                              accentColor: const Color(0xFF8B5CF6),
-                            ),
-                          ],
-                        ),
-                  const SizedBox(height: 24),
-
-                  // Segment Tab Switcher: Bills vs Quotations
-                  Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: const Color(0xFFE2E8F0)),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.02),
-                          blurRadius: 6,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: InkWell(
-                            onTap: () => setState(() => _selectedViewTab = 0),
-                            borderRadius: BorderRadius.circular(9),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 10),
-                              decoration: BoxDecoration(
-                                color: _selectedViewTab == 0 ? const Color(0xFF2563EB) : Colors.transparent,
-                                borderRadius: BorderRadius.circular(9),
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.receipt_long_rounded, size: 18, color: _selectedViewTab == 0 ? Colors.white : const Color(0xFF64748B)),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'Fixed Price Bills & Invoices (${provider.invoices.length})',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 13,
-                                      fontWeight: _selectedViewTab == 0 ? FontWeight.w700 : FontWeight.w600,
-                                      color: _selectedViewTab == 0 ? Colors.white : const Color(0xFF64748B),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: InkWell(
-                            onTap: () => setState(() => _selectedViewTab = 1),
-                            borderRadius: BorderRadius.circular(9),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 10),
-                              decoration: BoxDecoration(
-                                color: _selectedViewTab == 1 ? const Color(0xFF059669) : Colors.transparent,
-                                borderRadius: BorderRadius.circular(9),
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.request_quote_rounded, size: 18, color: _selectedViewTab == 1 ? Colors.white : const Color(0xFF64748B)),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'Quotations & Estimates (${provider.quotations.length})',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 13,
-                                      fontWeight: _selectedViewTab == 1 ? FontWeight.w700 : FontWeight.w600,
-                                      color: _selectedViewTab == 1 ? Colors.white : const Color(0xFF64748B),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+                  // Date Range Filter Bar
+                  DateRangeFilterBar(
+                    onChanged: (from, to) {
+                      _dateFrom = from;
+                      _dateTo = to;
+                      _loadData();
+                    },
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 14),
 
-                  // Search & Filter Tabs
+                  // KPI Cards Row (Full-width responsive, tab-aware)
+                  LayoutBuilder(
+                    builder: (ctx, kpiConstraints) {
+                      final quotes = provider.quotations;
+                      final sentQuotes = quotes.where((q) => q.status == 'SENT').length;
+                      final convertedQuotes = quotes.where((q) => q.status == 'CONVERTED' || q.status == 'ACCEPTED').length;
+                      final draftQuotes = quotes.where((q) => q.status == 'DRAFT').length;
+                      final totalQuoteVal = quotes.fold<double>(0.0, (sum, q) => sum + q.grandTotal);
+
+                      final cards = _selectedViewTab == 1
+                          ? [
+                              _buildKpiCard(
+                                title: isTelecaller ? 'My Quotes Value' : 'Total Quotes Value',
+                                value: 'Rs. ${totalQuoteVal.toStringAsFixed(2)}',
+                                subtitle: '${quotes.length} quotations',
+                                icon: Icons.request_quote_rounded,
+                                accentColor: const Color(0xFF059669),
+                                isMobile: isMobile,
+                              ),
+                              _buildKpiCard(
+                                title: 'Sent to Customer',
+                                value: '$sentQuotes',
+                                subtitle: 'Awaiting approval',
+                                icon: Icons.send_rounded,
+                                accentColor: const Color(0xFF2563EB),
+                                isMobile: isMobile,
+                              ),
+                              _buildKpiCard(
+                                title: 'Approved / Converted',
+                                value: '$convertedQuotes',
+                                subtitle: 'Converted or accepted',
+                                icon: Icons.check_circle_outline_rounded,
+                                accentColor: const Color(0xFF10B981),
+                                isMobile: isMobile,
+                              ),
+                              _buildKpiCard(
+                                title: 'Saved Drafts',
+                                value: '$draftQuotes',
+                                subtitle: 'Ready to send',
+                                icon: Icons.edit_note_rounded,
+                                accentColor: const Color(0xFF64748B),
+                                isMobile: isMobile,
+                              ),
+                            ]
+                          : [
+                              _buildKpiCard(
+                                title: isTelecaller ? 'My Invoiced' : 'Total Invoiced',
+                                value: 'Rs. ${(kpi?.totalBilled ?? 0.0).toStringAsFixed(2)}',
+                                subtitle: '${kpi?.invoiceCount ?? 0} invoices',
+                                icon: Icons.receipt_rounded,
+                                accentColor: const Color(0xFF2563EB),
+                                isMobile: isMobile,
+                              ),
+                              _buildKpiCard(
+                                title: isTelecaller ? 'My Collected' : 'Total Collected',
+                                value: 'Rs. ${(kpi?.totalCollected ?? 0.0).toStringAsFixed(2)}',
+                                subtitle: '${kpi?.paidInvoiceCount ?? 0} settled',
+                                icon: Icons.check_circle_outline_rounded,
+                                accentColor: const Color(0xFF10B981),
+                                isMobile: isMobile,
+                              ),
+                              _buildKpiCard(
+                                title: isTelecaller ? 'Pending Due' : 'Pending Receivables',
+                                value: 'Rs. ${(kpi?.pendingReceivables ?? 0.0).toStringAsFixed(2)}',
+                                subtitle: '${kpi?.pendingInvoiceCount ?? 0} pending',
+                                icon: Icons.pending_actions_rounded,
+                                accentColor: const Color(0xFFDC2626),
+                                isMobile: isMobile,
+                              ),
+                              _buildKpiCard(
+                                title: isTelecaller ? 'Active Quotes' : 'Active Quotations',
+                                value: 'Rs. ${(kpi?.totalQuotationValue ?? 0.0).toStringAsFixed(2)}',
+                                subtitle: '${kpi?.quotationCount ?? 0} quotes sent',
+                                icon: Icons.request_quote_rounded,
+                                accentColor: const Color(0xFF8B5CF6),
+                                isMobile: isMobile,
+                              ),
+                            ];
+
+                      if (kpiConstraints.maxWidth >= 760) {
+                        return Row(
+                          children: [
+                            Expanded(child: cards[0]),
+                            const SizedBox(width: 12),
+                            Expanded(child: cards[1]),
+                            const SizedBox(width: 12),
+                            Expanded(child: cards[2]),
+                            const SizedBox(width: 12),
+                            Expanded(child: cards[3]),
+                          ],
+                        );
+                      }
+                      return Column(
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(child: cards[0]),
+                              const SizedBox(width: 10),
+                              Expanded(child: cards[1]),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
+                              Expanded(child: cards[2]),
+                              const SizedBox(width: 10),
+                              Expanded(child: cards[3]),
+                            ],
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 14),
+
+                  // Search & Filter Tabs (single row on desktop, stacked on mobile)
                   GlassCard(
                     blur: 16,
                     opacity: 0.95,
                     borderRadius: BorderRadius.circular(16),
                     borderColor: const Color(0xFFE2E8F0),
-                    padding: const EdgeInsets.all(14),
-                    child: Column(
-                      children: [
-                        Row(
-                          children: [
-                            // Search bar
-                            Expanded(
-                              child: TextField(
-                                controller: _searchController,
-                                onChanged: (_) => setState(() {}),
-                                style: GoogleFonts.inter(fontSize: 13),
-                                decoration: InputDecoration(
-                                  hintText: _selectedViewTab == 0
-                                      ? 'Search by Invoice #, Customer Name, or Phone...'
-                                      : 'Search by Quotation #, Customer Name, or Phone...',
-                                  hintStyle: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8)),
-                                  prefixIcon: const Icon(Icons.search_rounded, size: 18, color: Color(0xFF64748B)),
-                                  suffixIcon: _searchController.text.isNotEmpty
-                                      ? IconButton(
-                                          icon: const Icon(Icons.clear_rounded, size: 16),
-                                          onPressed: () {
-                                            _searchController.clear();
-                                            setState(() {});
-                                          },
-                                        )
-                                      : null,
-                                  filled: true,
-                                  fillColor: Colors.white,
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFCBD5E1))),
-                                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
-                                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                                  isDense: true,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        // Filter Pills based on active tab
-                        SingleChildScrollView(
+                    padding: const EdgeInsets.all(12),
+                    child: LayoutBuilder(
+                      builder: (ctx, filterConstraints) {
+                        final searchField = TextField(
+                          controller: _searchController,
+                          onChanged: (_) => setState(() {}),
+                          style: GoogleFonts.inter(fontSize: 13),
+                          decoration: InputDecoration(
+                            hintText: _selectedViewTab == 0
+                                ? 'Search by Invoice #, Customer Name, or Phone...'
+                                : 'Search by Quotation #, Customer Name, or Phone...',
+                            hintStyle: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8)),
+                            prefixIcon: const Icon(Icons.search_rounded, size: 18, color: Color(0xFF64748B)),
+                            suffixIcon: _searchController.text.isNotEmpty
+                                ? IconButton(
+                                    icon: const Icon(Icons.clear_rounded, size: 16),
+                                    onPressed: () {
+                                      _searchController.clear();
+                                      setState(() {});
+                                    },
+                                  )
+                                : null,
+                            filled: true,
+                            fillColor: Colors.white,
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFCBD5E1))),
+                            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            isDense: true,
+                          ),
+                        );
+
+                        final filterPills = SingleChildScrollView(
                           scrollDirection: Axis.horizontal,
                           child: Row(
                             children: _selectedViewTab == 0
@@ -547,33 +527,33 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                                       _loadData();
                                     }, const Color(0xFF2563EB)),
                                     const SizedBox(width: 8),
-                                    _buildFilterPill('PENDING', 'Pending Payment', _selectedInvoiceStatus, (val) {
+                                    _buildFilterPill('PENDING', 'Pending', _selectedInvoiceStatus, (val) {
                                       setState(() => _selectedInvoiceStatus = val);
                                       _loadData();
                                     }, const Color(0xFFDC2626)),
                                     const SizedBox(width: 8),
-                                    _buildFilterPill('PARTIAL', 'Partially Paid', _selectedInvoiceStatus, (val) {
+                                    _buildFilterPill('PARTIAL', 'Partial', _selectedInvoiceStatus, (val) {
                                       setState(() => _selectedInvoiceStatus = val);
                                       _loadData();
                                     }, const Color(0xFFD97706)),
                                     const SizedBox(width: 8),
-                                    _buildFilterPill('PAID', 'Fully Paid', _selectedInvoiceStatus, (val) {
+                                    _buildFilterPill('PAID', 'Paid', _selectedInvoiceStatus, (val) {
                                       setState(() => _selectedInvoiceStatus = val);
                                       _loadData();
                                     }, const Color(0xFF059669)),
                                   ]
                                 : [
-                                    _buildFilterPill('ALL', 'All Quotations', _selectedQuoteStatus, (val) {
+                                    _buildFilterPill('ALL', 'All', _selectedQuoteStatus, (val) {
                                       setState(() => _selectedQuoteStatus = val);
                                       _loadData();
                                     }, const Color(0xFF059669)),
                                     const SizedBox(width: 8),
-                                    _buildFilterPill('SENT', 'Sent to Customer', _selectedQuoteStatus, (val) {
+                                    _buildFilterPill('SENT', 'Sent', _selectedQuoteStatus, (val) {
                                       setState(() => _selectedQuoteStatus = val);
                                       _loadData();
                                     }, const Color(0xFF2563EB)),
                                     const SizedBox(width: 8),
-                                    _buildFilterPill('CONVERTED', 'Converted to Bill', _selectedQuoteStatus, (val) {
+                                    _buildFilterPill('CONVERTED', 'Converted', _selectedQuoteStatus, (val) {
                                       setState(() => _selectedQuoteStatus = val);
                                       _loadData();
                                     }, const Color(0xFF059669)),
@@ -589,8 +569,26 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                                     }, const Color(0xFF64748B)),
                                   ],
                           ),
-                        ),
-                      ],
+                        );
+
+                        if (filterConstraints.maxWidth >= 860) {
+                          return Row(
+                            children: [
+                              Expanded(flex: 2, child: searchField),
+                              const SizedBox(width: 12),
+                              Flexible(flex: 3, child: Align(alignment: Alignment.centerRight, child: filterPills)),
+                            ],
+                          );
+                        }
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            searchField,
+                            const SizedBox(height: 10),
+                            filterPills,
+                          ],
+                        );
+                      },
                     ),
                   ),
                   const SizedBox(height: 20),
@@ -604,12 +602,14 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                       _buildEmptyState(
                         icon: Icons.receipt_outlined,
                         title: 'No invoices found in this view',
-                        subtitle: 'Convert an existing quotation from the Quotations tab or click "+ New Bill / Invoice" above.',
-                        actionText: '+ Create Bill / Invoice',
+                        subtitle: 'Convert an existing quotation from the Quotations tab or click "New Bill / Invoice" above.',
+                        actionText: 'Create Bill / Invoice',
                         onAction: () {
-                          showDialog(
-                            context: context,
-                            builder: (_) => const QuotationFormDialog(isBill: true),
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const QuotationFormDialog(isBill: true, asPage: true),
+                            ),
                           ).then((_) => _loadData());
                         },
                       )
@@ -631,11 +631,13 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                         icon: Icons.request_quote_outlined,
                         title: 'No quotations found in this view',
                         subtitle: 'Generate sales estimates with product catalog auto-saving to send to leads.',
-                        actionText: '+ Create Quotation',
+                        actionText: 'Create Quotation',
                         onAction: () {
-                          showDialog(
-                            context: context,
-                            builder: (_) => const QuotationFormDialog(isBill: false),
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const QuotationFormDialog(isBill: false, asPage: true),
+                            ),
                           ).then((_) => _loadData());
                         },
                       )
@@ -744,7 +746,6 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
     bool isMobile = false,
   }) {
     return Container(
-      width: isMobile ? null : 240,
       padding: EdgeInsets.all(isMobile ? 12 : 16),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -1284,9 +1285,11 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                               icon: const Icon(Icons.edit_outlined, size: 14, color: Color(0xFF2563EB)),
                               label: Text('Edit', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF2563EB))),
                               onPressed: () async {
-                                final res = await showDialog(
-                                  context: context,
-                                  builder: (_) => QuotationFormDialog(quotationToEdit: quote),
+                                final res = await Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => QuotationFormDialog(quotationToEdit: quote, asPage: true),
+                                  ),
                                 );
                                 if (res != null) {
                                   _loadData();
@@ -1367,9 +1370,11 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                             icon: const Icon(Icons.edit_outlined, size: 15, color: Color(0xFF2563EB)),
                             label: Text('Edit Quote', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF2563EB))),
                             onPressed: () async {
-                              final res = await showDialog(
-                                context: context,
-                                builder: (_) => QuotationFormDialog(quotationToEdit: quote),
+                              final res = await Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => QuotationFormDialog(quotationToEdit: quote, asPage: true),
+                                ),
                               );
                               if (res != null) {
                                 _loadData();

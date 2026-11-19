@@ -171,6 +171,23 @@ class AppTheme {
         onSecondary: Colors.white,
         onSurface: AppColors.textPrimary,
       ),
+      chipTheme: ChipThemeData(
+        backgroundColor: Colors.white,
+        selectedColor: AppColors.emerald.withValues(alpha: 0.14),
+        secondarySelectedColor: AppColors.emerald.withValues(alpha: 0.14),
+        checkmarkColor: AppColors.emeraldDark,
+        labelStyle: GoogleFonts.inter(
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+          color: AppColors.textPrimary,
+        ),
+        secondaryLabelStyle: GoogleFonts.inter(
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+          color: AppColors.textPrimary,
+        ),
+        side: const BorderSide(color: AppColors.border),
+      ),
       textTheme: textTheme.copyWith(
         displayLarge: GoogleFonts.inter(
           fontSize: 30,

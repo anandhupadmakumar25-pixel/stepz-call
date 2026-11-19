@@ -415,48 +415,18 @@ class _ImportWizardDialogState extends State<ImportWizardDialog> {
           ),
           const SizedBox(height: 14),
 
-          // Default Branch & Category assignment for batch
+          // Default Branch assignment for batch
           Text(
             'Batch Auto-Tagging (Optional)',
             style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
           ),
           const SizedBox(height: 8),
-          if (isMobile) ...[
-            _buildDropdownTile(
-              title: 'Default Branch',
-              value: _selectedBranchId,
-              items: leadProvider.branches.map((b) => DropdownMenuItem(value: b.id, child: Text(b.name))).toList(),
-              onChanged: (val) => setState(() => _selectedBranchId = val),
-            ),
-            const SizedBox(height: 10),
-            _buildDropdownTile(
-              title: 'Default Category',
-              value: _selectedCategoryId,
-              items: leadProvider.categories.map((c) => DropdownMenuItem(value: c.id, child: Text(c.name))).toList(),
-              onChanged: (val) => setState(() => _selectedCategoryId = val),
-            ),
-          ] else
-            Row(
-              children: [
-                Expanded(
-                  child: _buildDropdownTile(
-                    title: 'Default Branch',
-                    value: _selectedBranchId,
-                    items: leadProvider.branches.map((b) => DropdownMenuItem(value: b.id, child: Text(b.name))).toList(),
-                    onChanged: (val) => setState(() => _selectedBranchId = val),
-                  ),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: _buildDropdownTile(
-                    title: 'Default Category',
-                    value: _selectedCategoryId,
-                    items: leadProvider.categories.map((c) => DropdownMenuItem(value: c.id, child: Text(c.name))).toList(),
-                    onChanged: (val) => setState(() => _selectedCategoryId = val),
-                  ),
-                ),
-              ],
-            ),
+          _buildDropdownTile(
+            title: 'Default Branch',
+            value: _selectedBranchId,
+            items: leadProvider.branches.map((b) => DropdownMenuItem(value: b.id, child: Text(b.name))).toList(),
+            onChanged: (val) => setState(() => _selectedBranchId = val),
+          ),
         ],
       ),
     );

@@ -1,3 +1,49 @@
+class DelegationSummary {
+  final String id;
+  final String title;
+  final String delegatorId;
+  final String delegatorName;
+  final List<String> sections;
+  final List<String> permissions;
+  final String startDate;
+  final String endDate;
+
+  DelegationSummary({
+    required this.id,
+    required this.title,
+    required this.delegatorId,
+    required this.delegatorName,
+    this.sections = const [],
+    this.permissions = const [],
+    required this.startDate,
+    required this.endDate,
+  });
+
+  factory DelegationSummary.fromJson(Map<String, dynamic> json) {
+    return DelegationSummary(
+      id: json['id']?.toString() ?? '',
+      title: json['title']?.toString() ?? 'Acting In-Charge',
+      delegatorId: json['delegator_id']?.toString() ?? '',
+      delegatorName: json['delegator_name']?.toString() ?? 'Admin',
+      sections: (json['sections'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
+      permissions: (json['permissions'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
+      startDate: json['start_date']?.toString() ?? '',
+      endDate: json['end_date']?.toString() ?? '',
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'title': title,
+    'delegator_id': delegatorId,
+    'delegator_name': delegatorName,
+    'sections': sections,
+    'permissions': permissions,
+    'start_date': startDate,
+    'end_date': endDate,
+  };
+}
+
 class UserModel {
   final String id;
   final String email;
@@ -32,6 +78,7 @@ class UserModel {
   final List<String> customRoleIds;
   final List<String> customRoleNames;
   final List<String> resolvedPermissions;
+  final List<DelegationSummary> activeDelegations;
 
   UserModel({
     required this.id,
@@ -67,7 +114,18 @@ class UserModel {
     this.customRoleIds = const [],
     this.customRoleNames = const [],
     this.resolvedPermissions = const [],
+    this.activeDelegations = const [],
   });
+
+  static const Map<String, String> _v2MenuParentMap = {
+    'leave': 'attendance',
+    'payroll': 'employees',
+    'delegation': 'employees',
+    'quotations': 'leads',
+    'billing': 'leads',
+    'templates': 'leads',
+    'reports': 'analytics',
+  };
 
   bool get isRootMasterAdmin => isMasterAdmin || role == 'MASTER_ADMIN';
   bool get isSuperAdmin => role == 'SUPER_ADMIN' || role == 'MASTER_ADMIN';
@@ -75,20 +133,40 @@ class UserModel {
   bool get isManager => role == 'MANAGER';
   bool get isEmployee => role == 'EMPLOYEE';
   bool get canManageCompany => isSuperAdmin || role == 'COMPANY_ADMIN' || role == 'MANAGER';
+  bool get hasActiveDelegations => activeDelegations.isNotEmpty;
 
   bool hasMenuPermission(String menuKey) {
     if (isSuperAdmin) return true;
     if (companyAllowedMenus.isEmpty) return true; // Default fallback if not initialized
-    return companyAllowedMenus.contains(menuKey);
+    if (companyAllowedMenus.contains(menuKey)) return true;
+    final hasV2Keys = companyAllowedMenus.any((k) => _v2MenuParentMap.containsKey(k));
+    if (!hasV2Keys && _v2MenuParentMap.containsKey(menuKey)) {
+      return companyAllowedMenus.contains(_v2MenuParentMap[menuKey]);
+    }
+    return false;
   }
 
   bool hasPermission(String permKey) {
-    if (isSuperAdmin || isCompanyAdmin) return true;
-    if (resolvedPermissions.contains('*') || resolvedPermissions.contains(permKey)) return true;
+    if (isSuperAdmin) return true;
+    if (isCompanyAdmin || resolvedPermissions.contains('*')) return true;
+    if (resolvedPermissions.contains(permKey)) return true;
     final domain = permKey.split('.').first;
     if (resolvedPermissions.contains('$domain.*')) return true;
-    // Fallback if legacy manager
-    if (isManager) return true;
+    return false;
+  }
+
+  bool hasAnyPermission(List<String> keys) {
+    return keys.any(hasPermission);
+  }
+
+  bool isDelegatedFor(String sectionOrPrefix) {
+    if (activeDelegations.isEmpty) return false;
+    for (final d in activeDelegations) {
+      if (d.sections.contains(sectionOrPrefix)) return true;
+      if (d.permissions.any((p) => p == '*' || p == sectionOrPrefix || p.startsWith('$sectionOrPrefix.'))) {
+        return true;
+      }
+    }
     return false;
   }
 
@@ -121,6 +199,14 @@ class UserModel {
     final rawPerms = json['resolved_permissions'] as List<dynamic>?;
     final List<String> parsedPerms = rawPerms != null
         ? rawPerms.map((e) => e.toString()).toList()
+        : [];
+
+    final rawDelegations = json['active_delegations'] as List<dynamic>?;
+    final List<DelegationSummary> parsedDelegations = rawDelegations != null
+        ? rawDelegations
+            .whereType<Map<String, dynamic>>()
+            .map((e) => DelegationSummary.fromJson(e))
+            .toList()
         : [];
 
     return UserModel(
@@ -159,6 +245,7 @@ class UserModel {
       customRoleIds: parsedRoleIds,
       customRoleNames: parsedRoleNames,
       resolvedPermissions: parsedPerms,
+      activeDelegations: parsedDelegations,
     );
   }
 
@@ -192,5 +279,6 @@ class UserModel {
     'custom_role_ids': customRoleIds,
     'custom_role_names': customRoleNames,
     'resolved_permissions': resolvedPermissions,
+    'active_delegations': activeDelegations.map((e) => e.toJson()).toList(),
   };
 }

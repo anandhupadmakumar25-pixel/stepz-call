@@ -15,10 +15,10 @@ class LeadAssignmentService:
         [{'employee_id': 'uuid', 'count': int or 'percentage': float}]
         """
         with transaction.atomic():
-            # Lock leads for update
+            # Lock leads for update (strictly unassigned leads only — no duplicate assignment)
             leads = list(
                 Lead.objects.select_for_update()
-                .filter(id__in=lead_ids, company=company, status='UNASSIGNED')
+                .filter(id__in=lead_ids, company=company, status='UNASSIGNED', assigned_to__isnull=True)
             )
 
             if not leads:
@@ -29,14 +29,20 @@ class LeadAssignmentService:
                     'blocked_count': 0,
                 }
 
-            # Fetch active employees
-            emp_ids = [a['employee_id'] for a in allocations]
+            # Fetch active employees (deduplicated)
+            emp_ids = list(dict.fromkeys(str(a['employee_id']) for a in allocations))
             employees = {
                 str(u.id): u for u in User.objects.filter(id__in=emp_ids, company=company, is_active=True)
             }
 
             if not employees:
                 raise ValueError("No active target employees selected for assignment.")
+
+            if len(employees) > len(leads):
+                raise ValueError(
+                    f"Cannot assign {len(leads)} lead(s) to {len(employees)} employees. "
+                    "A lead cannot be assigned to multiple employees."
+                )
 
             # Calculate distribution map {emp_id: count}
             distribution = cls._calculate_distribution(len(leads), allocations, method, list(employees.keys()))
@@ -126,6 +132,82 @@ class LeadAssignmentService:
                     {'employee_id': emp_id, 'employee_name': employees[emp_id].full_name, 'count': c}
                     for emp_id, c in emp_assigned_counts.items()
                 ]
+            }
+
+    @classmethod
+    def reassign_leads(cls, company, reassigned_by, lead_ids: list, target_employee_id: str, notes: str = '') -> dict:
+        """
+        Safely transfers already-assigned leads from their current employee to a new employee.
+        Prevents duplicate assignment: a lead always has at most one assigned_to owner.
+        """
+        if not lead_ids:
+            return {'success': False, 'message': 'No leads selected for reassignment.', 'reassigned_count': 0}
+
+        with transaction.atomic():
+            target_emp = User.objects.filter(id=target_employee_id, company=company, is_active=True).first()
+            if not target_emp:
+                return {'success': False, 'message': 'Target employee not found or inactive.', 'reassigned_count': 0}
+
+            leads = list(
+                Lead.objects.select_for_update()
+                .select_related('assigned_to')
+                .filter(id__in=lead_ids, company=company, assigned_to__isnull=False)
+            )
+            if not leads:
+                return {
+                    'success': False,
+                    'message': 'Selected leads are unassigned. Use Assign to Staff instead of Reassign.',
+                    'reassigned_count': 0,
+                }
+
+            now = timezone.now()
+            reassigned_count = 0
+            skipped_same = 0
+            history_entries = []
+
+            for lead in leads:
+                if str(lead.assigned_to_id) == str(target_emp.id):
+                    skipped_same += 1
+                    continue
+
+                prev_emp = lead.assigned_to
+                prev_label = prev_emp.full_name or prev_emp.email if prev_emp else 'Previous Staff'
+                target_label = target_emp.full_name or target_emp.email
+
+                lead.assigned_to = target_emp
+                lead.assigned_at = now
+                lead.save(update_fields=['assigned_to', 'assigned_at'])
+
+                note_text = f"Reassigned from {prev_label} to {target_label}"
+                if notes.strip():
+                    note_text += f" — {notes.strip()}"
+
+                history_entries.append(LeadAssignmentHistory(
+                    company=company,
+                    lead=lead,
+                    assigned_to=target_emp,
+                    assigned_by=reassigned_by,
+                    assignment_method='CUSTOM',
+                    notes=note_text,
+                ))
+                reassigned_count += 1
+
+            if history_entries:
+                LeadAssignmentHistory.objects.bulk_create(history_entries)
+                Notification.objects.create(
+                    company=company,
+                    user=target_emp,
+                    title='Leads Reassigned to You',
+                    message=f'{reassigned_count} lead{"s have" if reassigned_count > 1 else " has"} been reassigned to you.',
+                    notification_type='LEAD_ASSIGNED',
+                    entity_type='lead',
+                )
+
+            return {
+                'success': True,
+                'reassigned_count': reassigned_count,
+                'skipped_same_employee': skipped_same,
+                'target_employee_name': target_emp.full_name or target_emp.email,
             }
 
     @staticmethod

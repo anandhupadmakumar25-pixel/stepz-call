@@ -363,7 +363,6 @@ Login URL: https://app.stepzcrm.com
     final compNameController = TextEditingController();
     final adminEmailController = TextEditingController();
     final phoneController = TextEditingController();
-    final subdomainController = TextEditingController();
     final adminNameController = TextEditingController();
     final addressController = TextEditingController();
     final adminUsernameController = TextEditingController();
@@ -465,31 +464,12 @@ Login URL: https://app.stepzcrm.com
                       ],
 
                       // Basic Info
-                      if (isMobile) ...[
-                        GlassTextField(
-                          label: 'Company Name *',
-                          hintText: 'e.g. Apex Global',
-                          controller: compNameController,
-                          validator: (val) => val == null || val.trim().isEmpty ? 'Company Name is required' : null,
-                        ),
-                        const SizedBox(height: 12),
-                        GlassTextField(label: 'Subdomain / Slug', hintText: 'apex', controller: subdomainController),
-                      ] else
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              child: GlassTextField(
-                                label: 'Company Name *',
-                                hintText: 'e.g. Apex Global',
-                                controller: compNameController,
-                                validator: (val) => val == null || val.trim().isEmpty ? 'Company Name is required' : null,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(child: GlassTextField(label: 'Subdomain / Slug', hintText: 'apex', controller: subdomainController)),
-                          ],
-                        ),
+                      GlassTextField(
+                        label: 'Company Name *',
+                        hintText: 'e.g. Apex Global',
+                        controller: compNameController,
+                        validator: (val) => val == null || val.trim().isEmpty ? 'Company Name is required' : null,
+                      ),
                       const SizedBox(height: 12),
 
                       // Admin Username & Email
@@ -829,6 +809,15 @@ Login URL: https://app.stepzcrm.com
                                       final nav = Navigator.of(ctx);
                                       final companyProvider = context.read<CompanyProvider>();
 
+                                      final autoSlug = compName
+                                          .toLowerCase()
+                                          .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
+                                          .replaceAll(RegExp(r'^-|-$'), '');
+
+                                      final effectivePlanId = compProv.plans.any((p) => p.code == selectedPlanId)
+                                          ? selectedPlanId
+                                          : (compProv.plans.isNotEmpty ? compProv.plans.first.code : selectedPlanId);
+
                                       final result = await companyProvider.createCompanyWithCredentials({
                                         'name': compName,
                                         'admin_email': adminEmail,
@@ -836,11 +825,11 @@ Login URL: https://app.stepzcrm.com
                                         'admin_password': adminPass,
                                         'admin_first_name': adminNameController.text.trim().isNotEmpty ? adminNameController.text.trim() : 'Admin',
                                         if (phoneController.text.trim().isNotEmpty) 'contact_phone': phoneController.text.trim(),
-                                        if (subdomainController.text.trim().isNotEmpty) 'subdomain': subdomainController.text.trim(),
+                                        if (autoSlug.isNotEmpty) 'subdomain': autoSlug,
                                         if (logoData.trim().isNotEmpty) 'logo': logoData.trim(),
                                         if (addressController.text.trim().isNotEmpty) 'address': addressController.text.trim(),
                                         if (websiteController.text.trim().isNotEmpty) 'website': websiteController.text.trim(),
-                                        'plan_id': selectedPlanId,
+                                        'plan_id': effectivePlanId,
                                         'allowed_menus': selectedMenus.toList(),
                                       });
 
@@ -2377,76 +2366,89 @@ Login URL: https://app.stepzcrm.com
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     if (isMasterAdmin)
-                      OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
-                          padding: EdgeInsets.symmetric(horizontal: isMobile ? 10 : 14, vertical: isMobile ? 8 : 10),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          side: const BorderSide(color: Color(0xFF6366F1)),
-                          backgroundColor: const Color(0xFFEEF2FF),
-                        ),
-                        icon: const Icon(Icons.shield_outlined, size: 16, color: Color(0xFF4338CA)),
-                        label: Text(
-                          isMobile ? 'Super Admins' : 'Super Admins (${compProvider.totalSuperAdmins})',
-                          style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFF4338CA)),
-                        ),
-                        onPressed: () {
-                          SuperAdminManagementDialog.show(
-                            context,
-                            onSelectFilter: (selectedId) {
-                              compProvider.setSelectedSuperAdminFilter(selectedId);
-                            },
-                          );
-                        },
-                      ),
-                    OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        padding: EdgeInsets.symmetric(horizontal: isMobile ? 10 : 14, vertical: isMobile ? 8 : 10),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        side: BorderSide(
-                          color: compProvider.pendingRenewalCount > 0 ? const Color(0xFFF59E0B) : const Color(0xFFCBD5E1),
-                          width: compProvider.pendingRenewalCount > 0 ? 1.5 : 1.0,
-                        ),
-                        backgroundColor: compProvider.pendingRenewalCount > 0 ? const Color(0xFFFFFBEB) : Colors.white,
-                      ),
-                      icon: Icon(
-                        Icons.pending_actions_rounded,
-                        size: 16,
-                        color: compProvider.pendingRenewalCount > 0 ? const Color(0xFFD97706) : const Color(0xFF475569),
-                      ),
-                      label: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            'Renewal Requests',
-                            style: GoogleFonts.inter(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: compProvider.pendingRenewalCount > 0 ? const Color(0xFF92400E) : const Color(0xFF334155),
-                            ),
+                      SizedBox(
+                        height: isMobile ? 36 : 38,
+                        child: OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 14),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            side: const BorderSide(color: Color(0xFF6366F1)),
+                            backgroundColor: const Color(0xFFEEF2FF),
                           ),
-                          if (compProvider.pendingRenewalCount > 0) ...[
-                            const SizedBox(width: 6),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFDC2626),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Text(
-                                '${compProvider.pendingRenewalCount}',
-                                style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w800, color: Colors.white),
+                          icon: const Icon(Icons.shield_outlined, size: 15, color: Color(0xFF4338CA)),
+                          label: Text(
+                            isMobile ? 'Super Admins' : 'Super Admins (${compProvider.totalSuperAdmins})',
+                            style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFF4338CA)),
+                          ),
+                          onPressed: () {
+                            SuperAdminManagementDialog.show(
+                              context,
+                              onSelectFilter: (selectedId) {
+                                compProvider.setSelectedSuperAdminFilter(selectedId);
+                              },
+                            );
+                          },
+                        ),
+                      ),
+                    SizedBox(
+                      height: isMobile ? 36 : 38,
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 14),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          side: BorderSide(
+                            color: compProvider.pendingRenewalCount > 0 ? const Color(0xFFF59E0B) : const Color(0xFFCBD5E1),
+                            width: compProvider.pendingRenewalCount > 0 ? 1.5 : 1.0,
+                          ),
+                          backgroundColor: compProvider.pendingRenewalCount > 0 ? const Color(0xFFFFFBEB) : Colors.white,
+                        ),
+                        icon: Icon(
+                          Icons.pending_actions_rounded,
+                          size: 15,
+                          color: compProvider.pendingRenewalCount > 0 ? const Color(0xFFD97706) : const Color(0xFF475569),
+                        ),
+                        label: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'Renewal Requests',
+                              style: GoogleFonts.inter(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: compProvider.pendingRenewalCount > 0 ? const Color(0xFF92400E) : const Color(0xFF334155),
                               ),
                             ),
+                            if (compProvider.pendingRenewalCount > 0) ...[
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFDC2626),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Text(
+                                  '${compProvider.pendingRenewalCount}',
+                                  style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w800, color: Colors.white),
+                                ),
+                              ),
+                            ],
                           ],
-                        ],
+                        ),
+                        onPressed: _showRenewalRequestsManagerDialog,
                       ),
-                      onPressed: _showRenewalRequestsManagerDialog,
                     ),
                     GradientPrimaryButton(
                       icon: Icons.add_rounded,
                       text: 'Create Company',
                       onPressed: _showCreateCompanyDialog,
                       gradient: AppColors.primaryGradient,
+                      height: isMobile ? 36 : 38,
+                      borderRadius: 10,
+                      padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 14),
                     ),
                   ],
                 ),
@@ -2502,248 +2504,249 @@ Login URL: https://app.stepzcrm.com
                         )
                       : ListView.separated(
                           itemCount: compProvider.companies.length,
-                          separatorBuilder: (_, __) => const SizedBox(height: 12),
+                          separatorBuilder: (_, __) => const SizedBox(height: 10),
                           itemBuilder: (ctx, i) {
                             final comp = compProvider.companies[i];
-                            return Material(
-                              color: Colors.transparent,
-                              child: InkWell(
-                                onTap: () => Navigator.pushNamed(context, AppRoutes.companyDetail, arguments: comp),
-                                borderRadius: BorderRadius.circular(20),
-                                child: GlassCard(
-                                  padding: EdgeInsets.symmetric(horizontal: isMobile ? 14 : 20, vertical: 16),
-                                  opacity: 0.95,
-                                  borderColor: const Color(0xFFE2E8F0),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          CompanyLogoView(
-                                            logo: comp.logo,
-                                            companyName: comp.name,
-                                            size: 46,
-                                            borderRadius: BorderRadius.circular(12),
-                                            borderColor: const Color(0xFFCBD5E1),
-                                          ),
-                                          const SizedBox(width: 14),
-                                          Expanded(
-                                            child: Column(
-                                              crossAxisAlignment: CrossAxisAlignment.start,
-                                              children: [
-                                                Row(
-                                                  children: [
-                                                    Flexible(
-                                                      child: Text(
-                                                        comp.name,
-                                                        style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
-                                                        overflow: TextOverflow.ellipsis,
-                                                      ),
-                                                    ),
-                                                    const SizedBox(width: 8),
-                                                    Container(
-                                                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                                                      decoration: BoxDecoration(
-                                                        color: const Color(0xFFFEF3C7),
-                                                        borderRadius: BorderRadius.circular(6),
-                                                        border: Border.all(color: const Color(0xFFD4AF37)),
-                                                      ),
-                                                      child: Text(
-                                                        comp.planName,
-                                                        style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, color: const Color(0xFF92400E)),
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                                const SizedBox(height: 4),
-                                                Text(
-                                                  '${comp.subdomain != null && comp.subdomain!.isNotEmpty ? "${comp.subdomain}.stepzcrm.com • " : ""}${comp.adminEmail}',
-                                                  style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
-                                                  overflow: TextOverflow.ellipsis,
-                                                  maxLines: 1,
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                          if (!isMobile) ...[
-                                            const SizedBox(width: 16),
-                                            _buildCenterLifecycleBlock(comp, isMasterAdmin),
-                                            const SizedBox(width: 16),
-                                            Wrap(
-                                              spacing: 8,
-                                              crossAxisAlignment: WrapCrossAlignment.center,
-                                              children: [
-                                                // View Company Button
-                                                OutlinedButton.icon(
-                                                  onPressed: () => Navigator.pushNamed(context, AppRoutes.companyDetail, arguments: comp),
-                                                  icon: const Icon(Icons.remove_red_eye_outlined, size: 14, color: Color(0xFF0F172A)),
-                                                  label: Text('View Details', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A))),
-                                                  style: OutlinedButton.styleFrom(
-                                                    side: const BorderSide(color: Color(0xFFE2E8F0)),
-                                                    backgroundColor: Colors.white,
-                                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                                  ),
-                                                ),
-                                                // Suspend / Activate Action Button
-                                                OutlinedButton.icon(
-                                                  onPressed: () => _confirmToggleStatus(comp),
-                                                  icon: Icon(
-                                                    comp.isActive ? Icons.pause_circle_outline_rounded : Icons.play_circle_outline_rounded,
-                                                    size: 14,
-                                                    color: comp.isActive ? const Color(0xFFDC2626) : const Color(0xFF047857),
-                                                  ),
-                                                  label: Text(
-                                                    comp.isActive ? 'Suspend' : 'Activate',
-                                                    style: GoogleFonts.inter(
-                                                      fontSize: 11,
-                                                      fontWeight: FontWeight.w700,
-                                                      color: comp.isActive ? const Color(0xFFDC2626) : const Color(0xFF047857),
-                                                    ),
-                                                  ),
-                                                  style: OutlinedButton.styleFrom(
-                                                    side: BorderSide(
-                                                      color: comp.isActive ? const Color(0xFFFECDD3) : const Color(0xFFBBF7D0),
-                                                    ),
-                                                    backgroundColor: comp.isActive ? const Color(0xFFFFF1F2) : const Color(0xFFF0FDF4),
-                                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                                  ),
-                                                ),
-                                                // Permissions Button
-                                                OutlinedButton.icon(
-                                                  onPressed: () => _showPermissionsDialog(comp),
-                                                  icon: const Icon(Icons.tune_rounded, size: 14, color: Color(0xFF2563EB)),
-                                                  label: Text('Permissions', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF1D4ED8))),
-                                                  style: OutlinedButton.styleFrom(
-                                                    side: const BorderSide(color: Color(0xFFBFDBFE)),
-                                                    backgroundColor: const Color(0xFFEFF6FF),
-                                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                                  ),
-                                                ),
-                                                // Renew Plan Button
-                                                OutlinedButton.icon(
-                                                  onPressed: () => _showRenewPlanDialog(comp),
-                                                  icon: const Icon(Icons.bolt_rounded, size: 14, color: Color(0xFF4F46E5)),
-                                                  label: Text('Renew Plan', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF4338CA))),
-                                                  style: OutlinedButton.styleFrom(
-                                                    side: const BorderSide(color: Color(0xFFC7D2FE)),
-                                                    backgroundColor: const Color(0xFFEEF2FF),
-                                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                                  ),
-                                                ),
-                                                IconButton(
-                                                  tooltip: 'Generate New Temporary Password',
-                                                  icon: const Icon(Icons.lock_reset_rounded, size: 20, color: Color(0xFFD4AF37)),
-                                                  onPressed: () => _showResetPasswordDialog(comp),
-                                                ),
-                                                if (isMasterAdmin)
-                                                  IconButton(
-                                                    tooltip: 'Reassign Super Admin',
-                                                    icon: const Icon(Icons.swap_horiz_rounded, size: 20, color: Color(0xFF4338CA)),
-                                                    onPressed: () => _showSuperAdminRequestDialog(comp),
-                                                  ),
-                                              ],
-                                            ),
-                                          ],
-                                        ],
-                                      ),
-                                      if (isMobile) ...[
-                                        _buildCenterLifecycleBlock(comp, isMasterAdmin, isMobile: true),
-                                        const SizedBox(height: 6),
-                                        const Divider(color: Color(0xFFE2E8F0), height: 1),
-                                        const SizedBox(height: 10),
-                                        Wrap(
-                                          spacing: 8,
-                                          runSpacing: 8,
-                                          alignment: WrapAlignment.spaceBetween,
-                                          crossAxisAlignment: WrapCrossAlignment.center,
-                                          children: [
-                                            // View Details button
-                                            OutlinedButton.icon(
-                                              onPressed: () => Navigator.pushNamed(context, AppRoutes.companyDetail, arguments: comp),
-                                              icon: const Icon(Icons.remove_red_eye_outlined, size: 13, color: Color(0xFF0F172A)),
-                                              label: Text('View', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A))),
-                                              style: OutlinedButton.styleFrom(
-                                                side: const BorderSide(color: Color(0xFFE2E8F0)),
-                                                backgroundColor: Colors.white,
-                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                              ),
-                                            ),
-                                            // Suspend / Activate Toggle
-                                            OutlinedButton.icon(
-                                              onPressed: () => _confirmToggleStatus(comp),
-                                              icon: Icon(
-                                                comp.isActive ? Icons.pause_circle_outline_rounded : Icons.play_circle_outline_rounded,
-                                                size: 13,
-                                                color: comp.isActive ? const Color(0xFFDC2626) : const Color(0xFF047857),
-                                              ),
-                                              label: Text(
-                                                comp.isActive ? 'Suspend' : 'Activate',
-                                                style: GoogleFonts.inter(
-                                                  fontSize: 11,
-                                                  fontWeight: FontWeight.w700,
-                                                  color: comp.isActive ? const Color(0xFFDC2626) : const Color(0xFF047857),
-                                                ),
-                                              ),
-                                              style: OutlinedButton.styleFrom(
-                                                side: BorderSide(
-                                                  color: comp.isActive ? const Color(0xFFFECDD3) : const Color(0xFFBBF7D0),
-                                                ),
-                                                backgroundColor: comp.isActive ? const Color(0xFFFFF1F2) : const Color(0xFFF0FDF4),
-                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                              ),
-                                            ),
-                                            Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                OutlinedButton.icon(
-                                                  onPressed: () => _showRenewPlanDialog(comp),
-                                                  icon: const Icon(Icons.bolt_rounded, size: 13, color: Color(0xFF4F46E5)),
-                                                  label: Text('Renew', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF4338CA))),
-                                                  style: OutlinedButton.styleFrom(
-                                                    side: const BorderSide(color: Color(0xFFC7D2FE)),
-                                                    backgroundColor: const Color(0xFFEEF2FF),
-                                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                                  ),
-                                                ),
-                                                const SizedBox(width: 6),
-                                                OutlinedButton.icon(
-                                                  onPressed: () => _showPermissionsDialog(comp),
-                                                  icon: const Icon(Icons.tune_rounded, size: 13, color: Color(0xFF2563EB)),
-                                                  label: Text('Perms', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF1D4ED8))),
-                                                  style: OutlinedButton.styleFrom(
-                                                    side: const BorderSide(color: Color(0xFFBFDBFE)),
-                                                    backgroundColor: const Color(0xFFEFF6FF),
-                                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                                  ),
-                                                ),
-                                                IconButton(
-                                                  tooltip: 'Generate New Temporary Password',
-                                                  icon: const Icon(Icons.lock_reset_rounded, size: 18, color: Color(0xFFD4AF37)),
-                                                  onPressed: () => _showResetPasswordDialog(comp),
-                                                ),
-                                              ],
-                                            ),
-                                          ],
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            );
+                            return _buildCompanyExpansionTile(comp, isMasterAdmin, isMobile);
                           },
                         ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCompanyExpansionTile(CompanyModel comp, bool isMasterAdmin, bool isMobile) {
+    final statusColor = comp.isActive ? const Color(0xFF059669) : const Color(0xFFDC2626);
+    final statusBg = comp.isActive ? const Color(0xFFECFDF5) : const Color(0xFFFEF2F2);
+
+    return GlassCard(
+      padding: EdgeInsets.zero,
+      opacity: 0.96,
+      borderRadius: BorderRadius.circular(14),
+      borderColor: comp.isActive ? const Color(0xFFE2E8F0) : const Color(0xFFFECACA),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          tilePadding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 16, vertical: 4),
+          childrenPadding: EdgeInsets.fromLTRB(isMobile ? 12 : 16, 0, isMobile ? 12 : 16, 14),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          collapsedShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          leading: CompanyLogoView(
+            logo: comp.logo,
+            companyName: comp.name,
+            size: 38,
+            borderRadius: BorderRadius.circular(10),
+            borderColor: const Color(0xFFCBD5E1),
+          ),
+          title: Row(
+            children: [
+              Flexible(
+                child: Text(
+                  comp.name,
+                  style: GoogleFonts.inter(fontSize: 13.5, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF3C7),
+                  borderRadius: BorderRadius.circular(5),
+                  border: Border.all(color: const Color(0xFFD4AF37)),
+                ),
+                child: Text(
+                  comp.planName,
+                  style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w700, color: const Color(0xFF92400E)),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: statusBg,
+                  borderRadius: BorderRadius.circular(5),
+                ),
+                child: Text(
+                  comp.isActive ? 'ACTIVE' : 'SUSPENDED',
+                  style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w800, color: statusColor),
+                ),
+              ),
+            ],
+          ),
+          subtitle: Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(
+              '${comp.adminEmail} · ${comp.userCount} Staff${comp.daysUntilExpiry != null ? " · ${comp.daysUntilExpiry}d left" : ""}',
+              style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B)),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          children: [
+            _buildCenterLifecycleBlock(comp, isMasterAdmin, isMobile: true),
+            const Divider(color: Color(0xFFE2E8F0), height: 18),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _buildTileActionButton(
+                    icon: Icons.visibility_outlined,
+                    label: 'View Details',
+                    color: const Color(0xFF0F172A),
+                    bgColor: Colors.white,
+                    borderColor: const Color(0xFFCBD5E1),
+                    onPressed: () => Navigator.pushNamed(context, AppRoutes.companyDetail, arguments: comp),
+                  ),
+                  _buildTileActionButton(
+                    icon: comp.isActive ? Icons.pause_circle_outline_rounded : Icons.play_circle_outline_rounded,
+                    label: comp.isActive ? 'Suspend' : 'Activate',
+                    color: comp.isActive ? const Color(0xFFDC2626) : const Color(0xFF047857),
+                    bgColor: comp.isActive ? const Color(0xFFFFF1F2) : const Color(0xFFF0FDF4),
+                    borderColor: comp.isActive ? const Color(0xFFFECDD3) : const Color(0xFFBBF7D0),
+                    onPressed: () => _confirmToggleStatus(comp),
+                  ),
+                  _buildTileActionButton(
+                    icon: Icons.tune_rounded,
+                    label: 'Permissions',
+                    color: const Color(0xFF1D4ED8),
+                    bgColor: const Color(0xFFEFF6FF),
+                    borderColor: const Color(0xFFBFDBFE),
+                    onPressed: () => _showPermissionsDialog(comp),
+                  ),
+                  _buildTileActionButton(
+                    icon: Icons.bolt_rounded,
+                    label: 'Renew Plan',
+                    color: const Color(0xFF4338CA),
+                    bgColor: const Color(0xFFEEF2FF),
+                    borderColor: const Color(0xFFC7D2FE),
+                    onPressed: () => _showRenewPlanDialog(comp),
+                  ),
+                  _buildTileActionButton(
+                    icon: Icons.lock_reset_rounded,
+                    label: 'Reset Password',
+                    color: const Color(0xFF92400E),
+                    bgColor: const Color(0xFFFEF3C7),
+                    borderColor: const Color(0xFFFDE68A),
+                    onPressed: () => _showResetPasswordDialog(comp),
+                  ),
+                  if (isMasterAdmin)
+                    _buildTileActionButton(
+                      icon: Icons.swap_horiz_rounded,
+                      label: 'Reassign Admin',
+                      color: const Color(0xFF4338CA),
+                      bgColor: const Color(0xFFEEF2FF),
+                      borderColor: const Color(0xFFC7D2FE),
+                      onPressed: () => _showSuperAdminRequestDialog(comp),
+                    ),
+                  _buildTileActionButton(
+                    icon: Icons.delete_outline_rounded,
+                    label: 'Delete',
+                    color: const Color(0xFFDC2626),
+                    bgColor: const Color(0xFFFEF2F2),
+                    borderColor: const Color(0xFFFCA5A5),
+                    onPressed: () => _confirmDeleteCompany(comp),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _confirmDeleteCompany(CompanyModel comp) {
+    bool isDeleting = false;
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (dialogCtx, setDlgState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          title: Row(
+            children: [
+              const Icon(Icons.warning_amber_rounded, color: Color(0xFFDC2626), size: 24),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Delete Company?',
+                  style: GoogleFonts.inter(fontWeight: FontWeight.w800, fontSize: 16),
+                ),
+              ),
+            ],
+          ),
+          content: Text(
+            'Are you sure you want to permanently delete "${comp.name}"? This will remove all staff accounts, leads, call logs, and billing records for this tenant.',
+            style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF475569)),
+          ),
+          actions: [
+            TextButton(
+              onPressed: isDeleting ? null : () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFDC2626),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              onPressed: isDeleting
+                  ? null
+                  : () async {
+                      setDlgState(() => isDeleting = true);
+                      final compProv = context.read<CompanyProvider>();
+                      final messenger = ScaffoldMessenger.of(context);
+                      final ok = await compProv.deleteCompany(comp.id);
+                      if (!mounted) return;
+                      if (ctx.mounted) Navigator.pop(ctx);
+                      messenger.showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            ok
+                                ? 'Company "${comp.name}" deleted.'
+                                : (compProv.errorMessage ?? 'Failed to delete company.'),
+                          ),
+                          backgroundColor: ok ? AppColors.success : AppColors.danger,
+                        ),
+                      );
+                    },
+              child: Text(isDeleting ? 'Deleting...' : 'Delete Permanently'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTileActionButton({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required Color bgColor,
+    required Color borderColor,
+    required VoidCallback onPressed,
+  }) {
+    return SizedBox(
+      height: 34,
+      child: OutlinedButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon, size: 14.5, color: color),
+        label: Text(
+          label,
+          style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w700, color: color),
+        ),
+        style: OutlinedButton.styleFrom(
+          side: BorderSide(color: borderColor),
+          backgroundColor: bgColor,
+          padding: const EdgeInsets.symmetric(horizontal: 11),
+          minimumSize: Size.zero,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         ),
       ),
     );

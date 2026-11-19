@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:math';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../models/recording_model.dart';
@@ -262,6 +264,7 @@ class GlassAudioPlayerWidget extends StatefulWidget {
 
 class _GlassAudioPlayerWidgetState extends State<GlassAudioPlayerWidget> {
   bool _isPlaying = false;
+  bool _isExporting = false;
   double _currentPosition = 0; // seconds
   int _resolvedDuration = 0;
   Timer? _statusTimer;
@@ -271,6 +274,61 @@ class _GlassAudioPlayerWidgetState extends State<GlassAudioPlayerWidget> {
     final m = (s ~/ 60).toString().padLeft(2, '0');
     final rem = (s % 60).toString().padLeft(2, '0');
     return '$m:$rem';
+  }
+
+  Color _outcomeColor(String outcome) {
+    final upper = outcome.toUpperCase();
+    if (upper.contains('NO_ANSWER') || upper.contains('NOT_ANSWERED') || upper.contains('MISSED') || upper.contains('REJECT')) {
+      return const Color(0xFFDC2626);
+    }
+    if (upper.contains('BUSY') || upper.contains('VOICEMAIL') || upper.contains('CALLBACK')) {
+      return const Color(0xFFD97706);
+    }
+    return const Color(0xFF059669);
+  }
+
+  Future<void> _exportToDevice(String leadName) async {
+    final url = _effectiveAudioUrl;
+    if (url == null || url.isEmpty || _isExporting) return;
+    setState(() => _isExporting = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final res = await http.get(Uri.parse(url));
+      if (res.statusCode >= 200 && res.statusCode < 300 && res.bodyBytes.isNotEmpty) {
+        final safeLead = leadName.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
+        final uriPath = Uri.tryParse(url)?.path ?? '';
+        final ext = uriPath.contains('.') ? uriPath.split('.').last : 'm4a';
+        final fileName = '${safeLead}_recording.$ext';
+        final savedPath = await FilePicker.platform.saveFile(
+          dialogTitle: 'Save Call Recording to Device',
+          fileName: fileName,
+          bytes: res.bodyBytes,
+        );
+        if (mounted) {
+          messenger.showSnackBar(
+            SnackBar(
+              content: Text(savedPath != null && savedPath.isNotEmpty
+                  ? 'Saved recording to $savedPath'
+                  : 'Recording exported ($fileName)'),
+              backgroundColor: AppColors.success,
+            ),
+          );
+        }
+      } else {
+        final uri = Uri.parse(url);
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        messenger.showSnackBar(
+          SnackBar(content: Text('Export failed: $e'), backgroundColor: AppColors.danger),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isExporting = false);
+    }
   }
 
   String? get _effectiveAudioUrl => widget.recording?.audioUrl ?? widget.audioUrl;
@@ -425,17 +483,20 @@ class _GlassAudioPlayerWidgetState extends State<GlassAudioPlayerWidget> {
                         ),
                         if (callOutcome.isNotEmpty) ...[
                           const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF10B981).withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              callOutcome.replaceAll('_', ' '),
-                              style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w800, color: const Color(0xFF059669)),
-                            ),
-                          ),
+                          Builder(builder: (_) {
+                            final ocColor = _outcomeColor(callOutcome);
+                            return Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: ocColor.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                callOutcome.replaceAll('_', ' '),
+                                style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w800, color: ocColor),
+                              ),
+                            );
+                          }),
                         ],
                       ],
                     ),
@@ -531,11 +592,18 @@ class _GlassAudioPlayerWidgetState extends State<GlassAudioPlayerWidget> {
                 ),
               ),
 
-              // Action buttons (Open/Download & Delete)
+              // Action buttons (Save to Device, Open URL & Delete)
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (_effectiveAudioUrl != null && _effectiveAudioUrl!.isNotEmpty)
+                  if (_effectiveAudioUrl != null && _effectiveAudioUrl!.isNotEmpty) ...[
+                    IconButton(
+                      icon: _isExporting
+                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                          : const Icon(Icons.download_rounded, size: 19, color: Color(0xFF059669)),
+                      tooltip: 'Save / Export to Device',
+                      onPressed: _isExporting ? null : () => _exportToDevice(leadName),
+                    ),
                     IconButton(
                       icon: const Icon(Icons.open_in_new_rounded, size: 18, color: Color(0xFF2563EB)),
                       tooltip: 'Open Audio File URL',
@@ -546,6 +614,7 @@ class _GlassAudioPlayerWidgetState extends State<GlassAudioPlayerWidget> {
                         }
                       },
                     ),
+                  ],
                   if (widget.onDelete != null)
                     IconButton(
                       icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.neonCoral),

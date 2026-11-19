@@ -23,6 +23,9 @@ from apps.companies.views import (
     CompanyRenewalRequestApproveView,
     CompanyRenewalRequestRejectView,
     CompanySubscriptionHistoryListView,
+    FeatureCatalogView,
+    FeatureRequestListCreateView,
+    FeatureRequestReviewView,
 )
 
 urlpatterns = [
@@ -35,6 +38,9 @@ urlpatterns = [
     path('renewal-requests/<uuid:pk>/approve/', CompanyRenewalRequestApproveView.as_view(), name='company_renewal_request_approve'),
     path('renewal-requests/<uuid:pk>/reject/', CompanyRenewalRequestRejectView.as_view(), name='company_renewal_request_reject'),
     path('subscription-history/', CompanySubscriptionHistoryListView.as_view(), name='company_subscription_history'),
+    path('features/catalog/', FeatureCatalogView.as_view(), name='feature_catalog'),
+    path('feature-requests/', FeatureRequestListCreateView.as_view(), name='feature_request_list_create'),
+    path('feature-requests/<uuid:pk>/', FeatureRequestReviewView.as_view(), name='feature_request_review'),
     path('plans/', PlanListCreateView.as_view(), name='plan_list_create'),
     path('plans/<int:pk>/', PlanDetailView.as_view(), name='plan_detail'),
     path('billing/overview/', PlatformBillingOverviewView.as_view(), name='platform_billing_overview'),

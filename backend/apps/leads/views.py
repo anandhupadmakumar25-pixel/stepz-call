@@ -160,16 +160,22 @@ class LeadListCreateView(views.APIView):
         user = request.user
         company = user.company
 
-        if user.is_super_admin:
-            leads = Lead.objects.all()
+        if not company:
+            return Response([])
+
+        if user.has_permission('leads.view_all'):
+            leads = Lead.objects.filter(company=company)
         else:
-            if not company:
-                return Response([])
-            if user.role == 'EMPLOYEE':
-                # Individual workspace: Telecaller strictly only sees their own assigned leads
-                leads = Lead.objects.filter(company=company, assigned_to=user)
-            else:
-                leads = Lead.objects.filter(company=company)
+            # Individual workspace: strictly only their own assigned leads within their company
+            leads = Lead.objects.filter(company=company, assigned_to=user)
+
+        # Date range filtering
+        date_from = request.query_params.get('date_from')
+        date_to = request.query_params.get('date_to')
+        if date_from:
+            leads = leads.filter(created_at__date__gte=date_from)
+        if date_to:
+            leads = leads.filter(created_at__date__lte=date_to)
 
         # Filters
         status_param = request.query_params.get('status')
@@ -185,7 +191,7 @@ class LeadListCreateView(views.APIView):
             leads = leads.filter(category_id=category_param)
 
         assigned_to_param = request.query_params.get('assigned_to')
-        if assigned_to_param and user.is_company_admin:
+        if assigned_to_param and user.has_permission('leads.view_all'):
             if assigned_to_param == 'unassigned':
                 leads = leads.filter(assigned_to__isnull=True)
             else:
@@ -286,14 +292,13 @@ class LeadDetailView(views.APIView):
     def get(self, request, pk):
         user = request.user
         company = user.company
-        lead = Lead.objects.filter(id=pk).first()
+        if not company:
+            return Response({"error": "Company context required"}, status=status.HTTP_403_FORBIDDEN)
+        lead = Lead.objects.filter(id=pk, company=company).first()
         if not lead:
             return Response({"error": "Lead not found"}, status=status.HTTP_404_NOT_FOUND)
 
-        if not user.is_super_admin and lead.company_id != company.id:
-            return Response({"error": "Unauthorized"}, status=status.HTTP_403_FORBIDDEN)
-
-        if user.role == 'EMPLOYEE' and lead.assigned_to_id != user.id:
+        if not user.has_permission('leads.view_all') and lead.assigned_to_id != user.id:
             return Response({"error": "Unauthorized"}, status=status.HTTP_403_FORBIDDEN)
 
         return Response(LeadDetailSerializer(lead).data)
@@ -301,17 +306,16 @@ class LeadDetailView(views.APIView):
     def patch(self, request, pk):
         user = request.user
         company = user.company
-        lead = Lead.objects.filter(id=pk).first()
+        if not company:
+            return Response({"error": "Company context required"}, status=status.HTTP_403_FORBIDDEN)
+        lead = Lead.objects.filter(id=pk, company=company).first()
         if not lead:
             return Response({"error": "Lead not found"}, status=status.HTTP_404_NOT_FOUND)
 
-        if not user.is_super_admin and lead.company_id != company.id:
+        if not user.has_permission('leads.view_all') and lead.assigned_to_id != user.id:
             return Response({"error": "Unauthorized"}, status=status.HTTP_403_FORBIDDEN)
 
-        if user.role == 'EMPLOYEE' and lead.assigned_to_id != user.id:
-            return Response({"error": "Unauthorized"}, status=status.HTTP_403_FORBIDDEN)
-
-        if not (user.is_company_admin or user.has_permission('leads.edit') or (user.role == 'EMPLOYEE' and lead.assigned_to_id == user.id)):
+        if not (user.is_company_admin or user.has_permission('leads.edit') or (lead.assigned_to_id == user.id)):
             return Response({"error": "Permission denied: requires 'leads.edit' permission."}, status=status.HTTP_403_FORBIDDEN)
 
         if 'notes' in request.data or 'note' in request.data:
@@ -329,11 +333,11 @@ class LeadDetailView(views.APIView):
     def delete(self, request, pk):
         user = request.user
         company = user.company
-        lead = Lead.objects.filter(id=pk).first()
+        if not company:
+            return Response({"error": "Company context required"}, status=status.HTTP_403_FORBIDDEN)
+        lead = Lead.objects.filter(id=pk, company=company).first()
         if not lead:
             return Response({"error": "Lead not found"}, status=status.HTTP_404_NOT_FOUND)
-        if not user.is_super_admin and lead.company_id != company.id:
-            return Response({"error": "Unauthorized"}, status=status.HTTP_403_FORBIDDEN)
         if not (user.is_company_admin or user.has_permission('leads.delete')):
             return Response({"error": "Permission denied: requires 'leads.delete' permission."}, status=status.HTTP_403_FORBIDDEN)
         lead.delete()
@@ -423,6 +427,38 @@ class LeadBulkAssignView(views.APIView):
                 allocations=data['allocations'],
                 method=data.get('method', 'EQUAL')
             )
+            return Response(result)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class LeadReassignView(views.APIView):
+    permission_classes = [IsEmployee]
+
+    def post(self, request):
+        if not (request.user.is_company_admin or request.user.has_permission('leads.assign')):
+            return Response({"error": "Permission denied: requires 'leads.assign' permission."}, status=status.HTTP_403_FORBIDDEN)
+
+        company = request.user.company
+        lead_ids = request.data.get('lead_ids') or []
+        target_employee_id = request.data.get('target_employee_id') or request.data.get('assigned_to')
+        notes = str(request.data.get('notes') or '')
+
+        if not isinstance(lead_ids, list) or not lead_ids:
+            return Response({"error": "Please select at least one assigned lead to reassign."}, status=status.HTTP_400_BAD_REQUEST)
+        if not target_employee_id:
+            return Response({"error": "Please select a target employee for reassignment."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            result = LeadAssignmentService.reassign_leads(
+                company=company,
+                reassigned_by=request.user,
+                lead_ids=lead_ids,
+                target_employee_id=str(target_employee_id),
+                notes=notes,
+            )
+            if not result.get('success'):
+                return Response({"error": result.get('message', 'Reassignment failed.')}, status=status.HTTP_400_BAD_REQUEST)
             return Response(result)
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
@@ -548,6 +584,14 @@ class CallingTaskListCreateView(views.APIView):
                 pass
 
         priority = request.data.get('priority', 'MEDIUM')
+        task_type = str(request.data.get('task_type') or 'GENERAL').upper()
+        target_role = str(request.data.get('target_role') or '').strip()
+        if not target_role and assigned_user:
+            profile = getattr(assigned_user, 'employee_profile', None)
+            if profile and getattr(profile, 'custom_role', None):
+                target_role = profile.custom_role.name
+            else:
+                target_role = assigned_user.role or ''
         due_date = request.data.get('due_date') or None
         description = request.data.get('description', '').strip()
 
@@ -592,6 +636,8 @@ class CallingTaskListCreateView(views.APIView):
                 company=company,
                 title=title,
                 description=description,
+                task_type=task_type,
+                target_role=target_role,
                 branch=branch,
                 category=category,
                 assigned_to=assigned_user,
@@ -646,7 +692,9 @@ class CallingTaskDetailView(views.APIView):
     def get(self, request, pk):
         user = request.user
         company = user.company
-        task_qs = CallingTask.objects.all() if user.is_super_admin else CallingTask.objects.filter(company=company)
+        if not company:
+            return Response({"error": "Company required"}, status=status.HTTP_403_FORBIDDEN)
+        task_qs = CallingTask.objects.filter(company=company)
         task = task_qs.filter(id=pk).first()
         if not task:
             return Response({"error": "Calling task not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -662,7 +710,9 @@ class CallingTaskDetailView(views.APIView):
     def patch(self, request, pk):
         user = request.user
         company = user.company
-        task_qs = CallingTask.objects.all() if user.is_super_admin else CallingTask.objects.filter(company=company)
+        if not company:
+            return Response({"error": "Company required"}, status=status.HTTP_403_FORBIDDEN)
+        task_qs = CallingTask.objects.filter(company=company)
         task = task_qs.filter(id=pk).first()
         if not task:
             return Response({"error": "Calling task not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -670,9 +720,16 @@ class CallingTaskDetailView(views.APIView):
         if user.role == 'EMPLOYEE' and task.assigned_to_id != user.id:
             return Response({"error": "Permission denied."}, status=status.HTTP_403_FORBIDDEN)
 
+        report_submitted = False
         with transaction.atomic():
             if 'status' in request.data:
                 task.status = request.data['status']
+            if 'completion_report' in request.data:
+                report_text = str(request.data['completion_report'] or '').strip()
+                task.completion_report = report_text
+                if report_text:
+                    task.report_submitted_at = timezone.now()
+                    report_submitted = True
             if user.is_company_admin:
                 if 'priority' in request.data:
                     task.priority = request.data['priority']
@@ -713,13 +770,28 @@ class CallingTaskDetailView(views.APIView):
                     task.leads.update(assigned_to=new_assignee)
 
             task.save()
+        if report_submitted and task.created_by and task.created_by_id != user.id:
+            try:
+                Notification.objects.create(
+                    company=company,
+                    user=task.created_by,
+                    title=f"Task Report Submitted: {task.title}",
+                    message=f"{user.full_name or user.email} submitted a report ({task.status}).",
+                    notification_type='SYSTEM',
+                    entity_type='task',
+                    entity_id=str(task.id),
+                )
+            except Exception:
+                pass
         return Response(CallingTaskSerializer(task).data)
 
     def delete(self, request, pk):
         user = request.user
         if not user.is_company_admin:
             return Response({"error": "Admin permission required."}, status=status.HTTP_403_FORBIDDEN)
-        task_qs = CallingTask.objects.all() if user.is_super_admin else CallingTask.objects.filter(company=user.company)
+        if not user.company:
+            return Response({"error": "Company required"}, status=status.HTTP_403_FORBIDDEN)
+        task_qs = CallingTask.objects.filter(company=user.company)
         task = task_qs.filter(id=pk).first()
         if not task:
             return Response({"error": "Calling task not found."}, status=status.HTTP_404_NOT_FOUND)

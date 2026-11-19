@@ -1,60 +1,71 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import '../../core/responsive/responsive_layout.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/company_logo_view.dart';
 import '../../core/widgets/glass/glass_card.dart';
 import '../../core/widgets/glass/gradient_button.dart';
-import '../../core/responsive/responsive_layout.dart';
-import '../../providers/auth_provider.dart';
-import '../../providers/dashboard_provider.dart';
-import '../../providers/lead_provider.dart';
-import '../../providers/employee_provider.dart';
-import '../../models/lead_model.dart';
+import '../../models/attendance_model.dart';
+import '../../models/company_model.dart';
 import '../../models/dashboard_model.dart';
-import '../leads/import_wizard_dialog.dart';
-import '../branches/branch_management_screen.dart';
-import '../employees/employee_management_screen.dart';
-import '../employees/employee_activity_detail_dialog.dart';
+import '../../providers/attendance_provider.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/billing_provider.dart';
 import '../../providers/company_provider.dart';
-import '../../models/company_model.dart';
-import '../../core/widgets/company_logo_view.dart';
-import '../companies/edit_company_dialog.dart';
+import '../../providers/dashboard_provider.dart';
+import '../../providers/employee_provider.dart';
+import '../../providers/lead_provider.dart';
 import '../../routes/app_routes.dart';
-import '../quotations/quotation_form_dialog.dart';
+import '../companies/edit_company_dialog.dart';
 import '../companies/renewal_request_dialog.dart';
+import '../employees/employee_management_screen.dart';
+import '../leads/import_wizard_dialog.dart';
+import '../quotations/quotation_form_dialog.dart';
 
 class CompanyAdminDashboardScreen extends StatefulWidget {
   const CompanyAdminDashboardScreen({super.key});
 
   @override
-  State<CompanyAdminDashboardScreen> createState() => _CompanyAdminDashboardScreenState();
+  State<CompanyAdminDashboardScreen> createState() =>
+      _CompanyAdminDashboardScreenState();
 }
 
-class _CompanyAdminDashboardScreenState extends State<CompanyAdminDashboardScreen> {
-  String _teamSearchQuery = '';
+class _CompanyAdminDashboardScreenState
+    extends State<CompanyAdminDashboardScreen> {
+  String _attendanceFilter = 'ALL'; // ALL, PRESENT, LATE, ABSENT
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<AuthProvider>().refreshUserProfile();
-      context.read<CompanyProvider>().fetchMyCompany();
-      context.read<DashboardProvider>().fetchAdminDashboard();
-      context.read<LeadProvider>().fetchBranches();
-      context.read<LeadProvider>().fetchCategories();
-      context.read<EmployeeProvider>().fetchEmployees();
-      context.read<BillingProvider>().fetchBillingOverview();
+      _refreshAll();
     });
+  }
+
+  Future<void> _refreshAll() async {
+    final todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    await Future.wait([
+      context.read<AuthProvider>().refreshUserProfile(),
+      context.read<CompanyProvider>().fetchMyCompany(),
+      context.read<DashboardProvider>().fetchAdminDashboard(),
+      context.read<LeadProvider>().fetchBranches(),
+      context.read<EmployeeProvider>().fetchEmployees(),
+      context.read<BillingProvider>().fetchBillingOverview(),
+      context.read<AttendanceProvider>().fetchAdminRecords(date: todayStr),
+    ]);
   }
 
   void _showAddBranchDialog() {
     final authUser = context.read<AuthProvider>().currentUser;
-    final canAddBranch = authUser?.canManageBranches ?? (authUser?.hasMenuPermission('branches') ?? false);
+    final canAddBranch = authUser?.canManageBranches ??
+        (authUser?.hasMenuPermission('branches') ?? false);
     if (!canAddBranch) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Branch management is locked for your company. Super Admin permission required.'),
+          content: Text(
+              'Branch management is locked for your company. Super Admin permission required.'),
           backgroundColor: AppColors.danger,
         ),
       );
@@ -72,14 +83,15 @@ class _CompanyAdminDashboardScreenState extends State<CompanyAdminDashboardScree
         final isMobile = ResponsiveLayout.isMobile(ctx);
         return Dialog(
           backgroundColor: Colors.transparent,
-          insetPadding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 20, vertical: isMobile ? 16 : 24),
+          insetPadding: EdgeInsets.symmetric(
+              horizontal: isMobile ? 12 : 20, vertical: isMobile ? 16 : 24),
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 480),
+            constraints: const BoxConstraints(maxWidth: 460),
             child: GlassCard(
               blur: 24,
               opacity: 0.96,
               borderRadius: BorderRadius.circular(20),
-              padding: EdgeInsets.all(isMobile ? 18 : 28),
+              padding: EdgeInsets.all(isMobile ? 18 : 24),
               child: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -88,112 +100,128 @@ class _CompanyAdminDashboardScreenState extends State<CompanyAdminDashboardScree
                     Row(
                       children: [
                         Container(
-                          padding: const EdgeInsets.all(10),
+                          padding: const EdgeInsets.all(9),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF06B6D4).withValues(alpha: 0.18),
-                            borderRadius: BorderRadius.circular(12),
+                            color:
+                                const Color(0xFF06B6D4).withValues(alpha: 0.16),
+                            borderRadius: BorderRadius.circular(10),
                           ),
-                          child: const Icon(Icons.storefront_rounded, color: Color(0xFF06B6D4), size: 22),
+                          child: const Icon(Icons.storefront_rounded,
+                              color: Color(0xFF06B6D4), size: 20),
                         ),
-                        const SizedBox(width: 12),
+                        const SizedBox(width: 10),
                         Expanded(
                           child: Text(
                             'Add Company Branch',
-                            style: GoogleFonts.inter(fontSize: isMobile ? 16 : 18, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
+                            style: GoogleFonts.inter(
+                                fontSize: isMobile ? 15.5 : 17,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFF0F172A)),
                           ),
                         ),
                         DialogCloseButton(onPressed: () => Navigator.pop(ctx)),
                       ],
                     ),
-                    const SizedBox(height: 18),
+                    const SizedBox(height: 16),
                     TextField(
                       controller: nameCtrl,
-                      style: GoogleFonts.inter(color: const Color(0xFF0F172A), fontSize: 13),
+                      style: GoogleFonts.inter(
+                          color: const Color(0xFF0F172A), fontSize: 13),
                       decoration: InputDecoration(
                         labelText: 'Branch Name *',
-                        labelStyle: GoogleFonts.inter(color: const Color(0xFF64748B)),
                         hintText: 'e.g. Downtown Regional Branch',
-                        hintStyle: GoogleFonts.inter(color: const Color(0xFF94A3B8)),
                         filled: true,
                         fillColor: const Color(0xFFF8FAFC),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
-                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide:
+                                const BorderSide(color: Color(0xFFE2E8F0))),
+                        enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide:
+                                const BorderSide(color: Color(0xFFE2E8F0))),
                       ),
                     ),
-                    const SizedBox(height: 14),
+                    const SizedBox(height: 12),
                     TextField(
                       controller: codeCtrl,
-                      style: GoogleFonts.inter(color: const Color(0xFF0F172A), fontSize: 13),
+                      style: GoogleFonts.inter(
+                          color: const Color(0xFF0F172A), fontSize: 13),
                       decoration: InputDecoration(
                         labelText: 'Branch Code',
-                        labelStyle: GoogleFonts.inter(color: const Color(0xFF64748B)),
                         hintText: 'e.g. BR-HQ-01',
-                        hintStyle: GoogleFonts.inter(color: const Color(0xFF94A3B8)),
                         filled: true,
                         fillColor: const Color(0xFFF8FAFC),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
-                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide:
+                                const BorderSide(color: Color(0xFFE2E8F0))),
+                        enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide:
+                                const BorderSide(color: Color(0xFFE2E8F0))),
                       ),
                     ),
-                    const SizedBox(height: 14),
+                    const SizedBox(height: 12),
                     TextField(
                       controller: addressCtrl,
-                      style: GoogleFonts.inter(color: const Color(0xFF0F172A), fontSize: 13),
+                      style: GoogleFonts.inter(
+                          color: const Color(0xFF0F172A), fontSize: 13),
                       maxLines: 2,
                       decoration: InputDecoration(
                         labelText: 'Branch Location / Address',
-                        labelStyle: GoogleFonts.inter(color: const Color(0xFF64748B)),
                         hintText: 'Physical address or territory notes',
-                        hintStyle: GoogleFonts.inter(color: const Color(0xFF94A3B8)),
                         filled: true,
                         fillColor: const Color(0xFFF8FAFC),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
-                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide:
+                                const BorderSide(color: Color(0xFFE2E8F0))),
+                        enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide:
+                                const BorderSide(color: Color(0xFFE2E8F0))),
                       ),
                     ),
-                    const SizedBox(height: 20),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.only(top: 14),
-                      decoration: const BoxDecoration(
-                        border: Border(top: BorderSide(color: Color(0x33D4AF37), width: 1.0)),
-                      ),
-                      child: Wrap(
-                        alignment: WrapAlignment.end,
-                        spacing: 10,
-                        runSpacing: 8,
-                        children: [
-                          GlassSecondaryButton(
-                            text: 'Cancel',
-                            onPressed: () => Navigator.pop(ctx),
-                          ),
-                          GradientPrimaryButton(
-                            text: 'Create Branch',
-                            icon: Icons.check_rounded,
-                            onPressed: () async {
-                              if (nameCtrl.text.trim().isEmpty) return;
-                              final messenger = ScaffoldMessenger.of(context);
-                              final nav = Navigator.of(ctx);
-                              final branchName = nameCtrl.text.trim();
-                              final ok = await context.read<LeadProvider>().createBranch(
-                                name: branchName,
-                                code: codeCtrl.text.trim(),
-                                address: addressCtrl.text.trim(),
-                              );
-                              nav.pop();
-                              if (ok) {
-                                messenger.showSnackBar(
-                                  SnackBar(
-                                    content: Text('Branch "$branchName" created successfully!'),
-                                    backgroundColor: const Color(0xFF10B981),
-                                    behavior: SnackBarBehavior.floating,
-                                  ),
+                    const SizedBox(height: 18),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        GlassSecondaryButton(
+                          text: 'Cancel',
+                          onPressed: () => Navigator.pop(ctx),
+                        ),
+                        const SizedBox(width: 10),
+                        GradientPrimaryButton(
+                          text: 'Create Branch',
+                          icon: Icons.check_rounded,
+                          height: 38,
+                          onPressed: () async {
+                            if (nameCtrl.text.trim().isEmpty) return;
+                            final messenger = ScaffoldMessenger.of(context);
+                            final nav = Navigator.of(ctx);
+                            final branchName = nameCtrl.text.trim();
+                            final ok = await context
+                                .read<LeadProvider>()
+                                .createBranch(
+                                  name: branchName,
+                                  code: codeCtrl.text.trim(),
+                                  address: addressCtrl.text.trim(),
                                 );
-                              }
-                            },
-                          ),
-                        ],
-                      ),
+                            nav.pop();
+                            if (ok) {
+                              messenger.showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                      'Branch "$branchName" created successfully!'),
+                                  backgroundColor: const Color(0xFF10B981),
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              );
+                            }
+                          },
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -225,236 +253,234 @@ class _CompanyAdminDashboardScreenState extends State<CompanyAdminDashboardScree
         return StatefulBuilder(
           builder: (context, setDlgState) => Dialog(
             backgroundColor: Colors.transparent,
-            insetPadding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 20, vertical: isMobile ? 16 : 24),
+            insetPadding: EdgeInsets.symmetric(
+                horizontal: isMobile ? 12 : 20, vertical: isMobile ? 16 : 24),
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 460),
+              constraints: const BoxConstraints(maxWidth: 440),
               child: GlassCard(
                 blur: 24,
                 opacity: 0.98,
                 borderRadius: BorderRadius.circular(20),
-                padding: EdgeInsets.all(isMobile ? 18 : 28),
+                padding: EdgeInsets.all(isMobile ? 18 : 24),
                 child: Form(
                   key: formKey,
                   autovalidateMode: AutovalidateMode.onUserInteraction,
                   child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFFEF3C7),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: const Color(0xFFFDE68A)),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(9),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFEF3C7),
+                                borderRadius: BorderRadius.circular(10),
+                                border:
+                                    Border.all(color: const Color(0xFFFDE68A)),
+                              ),
+                              child: const Icon(Icons.lock_reset_rounded,
+                                  color: Color(0xFFD97706), size: 20),
                             ),
-                            child: const Icon(Icons.lock_reset_rounded, color: Color(0xFFD97706), size: 22),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Change / Reset Password',
-                                  style: GoogleFonts.inter(
-                                    fontSize: isMobile ? 16 : 18,
-                                    fontWeight: FontWeight.w700,
-                                    color: const Color(0xFF0F172A),
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  'Enter temporary or current password to set a new password',
-                                  style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B)),
-                                ),
-                              ],
-                            ),
-                          ),
-                          DialogCloseButton(onPressed: () => Navigator.pop(ctx)),
-                        ],
-                      ),
-                      const SizedBox(height: 20),
-
-                      if (localError != null) ...[
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFFEF2F2),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: const Color(0xFFFCA5A5)),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.error_outline_rounded, color: Color(0xFFDC2626), size: 16),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  localError!,
-                                  style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFFB91C1C)),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                'Change Password',
+                                style: GoogleFonts.inter(
+                                  fontSize: isMobile ? 15.5 : 17,
+                                  fontWeight: FontWeight.w700,
+                                  color: const Color(0xFF0F172A),
                                 ),
                               ),
-                            ],
-                          ),
+                            ),
+                            DialogCloseButton(
+                                onPressed: () => Navigator.pop(ctx)),
+                          ],
                         ),
                         const SizedBox(height: 16),
-                      ],
-
-                      // Current / Temporary Password
-                      TextFormField(
-                        controller: oldPasswordCtrl,
-                        obscureText: obscureOld,
-                        style: GoogleFonts.inter(color: const Color(0xFF0F172A), fontSize: 13),
-                        validator: (v) => v == null || v.trim().isEmpty ? 'Please enter current or temporary password' : null,
-                        decoration: InputDecoration(
-                          labelText: 'Current / Temporary Password *',
-                          labelStyle: GoogleFonts.inter(color: const Color(0xFF64748B), fontSize: 12.5),
-                          hintText: 'Enter temporary or current password',
-                          hintStyle: GoogleFonts.inter(color: const Color(0xFF94A3B8), fontSize: 12),
-                          filled: true,
-                          fillColor: const Color(0xFFF8FAFC),
-                          prefixIcon: const Icon(Icons.key_rounded, size: 18, color: Color(0xFF64748B)),
-                          suffixIcon: IconButton(
-                            icon: Icon(obscureOld ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 18, color: const Color(0xFF64748B)),
-                            onPressed: () => setDlgState(() => obscureOld = !obscureOld),
-                          ),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
-                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
-                          errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFDC2626), width: 1.5)),
-                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF047857), width: 1.5)),
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-
-                      // New Password
-                      TextFormField(
-                        controller: newPasswordCtrl,
-                        obscureText: obscureNew,
-                        style: GoogleFonts.inter(color: const Color(0xFF0F172A), fontSize: 13),
-                        validator: (v) {
-                          if (v == null || v.trim().isEmpty) return 'New password is required';
-                          if (v.trim().length < 6) return 'Password must be at least 6 characters';
-                          return null;
-                        },
-                        decoration: InputDecoration(
-                          labelText: 'New Password *',
-                          labelStyle: GoogleFonts.inter(color: const Color(0xFF64748B), fontSize: 12.5),
-                          hintText: 'Minimum 6 characters',
-                          hintStyle: GoogleFonts.inter(color: const Color(0xFF94A3B8), fontSize: 12),
-                          filled: true,
-                          fillColor: const Color(0xFFF8FAFC),
-                          prefixIcon: const Icon(Icons.lock_outline_rounded, size: 18, color: Color(0xFF64748B)),
-                          suffixIcon: IconButton(
-                            icon: Icon(obscureNew ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 18, color: const Color(0xFF64748B)),
-                            onPressed: () => setDlgState(() => obscureNew = !obscureNew),
-                          ),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
-                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
-                          errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFDC2626), width: 1.5)),
-                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF047857), width: 1.5)),
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-
-                      // Confirm New Password
-                      TextFormField(
-                        controller: confirmPasswordCtrl,
-                        obscureText: obscureConfirm,
-                        style: GoogleFonts.inter(color: const Color(0xFF0F172A), fontSize: 13),
-                        validator: (v) {
-                          if (v == null || v.trim().isEmpty) return 'Please confirm your new password';
-                          if (v.trim() != newPasswordCtrl.text.trim()) return 'Confirm password does not match';
-                          return null;
-                        },
-                        decoration: InputDecoration(
-                          labelText: 'Confirm New Password *',
-                          labelStyle: GoogleFonts.inter(color: const Color(0xFF64748B), fontSize: 12.5),
-                          hintText: 'Re-enter new password',
-                          hintStyle: GoogleFonts.inter(color: const Color(0xFF94A3B8), fontSize: 12),
-                          filled: true,
-                          fillColor: const Color(0xFFF8FAFC),
-                          prefixIcon: const Icon(Icons.lock_rounded, size: 18, color: Color(0xFF64748B)),
-                          suffixIcon: IconButton(
-                            icon: Icon(obscureConfirm ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 18, color: const Color(0xFF64748B)),
-                            onPressed: () => setDlgState(() => obscureConfirm = !obscureConfirm),
-                          ),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
-                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
-                          errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFDC2626), width: 1.5)),
-                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF047857), width: 1.5)),
-                        ),
-                      ),
-                      const SizedBox(height: 22),
-
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          TextButton(
-                            onPressed: isSubmitting ? null : () => Navigator.pop(ctx),
-                            child: Text('Cancel', style: GoogleFonts.inter(color: const Color(0xFF64748B), fontWeight: FontWeight.w600)),
-                          ),
-                          const SizedBox(width: 10),
-                          ElevatedButton.icon(
-                            onPressed: isSubmitting
-                                ? null
-                                : () async {
-                                    if (!formKey.currentState!.validate()) {
-                                      setDlgState(() => localError = 'Please fix the highlighted errors before submitting.');
-                                      return;
-                                    }
-
-                                    final oldPass = oldPasswordCtrl.text.trim();
-                                    final newPass = newPasswordCtrl.text.trim();
-
-                                    setDlgState(() {
-                                      isSubmitting = true;
-                                      localError = null;
-                                    });
-
-                                    final authProv = context.read<AuthProvider>();
-                                    final res = await authProv.changePassword(oldPassword: oldPass, newPassword: newPass);
-
-                                    if (!mounted) return;
-
-                                    if (res['success'] == true) {
-                                      Navigator.pop(ctx);
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(
-                                          content: Text('Password changed successfully! Please use your new password next time you sign in.'),
-                                          backgroundColor: AppColors.success,
-                                          duration: Duration(seconds: 4),
-                                        ),
-                                      );
-                                    } else {
-                                      setDlgState(() {
-                                        isSubmitting = false;
-                                        localError = res['error']?.toString() ?? 'Failed to change password.';
-                                      });
-                                    }
-                                  },
-                            icon: isSubmitting
-                                ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                                : const Icon(Icons.check_rounded, size: 16),
-                            label: Text(
-                              isSubmitting ? 'Updating...' : 'Update Password',
-                              style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700),
+                        if (localError != null) ...[
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFEF2F2),
+                              borderRadius: BorderRadius.circular(10),
+                              border:
+                                  Border.all(color: const Color(0xFFFCA5A5)),
                             ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF047857),
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                              elevation: 0,
+                            child: Text(
+                              localError!,
+                              style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: const Color(0xFFB91C1C)),
                             ),
                           ),
+                          const SizedBox(height: 14),
                         ],
-                      ),
-                    ],
+                        TextFormField(
+                          controller: oldPasswordCtrl,
+                          obscureText: obscureOld,
+                          style: GoogleFonts.inter(
+                              color: const Color(0xFF0F172A), fontSize: 13),
+                          validator: (v) => v == null || v.trim().isEmpty
+                              ? 'Current password is required'
+                              : null,
+                          decoration: InputDecoration(
+                            labelText: 'Current / Temporary Password *',
+                            filled: true,
+                            fillColor: const Color(0xFFF8FAFC),
+                            prefixIcon: const Icon(Icons.key_rounded, size: 18),
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                  obscureOld
+                                      ? Icons.visibility_outlined
+                                      : Icons.visibility_off_outlined,
+                                  size: 18),
+                              onPressed: () =>
+                                  setDlgState(() => obscureOld = !obscureOld),
+                            ),
+                            border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10)),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: newPasswordCtrl,
+                          obscureText: obscureNew,
+                          style: GoogleFonts.inter(
+                              color: const Color(0xFF0F172A), fontSize: 13),
+                          validator: (v) {
+                            if (v == null || v.trim().isEmpty) {
+                              return 'New password is required';
+                            }
+                            if (v.trim().length < 6) {
+                              return 'Minimum 6 characters';
+                            }
+                            return null;
+                          },
+                          decoration: InputDecoration(
+                            labelText: 'New Password *',
+                            filled: true,
+                            fillColor: const Color(0xFFF8FAFC),
+                            prefixIcon:
+                                const Icon(Icons.lock_outline_rounded, size: 18),
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                  obscureNew
+                                      ? Icons.visibility_outlined
+                                      : Icons.visibility_off_outlined,
+                                  size: 18),
+                              onPressed: () =>
+                                  setDlgState(() => obscureNew = !obscureNew),
+                            ),
+                            border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10)),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: confirmPasswordCtrl,
+                          obscureText: obscureConfirm,
+                          style: GoogleFonts.inter(
+                              color: const Color(0xFF0F172A), fontSize: 13),
+                          validator: (v) {
+                            if (v == null || v.trim().isEmpty) {
+                              return 'Please confirm new password';
+                            }
+                            if (v.trim() != newPasswordCtrl.text.trim()) {
+                              return 'Passwords do not match';
+                            }
+                            return null;
+                          },
+                          decoration: InputDecoration(
+                            labelText: 'Confirm New Password *',
+                            filled: true,
+                            fillColor: const Color(0xFFF8FAFC),
+                            prefixIcon:
+                                const Icon(Icons.lock_rounded, size: 18),
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                  obscureConfirm
+                                      ? Icons.visibility_outlined
+                                      : Icons.visibility_off_outlined,
+                                  size: 18),
+                              onPressed: () => setDlgState(
+                                  () => obscureConfirm = !obscureConfirm),
+                            ),
+                            border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10)),
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            TextButton(
+                              onPressed: isSubmitting
+                                  ? null
+                                  : () => Navigator.pop(ctx),
+                              child: Text('Cancel',
+                                  style: GoogleFonts.inter(
+                                      color: const Color(0xFF64748B),
+                                      fontWeight: FontWeight.w600)),
+                            ),
+                            const SizedBox(width: 8),
+                            ElevatedButton(
+                              onPressed: isSubmitting
+                                  ? null
+                                  : () async {
+                                      if (!formKey.currentState!.validate()) {
+                                        return;
+                                      }
+                                      setDlgState(() {
+                                        isSubmitting = true;
+                                        localError = null;
+                                      });
+                                      final res = await context
+                                          .read<AuthProvider>()
+                                          .changePassword(
+                                            oldPassword:
+                                                oldPasswordCtrl.text.trim(),
+                                            newPassword:
+                                                newPasswordCtrl.text.trim(),
+                                          );
+                                      if (!mounted) return;
+                                      if (res['success'] == true) {
+                                        if (ctx.mounted) Navigator.pop(ctx);
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          const SnackBar(
+                                            content: Text(
+                                                'Password updated successfully!'),
+                                            backgroundColor: AppColors.success,
+                                          ),
+                                        );
+                                      } else {
+                                        setDlgState(() {
+                                          isSubmitting = false;
+                                          localError =
+                                              res['error']?.toString() ??
+                                                  'Failed to change password.';
+                                        });
+                                      }
+                                    },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF047857),
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10)),
+                              ),
+                              child: Text(
+                                  isSubmitting ? 'Updating...' : 'Update'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
               ),
             ),
           ),
@@ -463,378 +489,28 @@ class _CompanyAdminDashboardScreenState extends State<CompanyAdminDashboardScree
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final auth = context.watch<AuthProvider>();
-    final user = auth.currentUser;
-    final dash = context.watch<DashboardProvider>();
-    final leadP = context.watch<LeadProvider>();
-    final kpis = dash.adminKpis;
-    final branches = leadP.branches;
-    final isDesktop = ResponsiveLayout.isDesktop(context);
-    final isMobile = ResponsiveLayout.isMobile(context);
-
-    final compProv = context.watch<CompanyProvider>();
-    final activeComp = compProv.activeCompanyDetail;
-    final companyName = (activeComp != null && activeComp.name.isNotEmpty)
-        ? activeComp.name
-        : (user?.companyName ?? 'Acme Telecallers Corp');
-    final companyLogo = (activeComp != null && activeComp.logo.isNotEmpty)
-        ? activeComp.logo
-        : (user?.companyLogo ?? '');
-
-    final branchCount = branches.length;
-    final activeAgents = kpis.totalEmployees > 0 ? kpis.totalEmployees : dash.employeePerformance.length;
-    final canManageBranches = user?.canManageBranches ?? (user?.hasMenuPermission('branches') ?? false);
-
-    return RefreshIndicator(
-      color: const Color(0xFF06B6D4),
-      onRefresh: () async {
-        await Future.wait([
-          context.read<AuthProvider>().refreshUserProfile(),
-          context.read<CompanyProvider>().fetchMyCompany(),
-          context.read<DashboardProvider>().fetchAdminDashboard(),
-          context.read<LeadProvider>().fetchBranches(),
-          context.read<EmployeeProvider>().fetchEmployees(),
-          context.read<BillingProvider>().fetchBillingOverview(),
-        ]);
-      },
-      child: SingleChildScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: EdgeInsets.fromLTRB(
-          isMobile ? 12 : 24,
-          isMobile ? 8 : 18,
-          isMobile ? 12 : 24,
-          isMobile ? 16 : 24,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 1. EXECUTIVE COMMAND HEADER
-            _buildCompanyWorkspaceHeader(
-              companyName: companyName,
-              companyLogo: companyLogo,
-              userFullName: user?.fullName ?? 'Company Admin',
-              branchCount: branchCount,
-              agentCount: activeAgents,
-              isDesktop: isDesktop,
-              isMobile: isMobile,
-              canManageBranches: canManageBranches,
-            ),
-            const SizedBox(height: 16),
-
-            // 1.1 SUBSCRIPTION PLAN EXPIRY & RENEWAL BAR
-            _buildSubscriptionExpiryBanner(
-              context: context,
-              company: activeComp,
-              userPlanName: user?.companyPlanName ?? 'Standard',
-              userPlanExpiry: user?.companyPlanExpiresAt,
-              userDaysLeft: user?.companyDaysUntilExpiry,
-              userIsExpired: user?.companyIsPlanExpired ?? false,
-              isDesktop: isDesktop,
-              isMobile: isMobile,
-            ),
-            const SizedBox(height: 20),
-
-            // 2. UNIFIED OPERATIONAL KPI DECK
-            _buildCompanyStatCards(kpis, isDesktop),
-            const SizedBox(height: 20),
-
-            // 3. SALES & BILLING REVENUE PIPELINE
-            _buildSalesAndBillingSection(context, isDesktop),
-            const SizedBox(height: 20),
-
-            // 4. BRANCHES & CALLING DESKS (IF PERMISSIONED)
-            if (canManageBranches) ...[
-              _buildCompanyBranchesSection(branches, isDesktop),
-              const SizedBox(height: 20),
-            ],
-
-            // 5. LIVE FLOOR TELECALLER TEAM PERFORMANCE & OUTCOMES RADAR
-            if (isDesktop)
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(flex: 7, child: _buildTeamPerformanceTable(dash.employeePerformance)),
-                  const SizedBox(width: 18),
-                  Expanded(flex: 5, child: _buildCompanyCallOutcomesCard(dash.outcomeCounts)),
-                ],
-              )
-            else ...[
-              _buildTeamPerformanceTable(dash.employeePerformance),
-              const SizedBox(height: 18),
-              _buildCompanyCallOutcomesCard(dash.outcomeCounts),
-            ],
-            const SizedBox(height: 20),
-
-            // 6. CALL VOLUME VELOCITY TREND
-            _buildCallingTimelineSection(dash.activityTimeline, isDesktop),
-            const SizedBox(height: 28),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ==========================================
-  // 1.1 SUBSCRIPTION PLAN EXPIRY & RENEWAL BAR
-  // ==========================================
-  Widget _buildSubscriptionExpiryBanner({
-    required BuildContext context,
-    required CompanyModel? company,
-    required String userPlanName,
-    String? userPlanExpiry,
-    int? userDaysLeft,
-    bool userIsExpired = false,
-    required bool isDesktop,
-    required bool isMobile,
-  }) {
-    final planName = (company != null && company.planName.isNotEmpty)
-        ? company.planName
-        : userPlanName;
-    final isOverdue = company != null ? company.isPlanOverdue : userIsExpired;
-    final daysLeft = company != null ? company.daysUntilExpiry : userDaysLeft;
-    final isExpiringSoon = !isOverdue && daysLeft != null && daysLeft <= 7;
-
-    String expiryFormatted = company?.expiryFormatted ?? '';
-    if (expiryFormatted.isEmpty || expiryFormatted == 'No expiry set') {
-      final rawExp = company?.planExpiresAt ?? userPlanExpiry;
-      if (rawExp != null && rawExp.isNotEmpty) {
-        try {
-          final dt = DateTime.parse(rawExp);
-          const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-          expiryFormatted = '${dt.day.toString().padLeft(2, '0')} ${months[dt.month - 1]} ${dt.year}';
-        } catch (_) {
-          expiryFormatted = rawExp.length >= 10 ? rawExp.substring(0, 10) : rawExp;
-        }
-      } else {
-        expiryFormatted = 'Active (No Expiry)';
-      }
+  Future<void> _openEditCompanyDialog() async {
+    final compProv = context.read<CompanyProvider>();
+    final authProv = context.read<AuthProvider>();
+    CompanyModel? comp = compProv.activeCompanyDetail;
+    if (comp == null || comp.name.isEmpty) {
+      comp = await compProv.fetchMyCompany();
     }
-    final superAdminName = (company != null && company.assignedSuperAdminName.isNotEmpty)
-        ? company.assignedSuperAdminName
-        : 'Enterprise Super Admin';
-
-    // Urgency Styling
-    Color bannerBorder;
-    Color bannerBg;
-    Color statusBadgeBg;
-    Color statusBadgeText;
-    IconData statusIcon;
-    String statusTitle;
-    String statusSubtitle;
-
-    if (isOverdue) {
-      bannerBorder = const Color(0xFFFCA5A5);
-      bannerBg = const Color(0xFFFEF2F2);
-      statusBadgeBg = const Color(0xFFDC2626);
-      statusBadgeText = Colors.white;
-      statusIcon = Icons.error_rounded;
-      statusTitle = 'Subscription Expired';
-      statusSubtitle = 'Your plan expired on $expiryFormatted. Submit a renewal request to restore unrestricted operations.';
-    } else if (isExpiringSoon) {
-      bannerBorder = const Color(0xFFFCD34D);
-      bannerBg = const Color(0xFFFFFBEB);
-      statusBadgeBg = const Color(0xFFD97706);
-      statusBadgeText = Colors.white;
-      statusIcon = Icons.hourglass_top_rounded;
-      statusTitle = 'Expiring Soon';
-      statusSubtitle = '$daysLeft ${daysLeft == 1 ? 'day' : 'days'} left (Expires on $expiryFormatted). Request renewal now.';
-    } else {
-      bannerBorder = const Color(0xFFE2E8F0);
-      bannerBg = Colors.white;
-      statusBadgeBg = const Color(0xFF047857);
-      statusBadgeText = Colors.white;
-      statusIcon = Icons.verified_rounded;
-      statusTitle = 'Active Plan';
-      statusSubtitle = 'Valid until $expiryFormatted ${daysLeft != null ? '($daysLeft days remaining)' : ''}';
+    if (comp == null) {
+      final u = authProv.currentUser;
+      comp = CompanyModel(
+        id: u?.companyId ?? '',
+        name: u?.companyName ?? '',
+        logo: u?.companyLogo ?? '',
+        contactPhone: u?.companyPhone ?? '',
+        contactEmail: u?.companyEmail ?? '',
+        address: u?.companyAddress ?? '',
+        gstin: u?.companyGstin ?? '',
+        website: u?.companyWebsite ?? '',
+      );
     }
-
-    return Container(
-      decoration: BoxDecoration(
-        color: bannerBg,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: bannerBorder, width: isOverdue || isExpiringSoon ? 1.5 : 1.0),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.02),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      padding: EdgeInsets.all(isMobile ? 12 : 16),
-      child: isMobile
-          ? Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: statusBadgeBg.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Icon(statusIcon, color: statusBadgeBg, size: 20),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Flexible(
-                                child: Text(
-                                  planName,
-                                  style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: statusBadgeBg,
-                                  borderRadius: BorderRadius.circular(5),
-                                ),
-                                child: Text(
-                                  statusTitle,
-                                  style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w700, color: statusBadgeText),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            statusSubtitle,
-                            style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF475569)),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                const Divider(color: Color(0xFFE2E8F0), height: 1),
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Flexible(
-                      child: Text(
-                        'Super Admin: $superAdminName',
-                        style: GoogleFonts.inter(fontSize: 10.5, color: const Color(0xFF64748B), fontWeight: FontWeight.w500),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    ElevatedButton.icon(
-                      onPressed: () => _openRenewalRequestDialog(context, company),
-                      icon: const Icon(Icons.autorenew_rounded, size: 14),
-                      label: Text('Request Renewal', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700)),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF0F766E),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                        elevation: 0,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            )
-          : Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: statusBadgeBg.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(statusIcon, color: statusBadgeBg, size: 24),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Text(
-                            planName,
-                            style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
-                          ),
-                          const SizedBox(width: 10),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
-                            decoration: BoxDecoration(
-                              color: statusBadgeBg,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              statusTitle,
-                              style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w700, color: statusBadgeText),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF1F5F9),
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: const Color(0xFFE2E8F0)),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.calendar_month_rounded, size: 13, color: Color(0xFF64748B)),
-                                const SizedBox(width: 5),
-                                Text(
-                                  'Expires: $expiryFormatted',
-                                  style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF334155)),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        statusSubtitle,
-                        style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF475569)),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      'Super Admin: $superAdminName',
-                      style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B), fontWeight: FontWeight.w500),
-                    ),
-                    const SizedBox(height: 6),
-                    ElevatedButton.icon(
-                      onPressed: () => _openRenewalRequestDialog(context, company),
-                      icon: const Icon(Icons.autorenew_rounded, size: 15),
-                      label: Text('Request Plan Renewal', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700)),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF0F766E),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                        elevation: 0,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-    );
+    if (!mounted) return;
+    await EditCompanyDialog.show(context, comp);
   }
 
   void _openRenewalRequestDialog(BuildContext context, CompanyModel? company) {
@@ -845,255 +521,304 @@ class _CompanyAdminDashboardScreenState extends State<CompanyAdminDashboardScree
     });
   }
 
-  // ==========================================
-  // 1. EXECUTIVE COMMAND HEADER
-  // ==========================================
-  Widget _buildCompanyWorkspaceHeader({
+  String _formatExpiry(CompanyModel? company, String? userPlanExpiry) {
+    final exp = company?.expiryFormatted ?? '';
+    if (exp.isNotEmpty && exp != 'No expiry set') return exp;
+    final raw = company?.planExpiresAt ?? userPlanExpiry;
+    if (raw != null && raw.isNotEmpty) {
+      try {
+        final dt = DateTime.parse(raw);
+        const months = [
+          'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+          'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+        ];
+        return '${dt.day.toString().padLeft(2, '0')} ${months[dt.month - 1]} ${dt.year}';
+      } catch (_) {
+        return raw.length >= 10 ? raw.substring(0, 10) : raw;
+      }
+    }
+    return 'Active';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final auth = context.watch<AuthProvider>();
+    final user = auth.currentUser;
+    final dash = context.watch<DashboardProvider>();
+    final compProv = context.watch<CompanyProvider>();
+    final activeComp = compProv.activeCompanyDetail;
+    final kpis = dash.adminKpis;
+    final isMobile = ResponsiveLayout.isMobile(context);
+
+    final companyName = (activeComp != null && activeComp.name.isNotEmpty)
+        ? activeComp.name
+        : (user?.companyName ?? 'Company Workspace');
+    final companyLogo = (activeComp != null && activeComp.logo.isNotEmpty)
+        ? activeComp.logo
+        : (user?.companyLogo ?? '');
+    final planName = (activeComp != null && activeComp.planName.isNotEmpty)
+        ? activeComp.planName
+        : (user?.companyPlanName ?? 'Standard');
+    final isOverdue =
+        activeComp != null ? activeComp.isPlanOverdue : (user?.companyIsPlanExpired ?? false);
+    final daysLeft =
+        activeComp != null ? activeComp.daysUntilExpiry : user?.companyDaysUntilExpiry;
+    final isExpiringSoon = !isOverdue && daysLeft != null && daysLeft <= 7;
+    final expiryText = _formatExpiry(activeComp, user?.companyPlanExpiresAt);
+    final canManageBranches = user?.canManageBranches ??
+        (user?.hasMenuPermission('branches') ?? false);
+
+    return RefreshIndicator(
+      color: const Color(0xFF047857),
+      onRefresh: _refreshAll,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: EdgeInsets.fromLTRB(
+          isMobile ? 12 : 24,
+          isMobile ? 8 : 16,
+          isMobile ? 12 : 24,
+          isMobile ? 16 : 24,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // 1. Compact Header
+            _buildCompactHeader(
+              companyName: companyName,
+              companyLogo: companyLogo,
+              planName: planName,
+              expiryText: expiryText,
+              daysLeft: daysLeft,
+              isMobile: isMobile,
+              canManageBranches: canManageBranches,
+              activeComp: activeComp,
+            ),
+
+            // Only show subscription alert banner if expired or expiring soon
+            if (isOverdue || isExpiringSoon) ...[
+              const SizedBox(height: 12),
+              _buildUrgentRenewalAlert(
+                isOverdue: isOverdue,
+                daysLeft: daysLeft,
+                expiryText: expiryText,
+                activeComp: activeComp,
+              ),
+            ],
+            const SizedBox(height: 14),
+
+            // 2. 4 Essential Small KPI Tiles
+            _buildCompactKpiGrid(kpis),
+            const SizedBox(height: 14),
+
+            // 3. Slim Sales & Billing Strip
+            _buildSlimSalesBillingStrip(context),
+            const SizedBox(height: 14),
+
+            // 4. Employee Attendance Summary (Present / Absent / Late)
+            _buildEmployeeAttendanceSection(context),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCompactHeader({
     required String companyName,
-    String? companyLogo,
-    required String userFullName,
-    required int branchCount,
-    required int agentCount,
-    required bool isDesktop,
+    required String companyLogo,
+    required String planName,
+    required String expiryText,
+    required int? daysLeft,
     required bool isMobile,
     required bool canManageBranches,
+    required CompanyModel? activeComp,
   }) {
     return GlassCard(
-      padding: EdgeInsets.all(isMobile ? 16 : 22),
-      borderRadius: BorderRadius.circular(20),
+      padding: EdgeInsets.symmetric(
+          horizontal: isMobile ? 12 : 18, vertical: isMobile ? 12 : 14),
+      borderRadius: BorderRadius.circular(16),
       borderColor: const Color(0xFFE2E8F0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Wrap(
+        spacing: 12,
+        runSpacing: 10,
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Builder(
-                builder: (context) {
-                  final liveLogo = context.watch<CompanyProvider>().activeCompanyDetail?.logo;
-                  final effectiveLogo = (liveLogo != null && liveLogo.isNotEmpty) ? liveLogo : (companyLogo ?? '');
-                  return CompanyLogoView(
-                    logo: effectiveLogo,
-                    companyName: companyName,
-                    size: isMobile ? 48 : 56,
-                    borderRadius: BorderRadius.circular(16),
-                    borderColor: const Color(0xFFCBD5E1),
-                  );
-                },
+              CompanyLogoView(
+                logo: companyLogo,
+                companyName: companyName,
+                size: 40,
+                borderRadius: BorderRadius.circular(10),
+                borderColor: const Color(0xFFCBD5E1),
               ),
-              const SizedBox(width: 16),
-              Expanded(
+              const SizedBox(width: 12),
+              Flexible(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Wrap(
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      spacing: 8,
-                      runSpacing: 4,
-                      children: [
-                        Text(
-                          companyName,
-                          style: GoogleFonts.inter(
-                            fontSize: isMobile ? 18 : 22,
-                            fontWeight: FontWeight.w800,
-                            color: const Color(0xFF0F172A),
-                            letterSpacing: -0.5,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF047857).withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(color: const Color(0xFF047857).withValues(alpha: 0.3)),
-                          ),
-                          child: Text(
-                            'ENTERPRISE CONTROL CENTER',
-                            style: GoogleFonts.inter(
-                              fontSize: 9.5,
-                              fontWeight: FontWeight.w800,
-                              color: const Color(0xFF047857),
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
                     Text(
-                      'Signed in as $userFullName · Real-time operational monitoring & sales management',
-                      style: GoogleFonts.inter(fontSize: 12.5, color: const Color(0xFF64748B)),
+                      companyName,
+                      style: GoogleFonts.inter(
+                        fontSize: isMobile ? 16 : 19,
+                        fontWeight: FontWeight.w800,
+                        color: const Color(0xFF0F172A),
+                        letterSpacing: -0.3,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '$planName · Valid until $expiryText${daysLeft != null ? " ($daysLeft d left)" : ""}',
+                      style: GoogleFonts.inter(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w500,
+                          color: const Color(0xFF64748B)),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          const Divider(color: Color(0xFFE2E8F0), height: 1),
-          const SizedBox(height: 14),
-
-          // Operational Status Badges & Quick Action Command Bar
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            crossAxisAlignment: WrapCrossAlignment.center,
+          Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              // Agent Count Badge
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF8FAFC),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: const Color(0xFFE2E8F0)),
+              SizedBox(
+                height: 34,
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    showDialog(
+                      context: context,
+                      builder: (_) => const ImportWizardDialog(),
+                    );
+                  },
+                  icon: const Icon(Icons.upload_file_rounded,
+                      size: 15, color: Color(0xFF1D4ED8)),
+                  label: Text('Import CSV',
+                      style: GoogleFonts.inter(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF1D4ED8))),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Color(0xFFBFDBFE)),
+                    backgroundColor: const Color(0xFFEFF6FF),
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(9)),
+                  ),
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.headset_mic_rounded, size: 15, color: Color(0xFF047857)),
-                    const SizedBox(width: 6),
-                    Text(
-                      '$agentCount Active Telecallers',
-                      style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF0F172A)),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                height: 34,
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    showDialog(
+                      context: context,
+                      builder: (_) => const QuotationFormDialog(),
+                    );
+                  },
+                  icon: const Icon(Icons.request_quote_rounded,
+                      size: 15, color: Color(0xFF047857)),
+                  label: Text('New Quotation',
+                      style: GoogleFonts.inter(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF047857))),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Color(0xFFA7F3D0)),
+                    backgroundColor: const Color(0xFFECFDF5),
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(9)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              SizedBox(
+                height: 34,
+                width: 34,
+                child: PopupMenuButton<String>(
+                  tooltip: 'More Options',
+                  padding: EdgeInsets.zero,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                  icon: Container(
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(9),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
                     ),
+                    child: const Icon(Icons.more_vert_rounded,
+                        size: 18, color: Color(0xFF334155)),
+                  ),
+                  onSelected: (val) {
+                    if (val == 'edit') _openEditCompanyDialog();
+                    if (val == 'password') _showChangePasswordDialog();
+                    if (val == 'renew') {
+                      _openRenewalRequestDialog(context, activeComp);
+                    }
+                    if (val == 'branch') _showAddBranchDialog();
+                  },
+                  itemBuilder: (ctx) => [
+                    const PopupMenuItem(
+                      value: 'edit',
+                      child: Row(
+                        children: [
+                          Icon(Icons.edit_rounded,
+                              size: 16, color: Color(0xFF4338CA)),
+                          SizedBox(width: 8),
+                          Text('Edit Profile & Logo'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'password',
+                      child: Row(
+                        children: [
+                          Icon(Icons.lock_reset_rounded,
+                              size: 16, color: Color(0xFFD97706)),
+                          SizedBox(width: 8),
+                          Text('Change Password'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'renew',
+                      child: Row(
+                        children: [
+                          Icon(Icons.autorenew_rounded,
+                              size: 16, color: Color(0xFF0F766E)),
+                          SizedBox(width: 8),
+                          Text('Request Renewal'),
+                        ],
+                      ),
+                    ),
+                    if (canManageBranches)
+                      const PopupMenuItem(
+                        value: 'branch',
+                        child: Row(
+                          children: [
+                            Icon(Icons.add_business_rounded,
+                                size: 16, color: Color(0xFF0284C7)),
+                            SizedBox(width: 8),
+                            Text('Add Branch'),
+                          ],
+                        ),
+                      ),
                   ],
                 ),
               ),
-              // Branch Count Badge
-              if (canManageBranches)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF8FAFC),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFFE2E8F0)),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.storefront_rounded, size: 15, color: Color(0xFF0284C7)),
-                      const SizedBox(width: 6),
-                      Text(
-                        '$branchCount Calling Branches',
-                        style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF0F172A)),
-                      ),
-                    ],
-                  ),
-                ),
-
-              // Button: 📥 Import Leads CSV
-              OutlinedButton.icon(
-                onPressed: () {
-                  showDialog(
-                    context: context,
-                    builder: (ctx) => const ImportWizardDialog(),
-                  );
-                },
-                icon: const Icon(Icons.upload_file_rounded, size: 16, color: Color(0xFF2563EB)),
-                label: Text('Import CSV', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF1D4ED8))),
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: Color(0xFFBFDBFE), width: 1.0),
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  backgroundColor: const Color(0xFFEFF6FF),
-                ),
-              ),
-
-              // Button: 📄 New Quotation
-              OutlinedButton.icon(
-                onPressed: () {
-                  showDialog(
-                    context: context,
-                    builder: (ctx) => const QuotationFormDialog(),
-                  );
-                },
-                icon: const Icon(Icons.request_quote_rounded, size: 16, color: Color(0xFF059669)),
-                label: Text('New Quotation', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF047857))),
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: Color(0xFFA7F3D0), width: 1.0),
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  backgroundColor: const Color(0xFFECFDF5),
-                ),
-              ),
-
-              // Button: 💳 Invoices & Billing
-              OutlinedButton.icon(
-                onPressed: () {
-                  Navigator.pushNamed(context, AppRoutes.billing);
-                },
-                icon: const Icon(Icons.receipt_long_rounded, size: 16, color: Color(0xFF0284C7)),
-                label: Text('Invoices & Billing', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF0369A1))),
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: Color(0xFFBAE6FD), width: 1.0),
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  backgroundColor: const Color(0xFFF0F9FF),
-                ),
-              ),
-
-              // Button: Edit Profile & Logo
-              OutlinedButton.icon(
-                onPressed: () async {
-                  final compProv = context.read<CompanyProvider>();
-                  final authProv = context.read<AuthProvider>();
-                  CompanyModel? comp = compProv.activeCompanyDetail;
-                  if (comp == null || comp.name.isEmpty) {
-                    comp = await compProv.fetchMyCompany();
-                  }
-                  if (comp == null) {
-                    final u = authProv.currentUser;
-                    comp = CompanyModel(
-                      id: u?.companyId ?? '',
-                      name: u?.companyName ?? '',
-                      logo: u?.companyLogo ?? '',
-                      contactPhone: u?.companyPhone ?? '',
-                      contactEmail: u?.companyEmail ?? '',
-                      address: u?.companyAddress ?? '',
-                      gstin: u?.companyGstin ?? '',
-                      website: u?.companyWebsite ?? '',
-                    );
-                  }
-                  if (!mounted) return;
-                  await EditCompanyDialog.show(context, comp);
-                },
-                icon: const Icon(Icons.edit_rounded, size: 16, color: Color(0xFF4F46E5)),
-                label: Text('Edit Profile & Logo', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF4338CA))),
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: Color(0xFFC7D2FE), width: 1.0),
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  backgroundColor: const Color(0xFFEEF2FF),
-                ),
-              ),
-
-              // Button: Reset / Change Password
-              OutlinedButton.icon(
-                onPressed: _showChangePasswordDialog,
-                icon: const Icon(Icons.lock_reset_rounded, size: 16, color: Color(0xFFD97706)),
-                label: Text('Change Password', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFFB45309))),
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: Color(0xFFFDE68A), width: 1.0),
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  backgroundColor: const Color(0xFFFFFBEB),
-                ),
-              ),
-
-              // Button: Add Branch (If permissioned)
-              if (canManageBranches)
-                OutlinedButton.icon(
-                  onPressed: _showAddBranchDialog,
-                  icon: const Icon(Icons.add_business_rounded, size: 16, color: Color(0xFF0D9488)),
-                  label: Text('Add Branch', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF0F766E))),
-                  style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: Color(0xFF99F6E4), width: 1.0),
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    backgroundColor: const Color(0xFFF0FDFA),
-                  ),
-                ),
             ],
           ),
         ],
@@ -1101,119 +826,354 @@ class _CompanyAdminDashboardScreenState extends State<CompanyAdminDashboardScree
     );
   }
 
-  // ==========================================
-  // 2. 4 CORE OPERATIONAL METRIC STAT CARDS
-  // ==========================================
-  Widget _buildCompanyStatCards(DashboardKpis kpis, bool isDesktop) {
-    final cards = [
-      _buildSingleStatCard(
-        title: 'Total Company Leads',
-        value: '${kpis.totalRegisteredLeads}',
-        subtitle: '${kpis.assignedLeads} assigned · ${kpis.unassignedLeads} in pool',
-        icon: Icons.groups_rounded,
-        gradient: const [Color(0xFF3B82F6), Color(0xFF1D4ED8)],
-        badgeText: '+${kpis.newlyImportedLeads} new',
-        badgeColor: const Color(0xFF0284C7),
-      ),
-      _buildSingleStatCard(
-        title: 'Calls Dialed Today',
-        value: '${kpis.callsLoggedToday}',
-        subtitle: '${kpis.callsLoggedTotal} company total dials',
-        icon: Icons.phone_in_talk_rounded,
-        gradient: const [Color(0xFF06B6D4), Color(0xFF0284C7)],
-        badgeText: 'Active Today',
-        badgeColor: const Color(0xFF10B981),
-      ),
-      _buildSingleStatCard(
-        title: 'Won / Converted Leads',
-        value: '${kpis.completedLeads}',
-        subtitle: 'Successfully closed sales deals',
-        icon: Icons.verified_rounded,
-        gradient: const [Color(0xFF10B981), Color(0xFF047857)],
-        badgeText: 'Converted',
-        badgeColor: const Color(0xFF047857),
-      ),
-      _buildSingleStatCard(
-        title: 'Scheduled Callbacks',
-        value: '${kpis.scheduledCallbacks}',
-        subtitle: '${kpis.completedCallbacks} closed · ${kpis.overdueCallbacks} overdue',
-        icon: Icons.event_available_rounded,
-        gradient: const [Color(0xFFF59E0B), Color(0xFFD97706)],
-        badgeText: kpis.overdueCallbacks > 0 ? '${kpis.overdueCallbacks} Overdue' : 'On Track',
-        badgeColor: kpis.overdueCallbacks > 0 ? const Color(0xFFDC2626) : const Color(0xFFD97706),
-      ),
-    ];
+  Widget _buildUrgentRenewalAlert({
+    required bool isOverdue,
+    required int? daysLeft,
+    required String expiryText,
+    required CompanyModel? activeComp,
+  }) {
+    final bg = isOverdue ? const Color(0xFFFEF2F2) : const Color(0xFFFFFBEB);
+    final border =
+        isOverdue ? const Color(0xFFFCA5A5) : const Color(0xFFFCD34D);
+    final accent =
+        isOverdue ? const Color(0xFFDC2626) : const Color(0xFFD97706);
 
-    if (isDesktop) {
-      return Row(
-        children: cards.map((c) => Expanded(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 5), child: c))).toList(),
-      );
-    } else {
-      return Column(
-        children: cards.map((c) => Padding(padding: const EdgeInsets.only(bottom: 12), child: c)).toList(),
-      );
-    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: border),
+      ),
+      child: Wrap(
+        spacing: 10,
+        runSpacing: 8,
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                isOverdue ? Icons.error_rounded : Icons.hourglass_top_rounded,
+                color: accent,
+                size: 18,
+              ),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  isOverdue
+                      ? 'Subscription expired on $expiryText. Renew to keep full access.'
+                      : 'Plan expiring in ${daysLeft ?? 0}d ($expiryText).',
+                  style: GoogleFonts.inter(
+                      fontSize: 12, fontWeight: FontWeight.w600, color: accent),
+                ),
+              ),
+            ],
+          ),
+          SizedBox(
+            height: 32,
+            child: ElevatedButton(
+              onPressed: () => _openRenewalRequestDialog(context, activeComp),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: accent,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8)),
+                elevation: 0,
+              ),
+              child: Text('Renew Now',
+                  style: GoogleFonts.inter(
+                      fontSize: 11.5, fontWeight: FontWeight.w700)),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
-  Widget _buildSingleStatCard({
-    required String title,
+  Widget _buildCompactKpiGrid(DashboardKpis kpis) {
+    final c1 = _buildSmallKpiTile(
+      icon: Icons.groups_rounded,
+      label: 'Total Leads',
+      value: '${kpis.totalRegisteredLeads}',
+      subtitle: '${kpis.assignedLeads} assigned · ${kpis.unassignedLeads} pool',
+      color: const Color(0xFF2563EB),
+      bg: const Color(0xFFEFF6FF),
+    );
+    final c2 = _buildSmallKpiTile(
+      icon: Icons.phone_in_talk_rounded,
+      label: 'Calls Today',
+      value: '${kpis.callsLoggedToday}',
+      subtitle: '${kpis.callsLoggedTotal} total dials',
+      color: const Color(0xFF0284C7),
+      bg: const Color(0xFFF0F9FF),
+    );
+    final c3 = _buildSmallKpiTile(
+      icon: Icons.verified_rounded,
+      label: 'Won Leads',
+      value: '${kpis.completedLeads}',
+      subtitle: 'Converted deals',
+      color: const Color(0xFF059669),
+      bg: const Color(0xFFECFDF5),
+    );
+    final c4 = _buildSmallKpiTile(
+      icon: Icons.event_available_rounded,
+      label: 'Callbacks',
+      value: '${kpis.scheduledCallbacks}',
+      subtitle: kpis.overdueCallbacks > 0
+          ? '${kpis.overdueCallbacks} overdue'
+          : '${kpis.completedCallbacks} closed',
+      color: kpis.overdueCallbacks > 0
+          ? const Color(0xFFDC2626)
+          : const Color(0xFFD97706),
+      bg: kpis.overdueCallbacks > 0
+          ? const Color(0xFFFEF2F2)
+          : const Color(0xFFFFFBEB),
+    );
+
+    return LayoutBuilder(
+      builder: (ctx, constraints) {
+        if (constraints.maxWidth >= 760) {
+          return Row(
+            children: [
+              Expanded(child: c1),
+              const SizedBox(width: 10),
+              Expanded(child: c2),
+              const SizedBox(width: 10),
+              Expanded(child: c3),
+              const SizedBox(width: 10),
+              Expanded(child: c4),
+            ],
+          );
+        }
+        return Column(
+          children: [
+            Row(
+              children: [
+                Expanded(child: c1),
+                const SizedBox(width: 8),
+                Expanded(child: c2),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(child: c3),
+                const SizedBox(width: 8),
+                Expanded(child: c4),
+              ],
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildSmallKpiTile({
+    required IconData icon,
+    required String label,
     required String value,
     required String subtitle,
-    required IconData icon,
-    required List<Color> gradient,
-    required String badgeText,
-    required Color badgeColor,
+    required Color color,
+    required Color bg,
   }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(13),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(7),
+            decoration: BoxDecoration(
+              color: bg,
+              borderRadius: BorderRadius.circular(9),
+            ),
+            child: Icon(icon, size: 17, color: color),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: GoogleFonts.inter(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF64748B)),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  value,
+                  style: GoogleFonts.inter(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      color: const Color(0xFF0F172A)),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  subtitle,
+                  style: GoogleFonts.inter(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: color),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSlimSalesBillingStrip(BuildContext context) {
+    final kpi = context.watch<BillingProvider>().billingOverview;
+
     return GlassCard(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-      borderRadius: BorderRadius.circular(18),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      borderRadius: BorderRadius.circular(14),
       borderColor: const Color(0xFFE2E8F0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Container(
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(colors: gradient),
-                  borderRadius: BorderRadius.circular(10),
-                  boxShadow: [
-                    BoxShadow(color: gradient.first.withValues(alpha: 0.25), blurRadius: 10, offset: const Offset(0, 3)),
-                  ],
-                ),
-                child: Center(child: Icon(icon, color: Colors.white, size: 20)),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: badgeColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: badgeColor.withValues(alpha: 0.3)),
-                ),
+              const Icon(Icons.account_balance_wallet_outlined,
+                  size: 17, color: Color(0xFF059669)),
+              const SizedBox(width: 8),
+              Expanded(
                 child: Text(
-                  badgeText,
-                  style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, color: badgeColor),
+                  'Sales & Billing',
+                  style: GoogleFonts.inter(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w800,
+                      color: const Color(0xFF0F172A)),
                 ),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pushNamed(context, AppRoutes.billing),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: Text('Open Billing →',
+                    style: GoogleFonts.inter(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF2563EB))),
               ),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 10),
+          LayoutBuilder(
+            builder: (ctx, constraints) {
+              final s1 = _buildMiniBillingCell(
+                'Quotations (${kpi?.quotationCount ?? 0})',
+                '₹${(kpi?.totalQuotationValue ?? 0.0).toStringAsFixed(0)}',
+                const Color(0xFF7C3AED),
+                const Color(0xFFF5F3FF),
+              );
+              final s2 = _buildMiniBillingCell(
+                'Invoiced (${kpi?.invoiceCount ?? 0})',
+                '₹${(kpi?.totalBilled ?? 0.0).toStringAsFixed(0)}',
+                const Color(0xFF2563EB),
+                const Color(0xFFEFF6FF),
+              );
+              final s3 = _buildMiniBillingCell(
+                'Collected (${kpi?.paidInvoiceCount ?? 0})',
+                '₹${(kpi?.totalCollected ?? 0.0).toStringAsFixed(0)}',
+                const Color(0xFF059669),
+                const Color(0xFFECFDF5),
+              );
+              final s4 = _buildMiniBillingCell(
+                'Pending (${kpi?.pendingInvoiceCount ?? 0})',
+                '₹${(kpi?.pendingReceivables ?? 0.0).toStringAsFixed(0)}',
+                (kpi?.pendingReceivables ?? 0.0) > 0
+                    ? const Color(0xFFDC2626)
+                    : const Color(0xFF64748B),
+                (kpi?.pendingReceivables ?? 0.0) > 0
+                    ? const Color(0xFFFEF2F2)
+                    : const Color(0xFFF8FAFC),
+              );
+
+              if (constraints.maxWidth >= 680) {
+                return Row(
+                  children: [
+                    Expanded(child: s1),
+                    const SizedBox(width: 8),
+                    Expanded(child: s2),
+                    const SizedBox(width: 8),
+                    Expanded(child: s3),
+                    const SizedBox(width: 8),
+                    Expanded(child: s4),
+                  ],
+                );
+              }
+              return Column(
+                children: [
+                  Row(
+                    children: [
+                      Expanded(child: s1),
+                      const SizedBox(width: 8),
+                      Expanded(child: s2),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(child: s3),
+                      const SizedBox(width: 8),
+                      Expanded(child: s4),
+                    ],
+                  ),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMiniBillingCell(
+      String label, String value, Color color, Color bg) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: GoogleFonts.inter(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w600,
+                color: const Color(0xFF475569)),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 2),
           Text(
             value,
-            style: GoogleFonts.inter(fontSize: 24, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A), letterSpacing: -0.5),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            title,
-            style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF475569)),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            subtitle,
-            style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
+            style: GoogleFonts.robotoMono(
+                fontSize: 14, fontWeight: FontWeight.w800, color: color),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -1222,820 +1182,316 @@ class _CompanyAdminDashboardScreenState extends State<CompanyAdminDashboardScree
     );
   }
 
-  // ==========================================
-  // 3. SALES & BILLING PIPELINE
-  // ==========================================
-  Widget _buildSalesAndBillingSection(BuildContext context, bool isDesktop) {
-    final billing = context.watch<BillingProvider>();
-    final kpi = billing.billingOverview;
+  Widget _buildEmployeeAttendanceSection(BuildContext context) {
+    final attProv = context.watch<AttendanceProvider>();
+    final empProv = context.watch<EmployeeProvider>();
+    final summary = attProv.adminSummary;
+    final records = attProv.adminRecords;
 
-    return GlassCard(
-      blur: 20,
-      opacity: 0.95,
-      borderRadius: BorderRadius.circular(20),
-      borderColor: const Color(0xFFE2E8F0),
-      padding: const EdgeInsets.all(22),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF059669).withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(Icons.account_balance_wallet_rounded, color: Color(0xFF059669), size: 22),
-                  ),
-                  const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Sales & Revenue Pipeline',
-                        style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
-                      ),
-                      Text(
-                        'Quotations sent, billed revenue, collections & receivables',
-                        style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              Wrap(
-                spacing: 8,
-                children: [
-                  OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      side: const BorderSide(color: Color(0xFF059669)),
-                      backgroundColor: const Color(0xFFECFDF5),
-                    ),
-                    icon: const Icon(Icons.add_rounded, size: 16, color: Color(0xFF059669)),
-                    label: Text('Create Quotation', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF059669))),
-                    onPressed: () {
-                      showDialog(
-                        context: context,
-                        builder: (_) => const QuotationFormDialog(),
-                      );
-                    },
-                  ),
-                  ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF2563EB),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      elevation: 0,
-                    ),
-                    icon: const Icon(Icons.arrow_forward_rounded, size: 15),
-                    label: Text('Invoices Ledger', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700)),
-                    onPressed: () => Navigator.pushNamed(context, AppRoutes.billing),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 18),
-          const Divider(color: Color(0xFFF1F5F9), height: 1),
-          const SizedBox(height: 18),
+    final int totalStaff = (summary['total_employees'] as num?)?.toInt() ??
+        empProv.employees.length;
+    final int presentCount = (summary['present_count'] as num?)?.toInt() ?? 0;
+    final int lateCount = (summary['late_count'] as num?)?.toInt() ?? 0;
+    final int absentCount = (summary['absent_count'] as num?)?.toInt() ??
+        (totalStaff - presentCount - lateCount).clamp(0, totalStaff);
 
-          Wrap(
-            spacing: 16,
-            runSpacing: 14,
-            children: [
-              _buildPipelineStatCard(
-                title: 'Active Quotations',
-                value: '₹${(kpi?.totalQuotationValue ?? 0.0).toStringAsFixed(2)}',
-                subtitle: '${kpi?.quotationCount ?? 0} estimates generated',
-                icon: Icons.request_quote_rounded,
-                accentColor: const Color(0xFF8B5CF6),
-                bgColor: const Color(0xFFF5F3FF),
-              ),
-              _buildPipelineStatCard(
-                title: 'Total Invoiced',
-                value: '₹${(kpi?.totalBilled ?? 0.0).toStringAsFixed(2)}',
-                subtitle: '${kpi?.invoiceCount ?? 0} invoices billed',
-                icon: Icons.receipt_rounded,
-                accentColor: const Color(0xFF2563EB),
-                bgColor: const Color(0xFFEFF6FF),
-              ),
-              _buildPipelineStatCard(
-                title: 'Collected Revenue',
-                value: '₹${(kpi?.totalCollected ?? 0.0).toStringAsFixed(2)}',
-                subtitle: '${kpi?.paidInvoiceCount ?? 0} fully cleared',
-                icon: Icons.check_circle_rounded,
-                accentColor: const Color(0xFF10B981),
-                bgColor: const Color(0xFFECFDF5),
-              ),
-              _buildPipelineStatCard(
-                title: 'Pending Receivables',
-                value: '₹${(kpi?.pendingReceivables ?? 0.0).toStringAsFixed(2)}',
-                subtitle: '${kpi?.pendingInvoiceCount ?? 0} bills pending payment',
-                icon: Icons.hourglass_top_rounded,
-                accentColor: (kpi?.pendingReceivables ?? 0.0) > 0 ? const Color(0xFFDC2626) : const Color(0xFF64748B),
-                bgColor: (kpi?.pendingReceivables ?? 0.0) > 0 ? const Color(0xFFFEF2F2) : const Color(0xFFF8FAFC),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPipelineStatCard({
-    required String title,
-    required String value,
-    required String subtitle,
-    required IconData icon,
-    required Color accentColor,
-    required Color bgColor,
-  }) {
-    return Container(
-      width: 230,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: accentColor.withValues(alpha: 0.25)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(title, style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF475569))),
-              Icon(icon, size: 18, color: accentColor),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(value, style: GoogleFonts.robotoMono(fontSize: 16, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A))),
-          const SizedBox(height: 4),
-          Text(subtitle, style: GoogleFonts.inter(fontSize: 10.5, color: const Color(0xFF64748B))),
-        ],
-      ),
-    );
-  }
-
-  // ==========================================
-  // 4. TELECALLER TEAM PERFORMANCE TABLE
-  // ==========================================
-  Widget _buildTeamPerformanceTable(List<dynamic> employees) {
-    final isMobile = MediaQuery.of(context).size.width < 650;
-
-    final filtered = employees.where((emp) {
-      if (_teamSearchQuery.isEmpty) return true;
-      final query = _teamSearchQuery.toLowerCase();
-      final name = (emp.name ?? '').toString().toLowerCase();
-      final email = (emp.email ?? '').toString().toLowerCase();
-      return name.contains(query) || email.contains(query);
+    final filtered = records.where((r) {
+      final st = r.status.toUpperCase();
+      if (_attendanceFilter == 'PRESENT') return st == 'PRESENT';
+      if (_attendanceFilter == 'LATE') return st == 'LATE';
+      if (_attendanceFilter == 'ABSENT') return st == 'ABSENT' || st == 'ON_LEAVE';
+      return true;
     }).toList();
 
     return GlassCard(
-      padding: EdgeInsets.all(isMobile ? 16 : 22),
-      borderRadius: BorderRadius.circular(20),
+      padding: const EdgeInsets.all(16),
+      borderRadius: BorderRadius.circular(16),
       borderColor: const Color(0xFFE2E8F0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF10B981).withValues(alpha: 0.16),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(Icons.leaderboard_rounded, color: Color(0xFF047857), size: 20),
-                  ),
-                  const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Telecaller Team Performance',
-                        style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
-                      ),
-                      Text(
-                        'Daily dials, win rates & 1-tap live task audit',
-                        style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B)),
-                      ),
-                    ],
-                  ),
-                ],
+              const Icon(Icons.fingerprint_rounded,
+                  size: 18, color: Color(0xFF047857)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Employee Attendance (Today)',
+                  style: GoogleFonts.inter(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      color: const Color(0xFF0F172A)),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-              TextButton.icon(
+              TextButton(
                 onPressed: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (_) => const EmployeeManagementScreen()),
+                    MaterialPageRoute(
+                        builder: (_) => const EmployeeManagementScreen()),
                   );
                 },
-                icon: const Icon(Icons.arrow_forward_rounded, size: 14, color: Color(0xFF047857)),
-                label: Text('Manage Team', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFF047857))),
+                style: TextButton.styleFrom(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: Text('Manage Team →',
+                    style: GoogleFonts.inter(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF047857))),
               ),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 10),
 
-          // Team Search Filter
-          TextField(
-            onChanged: (val) => setState(() => _teamSearchQuery = val.trim()),
-            style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF0F172A)),
-            decoration: InputDecoration(
-              hintText: 'Search telecaller by name or email...',
-              hintStyle: GoogleFonts.inter(color: const Color(0xFF94A3B8), fontSize: 12),
-              prefixIcon: const Icon(Icons.search_rounded, size: 16, color: Color(0xFF64748B)),
-              filled: true,
-              fillColor: const Color(0xFFF8FAFC),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
-              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
-            ),
+          // Present / Absent / Late / Total Strip
+          LayoutBuilder(
+            builder: (ctx, constraints) {
+              final s1 = _buildMiniBillingCell(
+                'Total Staff',
+                '$totalStaff',
+                const Color(0xFF334155),
+                const Color(0xFFF8FAFC),
+              );
+              final s2 = _buildMiniBillingCell(
+                'Present',
+                '$presentCount',
+                const Color(0xFF059669),
+                const Color(0xFFECFDF5),
+              );
+              final s3 = _buildMiniBillingCell(
+                'Late',
+                '$lateCount',
+                const Color(0xFFD97706),
+                const Color(0xFFFFFBEB),
+              );
+              final s4 = _buildMiniBillingCell(
+                'Absent',
+                '$absentCount',
+                const Color(0xFFDC2626),
+                const Color(0xFFFEF2F2),
+              );
+
+              if (constraints.maxWidth >= 680) {
+                return Row(
+                  children: [
+                    Expanded(child: s1),
+                    const SizedBox(width: 8),
+                    Expanded(child: s2),
+                    const SizedBox(width: 8),
+                    Expanded(child: s3),
+                    const SizedBox(width: 8),
+                    Expanded(child: s4),
+                  ],
+                );
+              }
+              return Column(
+                children: [
+                  Row(
+                    children: [
+                      Expanded(child: s1),
+                      const SizedBox(width: 8),
+                      Expanded(child: s2),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(child: s3),
+                      const SizedBox(width: 8),
+                      Expanded(child: s4),
+                    ],
+                  ),
+                ],
+              );
+            },
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
 
-          if (filtered.isEmpty)
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF8FAFC),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFE2E8F0)),
-              ),
+          // Filter Chips
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              _buildAttFilterChip('ALL', 'All (${records.length})'),
+              _buildAttFilterChip('PRESENT', 'Present ($presentCount)'),
+              _buildAttFilterChip('LATE', 'Late ($lateCount)'),
+              _buildAttFilterChip('ABSENT', 'Absent ($absentCount)'),
+            ],
+          ),
+          const SizedBox(height: 10),
+
+          if (attProv.isLoading && records.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 20),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (filtered.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 18),
               child: Center(
-                child: Text('No telecaller records found matching search', style: GoogleFonts.inter(color: const Color(0xFF64748B), fontSize: 13)),
+                child: Text(
+                  'No attendance records for this filter today.',
+                  style: GoogleFonts.inter(
+                      color: const Color(0xFF64748B), fontSize: 12),
+                ),
               ),
             )
           else
             ListView.separated(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              itemCount: filtered.take(6).length,
-              separatorBuilder: (_, __) => const Divider(color: Color(0xFFE2E8F0), height: 16),
-              itemBuilder: (ctx, i) {
-                final emp = filtered[i];
-                final callsToday = emp.callsToday as int? ?? 0;
-                final dailyTarget = emp.dailyTarget as int? ?? 50;
-                final pct = dailyTarget > 0 ? (callsToday / dailyTarget).clamp(0.0, 1.0) : 0.0;
-                final empId = emp.employeeId ?? '';
-
-                void openActivity() {
-                  showDialog(
-                    context: context,
-                    builder: (_) => EmployeeActivityDetailDialog(
-                      employee: {
-                        'id': empId,
-                        'first_name': emp.name,
-                        'email': emp.email,
-                        'calls_today': callsToday,
-                        'daily_target': dailyTarget,
-                        'completed_leads': emp.completedLeads,
-                      },
-                    ),
-                  );
-                }
-
-                return InkWell(
-                  onTap: openActivity,
-                  borderRadius: BorderRadius.circular(10),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: isMobile
-                        ? Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  CircleAvatar(
-                                    radius: 17,
-                                    backgroundColor: const Color(0xFF047857),
-                                    child: Text(
-                                      emp.name.isNotEmpty ? emp.name[0].toUpperCase() : 'A',
-                                      style: GoogleFonts.inter(fontWeight: FontWeight.w800, color: Colors.white, fontSize: 13),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(emp.name, style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)), maxLines: 1, overflow: TextOverflow.ellipsis),
-                                        Text(emp.email, style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)), maxLines: 1, overflow: TextOverflow.ellipsis),
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF10B981).withValues(alpha: 0.12),
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                    child: Text(
-                                      '${emp.completedLeads} Won',
-                                      style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, color: const Color(0xFF047857)),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text('$callsToday / $dailyTarget calls (${(pct * 100).toInt()}%)', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF047857))),
-                                  Text('Tasks & Activity →', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF2563EB))),
-                                ],
-                              ),
-                              const SizedBox(height: 4),
-                              LinearProgressIndicator(
-                                value: pct,
-                                backgroundColor: const Color(0xFFE2E8F0),
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                  pct >= 1.0 ? const Color(0xFF047857) : const Color(0xFF0284C7),
-                                ),
-                                minHeight: 5,
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                            ],
-                          )
-                        : Row(
-                            children: [
-                              CircleAvatar(
-                                radius: 18,
-                                backgroundColor: const Color(0xFF047857),
-                                child: Text(
-                                  emp.name.isNotEmpty ? emp.name[0].toUpperCase() : 'A',
-                                  style: GoogleFonts.inter(fontWeight: FontWeight.w800, color: Colors.white, fontSize: 13),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                flex: 3,
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(emp.name, style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A))),
-                                    Text(emp.email, style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B))),
-                                  ],
-                                ),
-                              ),
-                              Expanded(
-                                flex: 3,
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Text('Dial Target', style: GoogleFonts.inter(fontSize: 10.5, color: const Color(0xFF64748B))),
-                                        Text('$callsToday / $dailyTarget (${(pct * 100).toInt()}%)', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF047857))),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 4),
-                                    LinearProgressIndicator(
-                                      value: pct,
-                                      backgroundColor: const Color(0xFFE2E8F0),
-                                      valueColor: AlwaysStoppedAnimation<Color>(
-                                        pct >= 1.0 ? const Color(0xFF047857) : const Color(0xFF0284C7),
-                                      ),
-                                      minHeight: 5,
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 14),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF10B981).withValues(alpha: 0.12),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(
-                                  '${emp.completedLeads} Won',
-                                  style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w700, color: const Color(0xFF047857)),
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              OutlinedButton.icon(
-                                onPressed: openActivity,
-                                style: OutlinedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                  side: const BorderSide(color: Color(0xFFBFDBFE)),
-                                  backgroundColor: const Color(0xFFEFF6FF),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                ),
-                                icon: const Icon(Icons.analytics_outlined, size: 13, color: Color(0xFF1D4ED8)),
-                                label: Text(
-                                  'Activity',
-                                  style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF1D4ED8)),
-                                ),
-                              ),
-                            ],
-                          ),
-                  ),
-                );
-              },
+              itemCount: filtered.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 6),
+              itemBuilder: (ctx, i) => _buildAttendanceTile(filtered[i]),
             ),
         ],
       ),
     );
   }
 
-  // ==========================================
-  // 5. CALL OUTCOMES DISTRIBUTION
-  // ==========================================
-  Widget _buildCompanyCallOutcomesCard(List<dynamic> outcomes) {
-    int totalDials = 0;
-    for (var o in outcomes) {
-      totalDials += (o['count'] ?? 0) as int;
+  Widget _buildAttFilterChip(String key, String label) {
+    final isSelected = _attendanceFilter == key;
+    return InkWell(
+      onTap: () => setState(() => _attendanceFilter = key),
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF0F172A) : Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isSelected
+                ? const Color(0xFF0F172A)
+                : const Color(0xFFE2E8F0),
+          ),
+        ),
+        child: Text(
+          label,
+          style: GoogleFonts.inter(
+            fontSize: 11,
+            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+            color: isSelected ? Colors.white : const Color(0xFF475569),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAttendanceTile(AttendanceModel rec) {
+    final st = rec.status.toUpperCase();
+    final Color statusColor;
+    final Color statusBg;
+    if (st == 'PRESENT') {
+      statusColor = const Color(0xFF059669);
+      statusBg = const Color(0xFFECFDF5);
+    } else if (st == 'LATE') {
+      statusColor = const Color(0xFFD97706);
+      statusBg = const Color(0xFFFFFBEB);
+    } else {
+      statusColor = const Color(0xFFDC2626);
+      statusBg = const Color(0xFFFEF2F2);
     }
 
-    return GlassCard(
-      padding: const EdgeInsets.all(22),
-      borderRadius: BorderRadius.circular(20),
-      borderColor: const Color(0xFFE2E8F0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF59E0B).withValues(alpha: 0.16),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(Icons.pie_chart_rounded, color: Color(0xFFD97706), size: 20),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Call Outcomes Distribution',
-                      style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
-                    ),
-                    Text(
-                      totalDials > 0 ? '$totalDials total outbound call dispositions' : 'Company telecalling dispositions',
-                      style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B)),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 18),
-          if (outcomes.isEmpty)
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF8FAFC),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFE2E8F0)),
-              ),
-              child: Center(
-                child: Text('No call disposition records yet', style: GoogleFonts.inter(color: const Color(0xFF64748B), fontSize: 13)),
-              ),
-            )
-          else
-            Column(
-              children: outcomes.map((o) {
-                final outcomeName = (o['outcome'] ?? 'UNKNOWN').toString().replaceAll('_', ' ');
-                final count = (o['count'] ?? 0) as int;
-                final color = _getOutcomeColor(o['outcome']?.toString() ?? '');
-                final ratio = totalDials > 0 ? (count / totalDials) : 0.0;
+    final checkInStr = rec.checkInTime != null
+        ? DateFormat('hh:mm a').format(rec.checkInTime!.toLocal())
+        : 'Not checked in';
+    final checkOutStr = rec.checkOutTime != null
+        ? DateFormat('hh:mm a').format(rec.checkOutTime!.toLocal())
+        : '—';
 
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 6),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Container(width: 10, height: 10, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              outcomeName,
-                              style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w600, color: const Color(0xFF0F172A)),
-                            ),
-                          ),
-                          Text(
-                            '$count dials (${(ratio * 100).toStringAsFixed(0)}%)',
-                            style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w700, color: color),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 5),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(3),
-                        child: LinearProgressIndicator(
-                          value: ratio,
-                          backgroundColor: const Color(0xFFF1F5F9),
-                          valueColor: AlwaysStoppedAnimation<Color>(color),
-                          minHeight: 4,
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }).toList(),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Color _getOutcomeColor(String outcome) {
-    switch (outcome.toUpperCase()) {
-      case 'INTERESTED':
-        return const Color(0xFF047857);
-      case 'CALLBACK_REQUESTED':
-      case 'CALLBACK':
-        return const Color(0xFFD97706);
-      case 'NOT_INTERESTED':
-        return const Color(0xFFDC2626);
-      case 'BUSY':
-      case 'NO_ANSWER':
-        return const Color(0xFF0284C7);
-      case 'WRONG_NUMBER':
-      case 'INVALID':
-        return const Color(0xFF64748B);
-      default:
-        return const Color(0xFF7C3AED);
-    }
-  }
-
-  // ==========================================
-  // 6. CALLING ACTIVITY TIMELINE (LAST 7 DAYS)
-  // ==========================================
-  Widget _buildCallingTimelineSection(List<dynamic> timeline, bool isDesktop) {
-    return GlassCard(
-      padding: const EdgeInsets.all(22),
-      borderRadius: BorderRadius.circular(20),
-      borderColor: const Color(0xFFE2E8F0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF047857).withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(Icons.bar_chart_rounded, color: Color(0xFF047857), size: 20),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Weekly Call Volume Trend',
-                      style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
-                    ),
-                    Text(
-                      'Daily outbound telecalling volume across all company desks',
-                      style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B)),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          if (timeline.isEmpty)
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF8FAFC),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFE2E8F0)),
-              ),
-              child: Center(
-                child: Text('Activity data is generating...', style: GoogleFonts.inter(color: const Color(0xFF64748B), fontSize: 13)),
-              ),
-            )
-          else
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: timeline.map((item) {
-                final day = item['day'] ?? '';
-                final calls = (item['calls'] ?? 0) as int;
-                final height = (calls * 2.5).clamp(24.0, 110.0);
-
-                return Expanded(
-                  child: Column(
-                    children: [
-                      Text('$calls', style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w700, color: const Color(0xFF047857))),
-                      const SizedBox(height: 6),
-                      Container(
-                        width: isDesktop ? 36 : 20,
-                        height: height,
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFF047857), Color(0xFF10B981)],
-                            begin: Alignment.bottomCenter,
-                            end: Alignment.topCenter,
-                          ),
-                          borderRadius: BorderRadius.circular(8),
-                          boxShadow: [
-                            BoxShadow(color: const Color(0xFF047857).withValues(alpha: 0.25), blurRadius: 8, offset: const Offset(0, 2)),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        day,
-                        style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w600, color: const Color(0xFF64748B)),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                );
-              }).toList(),
-            ),
-        ],
-      ),
-    );
-  }
-
-  // ==========================================
-  // 7. COMPANY BRANCHES SECTION
-  // ==========================================
-  Widget _buildCompanyBranchesSection(List<BranchModel> branches, bool isDesktop) {
-    final isMobile = MediaQuery.of(context).size.width < 650;
-    return GlassCard(
-      padding: EdgeInsets.all(isMobile ? 16 : 22),
-      borderRadius: BorderRadius.circular(20),
-      borderColor: const Color(0xFFE2E8F0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF0D9488).withValues(alpha: 0.16),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(Icons.storefront_rounded, color: Color(0xFF0F766E), size: 20),
-                  ),
-                  const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Company Branches & Desks',
-                        style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
-                      ),
-                      Text(
-                        'Individual office locations, telecaller allocation & lead pools',
-                        style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B)),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              TextButton.icon(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const BranchManagementScreen()),
-                  );
-                },
-                icon: const Icon(Icons.settings_suggest_rounded, size: 16, color: Color(0xFF047857)),
-                label: Text('Manage Branches', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF047857))),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          if (branches.isEmpty)
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF8FAFC),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: const Color(0xFFE2E8F0)),
-              ),
-              child: Center(
-                child: Column(
-                  children: [
-                    const Icon(Icons.store_mall_directory_outlined, color: Color(0xFF94A3B8), size: 40),
-                    const SizedBox(height: 8),
-                    Text('No branches created yet for this company', style: GoogleFonts.inter(color: const Color(0xFF64748B), fontSize: 13)),
-                    const SizedBox(height: 12),
-                    GradientPrimaryButton(
-                      text: 'Add First Branch',
-                      icon: Icons.add_rounded,
-                      onPressed: _showAddBranchDialog,
-                    ),
-                  ],
-                ),
-              ),
-            )
-          else
-            Wrap(
-              spacing: 14,
-              runSpacing: 14,
-              children: branches.map((b) => _buildBranchMiniCard(b, isMobile)).toList(),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBranchMiniCard(BranchModel branch, bool isMobile) {
     return Container(
-      width: isMobile ? double.infinity : 260,
-      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(11),
         border: Border.all(color: const Color(0xFFE2E8F0)),
-        boxShadow: [
-          BoxShadow(color: const Color(0xFF0F172A).withValues(alpha: 0.04), blurRadius: 10, offset: const Offset(0, 3)),
-        ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          tilePadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+          childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(11)),
+          collapsedShape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(11)),
+          leading: CircleAvatar(
+            radius: 15,
+            backgroundColor: statusColor,
+            child: Text(
+              rec.userName.isNotEmpty ? rec.userName[0].toUpperCase() : 'E',
+              style: GoogleFonts.inter(
+                  fontWeight: FontWeight.w800,
+                  color: Colors.white,
+                  fontSize: 12),
+            ),
+          ),
+          title: Row(
             children: [
-              Expanded(
+              Flexible(
                 child: Text(
-                  branch.name,
-                  style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
+                  rec.userName.isNotEmpty ? rec.userName : 'Employee',
+                  style: GoogleFonts.inter(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFF0F172A)),
+                  maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              if (branch.code.isNotEmpty)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF047857).withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    branch.code,
-                    style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w800, color: const Color(0xFF047857)),
-                  ),
+              const SizedBox(width: 8),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                decoration: BoxDecoration(
+                  color: statusBg,
+                  borderRadius: BorderRadius.circular(5),
                 ),
+                child: Text(
+                  st.replaceAll('_', ' '),
+                  style: GoogleFonts.inter(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w800,
+                      color: statusColor),
+                ),
+              ),
             ],
           ),
-          const SizedBox(height: 6),
-          if (branch.address.isNotEmpty)
-            Text(
-              branch.address,
-              style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+          subtitle: Text(
+            'In: $checkInStr${rec.matchedBranchName.isNotEmpty ? " · ${rec.matchedBranchName}" : ""}',
+            style: GoogleFonts.inter(
+                fontSize: 11, color: const Color(0xFF64748B)),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          children: [
+            const Divider(color: Color(0xFFE2E8F0), height: 10),
+            Wrap(
+              spacing: 12,
+              runSpacing: 6,
+              children: [
+                if (rec.userEmail.isNotEmpty)
+                  Text('Email: ${rec.userEmail}',
+                      style: GoogleFonts.inter(
+                          fontSize: 11, color: const Color(0xFF475569))),
+                Text('Check-out: $checkOutStr',
+                    style: GoogleFonts.inter(
+                        fontSize: 11, color: const Color(0xFF475569))),
+                Text('Hours: ${rec.workingHours.toStringAsFixed(1)}h',
+                    style: GoogleFonts.inter(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF047857))),
+              ],
             ),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  const Icon(Icons.people_alt_outlined, size: 13, color: Color(0xFF047857)),
-                  const SizedBox(width: 4),
-                  Text('${branch.employeeCount} Agents', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B))),
-                ],
-              ),
-              Row(
-                children: [
-                  const Icon(Icons.folder_shared_outlined, size: 13, color: Color(0xFFB45309)),
-                  const SizedBox(width: 4),
-                  Text('${branch.leadCount} Leads', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B))),
-                ],
-              ),
-            ],
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

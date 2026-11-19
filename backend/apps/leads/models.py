@@ -104,6 +104,7 @@ class Branch(TenantModel):
     name = models.CharField(max_length=150)
     code = models.CharField(max_length=50, blank=True)
     address = models.CharField(max_length=255, blank=True)
+    logo = models.TextField(blank=True, default='')
     latitude = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True)
     longitude = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True)
     radius_meters = models.PositiveIntegerField(default=100)
@@ -160,9 +161,19 @@ class CallingTask(TenantModel):
         ('COMPLETED', 'Completed'),
         ('CANCELLED', 'Cancelled'),
     ]
+    TASK_TYPE_CHOICES = [
+        ('GENERAL', 'General'),
+        ('CALLING', 'Calling'),
+        ('FIELD_VISIT', 'Field Visit'),
+        ('FOLLOW_UP', 'Follow-Up'),
+        ('SUPPORT', 'Support'),
+        ('ADMIN_WORK', 'Admin Work'),
+    ]
 
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True)
+    task_type = models.CharField(max_length=30, choices=TASK_TYPE_CHOICES, default='GENERAL')
+    target_role = models.CharField(max_length=100, blank=True, default='')
     branch = models.ForeignKey(
         Branch,
         null=True,
@@ -192,6 +203,8 @@ class CallingTask(TenantModel):
     priority = models.CharField(max_length=20, choices=PRIORITY_CHOICES, default='MEDIUM')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING', db_index=True)
     due_date = models.DateField(null=True, blank=True)
+    completion_report = models.TextField(blank=True, default='')
+    report_submitted_at = models.DateTimeField(null=True, blank=True)
     target_count = models.PositiveIntegerField(default=0)
 
     class Meta:

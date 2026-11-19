@@ -37,6 +37,11 @@ class _BulkAssignDialogState extends State<BulkAssignDialog> {
       setState(() => _errorMessage = 'Please select at least one active employee for lead distribution.');
       return;
     }
+    if (_selectedEmployeeIds.length > widget.selectedLeadIds.length) {
+      setState(() => _errorMessage =
+          'You can select at most ${widget.selectedLeadIds.length} employee(s) for ${widget.selectedLeadIds.length} lead(s). Same lead cannot be assigned to multiple employees.');
+      return;
+    }
 
     setState(() {
       _isSubmitting = true;
@@ -207,13 +212,17 @@ class _BulkAssignDialogState extends State<BulkAssignDialog> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Equal Round-Robin Distribution',
+                            widget.selectedLeadIds.length == 1
+                                ? 'Single Lead Assignment (1 Employee Only)'
+                                : 'Equal Round-Robin Distribution',
                             style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
                           ),
                           Text(
-                            _selectedEmployeeIds.isNotEmpty
-                                ? '~${(widget.selectedLeadIds.length / _selectedEmployeeIds.length).ceil()} leads will be assigned per selected telecaller'
-                                : 'Select telecallers below to view estimated distribution',
+                            widget.selectedLeadIds.length == 1
+                                ? '1 lead selected — only 1 employee can be assigned (duplicate assignment is not allowed)'
+                                : (_selectedEmployeeIds.isNotEmpty
+                                    ? '~${(widget.selectedLeadIds.length / _selectedEmployeeIds.length).ceil()} leads will be assigned per selected telecaller (max ${widget.selectedLeadIds.length} employees)'
+                                    : 'Select up to ${widget.selectedLeadIds.length} telecallers below'),
                             style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
                           ),
                         ],
@@ -234,25 +243,34 @@ class _BulkAssignDialogState extends State<BulkAssignDialog> {
                       style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFF64748B)),
                     ),
                   ),
-                  InkWell(
-                    onTap: () {
-                      setState(() {
-                        if (_selectedEmployeeIds.length == activeEmployees.length) {
-                          _selectedEmployeeIds.clear();
-                        } else {
-                          _selectedEmployeeIds.addAll(activeEmployees.map((e) => e['id'].toString()));
-                        }
-                      });
-                    },
-                    borderRadius: BorderRadius.circular(6),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                      child: Text(
-                        _selectedEmployeeIds.length == activeEmployees.length ? 'Deselect All' : 'Select All',
-                        style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.neonCyan),
+                  if (widget.selectedLeadIds.length > 1)
+                    InkWell(
+                      onTap: () {
+                        setState(() {
+                          final maxAllowed = widget.selectedLeadIds.length;
+                          if (_selectedEmployeeIds.length >= activeEmployees.length ||
+                              _selectedEmployeeIds.length >= maxAllowed) {
+                            _selectedEmployeeIds.clear();
+                          } else {
+                            _selectedEmployeeIds
+                              ..clear()
+                              ..addAll(activeEmployees.take(maxAllowed).map((e) => e['id'].toString()));
+                          }
+                          _errorMessage = null;
+                        });
+                      },
+                      borderRadius: BorderRadius.circular(6),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                        child: Text(
+                          (_selectedEmployeeIds.length >= activeEmployees.length ||
+                                  _selectedEmployeeIds.length >= widget.selectedLeadIds.length)
+                              ? 'Deselect All'
+                              : 'Select All',
+                          style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.neonCyan),
+                        ),
                       ),
                     ),
-                  ),
                 ],
               ),
               const SizedBox(height: 8),
@@ -289,8 +307,18 @@ class _BulkAssignDialogState extends State<BulkAssignDialog> {
                                 setState(() {
                                   if (isChecked) {
                                     _selectedEmployeeIds.remove(id);
+                                    _errorMessage = null;
+                                  } else if (widget.selectedLeadIds.length == 1) {
+                                    _selectedEmployeeIds
+                                      ..clear()
+                                      ..add(id);
+                                    _errorMessage = null;
+                                  } else if (_selectedEmployeeIds.length >= widget.selectedLeadIds.length) {
+                                    _errorMessage =
+                                        'Maximum ${widget.selectedLeadIds.length} employee(s) can be selected for ${widget.selectedLeadIds.length} lead(s).';
                                   } else {
                                     _selectedEmployeeIds.add(id);
+                                    _errorMessage = null;
                                   }
                                 });
                               },
@@ -312,9 +340,21 @@ class _BulkAssignDialogState extends State<BulkAssignDialog> {
                                       onChanged: (val) {
                                         setState(() {
                                           if (val == true) {
-                                            _selectedEmployeeIds.add(id);
+                                            if (widget.selectedLeadIds.length == 1) {
+                                              _selectedEmployeeIds
+                                                ..clear()
+                                                ..add(id);
+                                              _errorMessage = null;
+                                            } else if (_selectedEmployeeIds.length >= widget.selectedLeadIds.length) {
+                                              _errorMessage =
+                                                  'Maximum ${widget.selectedLeadIds.length} employee(s) can be selected for ${widget.selectedLeadIds.length} lead(s).';
+                                            } else {
+                                              _selectedEmployeeIds.add(id);
+                                              _errorMessage = null;
+                                            }
                                           } else {
                                             _selectedEmployeeIds.remove(id);
+                                            _errorMessage = null;
                                           }
                                         });
                                       },

@@ -6,8 +6,9 @@ from rest_framework.response import Response
 from apps.leads.models import Lead, ImportBatch
 from apps.calls.models import CallAttempt
 from apps.callbacks.models import Callback
-from apps.accounts.models import User
-from apps.core.permissions import IsCompanyAdmin, IsEmployee
+from apps.accounts.models import User, AttendanceRecord
+from apps.billing.models import Quotation, Invoice, ReceiptVoucher
+from apps.core.permissions import IsCompanyAdmin, IsEmployee, require_permission
 
 from apps.companies.models import Company
 from apps.companies.serializers import CompanySerializer
@@ -263,4 +264,255 @@ class TelecallerDashboardMetricsView(views.APIView):
             },
             'recent_calls': CallAttemptSerializer(recent_calls, many=True).data,
             'due_callbacks': CallbackSerializer(due_callbacks, many=True).data,
+        })
+
+
+class SalesBillingReportView(views.APIView):
+    permission_classes = [require_permission('reports.sales_billing')]
+
+    def get(self, request):
+        company = request.user.company
+        if not company:
+            return Response({"summary": {}, "rows": []})
+
+        date_from = request.query_params.get('date_from')
+        date_to = request.query_params.get('date_to')
+        emp_id = request.query_params.get('employee_id')
+
+        q_qs = Quotation.objects.filter(company=company)
+        inv_qs = Invoice.objects.filter(company=company)
+        rv_qs = ReceiptVoucher.objects.filter(company=company)
+
+        if date_from:
+            q_qs = q_qs.filter(date__gte=date_from)
+            inv_qs = inv_qs.filter(date__gte=date_from)
+            rv_qs = rv_qs.filter(date__gte=date_from)
+        if date_to:
+            q_qs = q_qs.filter(date__lte=date_to)
+            inv_qs = inv_qs.filter(date__lte=date_to)
+            rv_qs = rv_qs.filter(date__lte=date_to)
+        if emp_id and emp_id != 'ALL':
+            q_qs = q_qs.filter(created_by_id=emp_id)
+            inv_qs = inv_qs.filter(created_by_id=emp_id)
+            rv_qs = rv_qs.filter(created_by_id=emp_id)
+
+        can_view_cst = request.user.has_permission('quotations.view_cost_cst')
+        q_agg = q_qs.aggregate(count=Count('id'), total=Sum('grand_total'))
+        inv_agg = inv_qs.aggregate(
+            count=Count('id'),
+            total=Sum('grand_total'),
+            paid=Sum('amount_paid'),
+            cost=Sum('total_cost'),
+            margin=Sum('gross_margin'),
+        )
+        rv_agg = rv_qs.aggregate(count=Count('id'), collected=Sum('amount'))
+
+        total_invoiced = float(inv_agg['total'] or 0.0)
+        total_paid = float(inv_agg['paid'] or 0.0)
+        pending_dues = max(0.0, total_invoiced - total_paid)
+        collection_rate = round((total_paid / total_invoiced) * 100, 1) if total_invoiced > 0 else 0.0
+
+        summary = {
+            'currency': company.currency,
+            'quotation_count': q_agg['count'] or 0,
+            'quotation_total': float(q_agg['total'] or 0.0),
+            'converted_count': q_qs.filter(status='CONVERTED').count(),
+            'invoice_count': inv_agg['count'] or 0,
+            'total_invoiced': total_invoiced,
+            'receipt_count': rv_agg['count'] or 0,
+            'total_collected': float(rv_agg['collected'] or 0.0),
+            'pending_dues': pending_dues,
+            'collection_rate': collection_rate,
+            'can_view_cst': can_view_cst,
+        }
+        if can_view_cst:
+            summary['total_cost'] = float(inv_agg['cost'] or 0.0)
+            summary['gross_margin'] = float(inv_agg['margin'] or 0.0)
+
+        rows = []
+        for inv in inv_qs.select_related('created_by').order_by('-date', '-created_at')[:200]:
+            row = {
+                'doc_type': 'INVOICE',
+                'number': inv.invoice_number,
+                'date': str(inv.date),
+                'customer': inv.customer_name,
+                'created_by': inv.created_by.full_name if inv.created_by else 'System',
+                'currency': inv.currency,
+                'grand_total': float(inv.grand_total),
+                'amount_paid': float(inv.amount_paid),
+                'balance_due': float(inv.balance_due),
+                'status': inv.payment_status,
+            }
+            if can_view_cst:
+                row['total_cost'] = float(inv.total_cost)
+                row['gross_margin'] = float(inv.gross_margin)
+            rows.append(row)
+
+        return Response({'summary': summary, 'rows': rows})
+
+
+class CallsTelecallerReportView(views.APIView):
+    permission_classes = [require_permission('reports.calls_telecaller')]
+
+    def get(self, request):
+        company = request.user.company
+        if not company:
+            return Response({"summary": {}, "rows": []})
+
+        date_from = request.query_params.get('date_from')
+        date_to = request.query_params.get('date_to')
+        emp_id = request.query_params.get('employee_id')
+
+        call_qs = CallAttempt.objects.filter(company=company)
+        cb_qs = Callback.objects.filter(company=company)
+        lead_qs = Lead.objects.filter(company=company, status='COMPLETED')
+
+        if date_from:
+            call_qs = call_qs.filter(created_at__date__gte=date_from)
+            cb_qs = cb_qs.filter(scheduled_at__date__gte=date_from)
+            lead_qs = lead_qs.filter(updated_at__date__gte=date_from)
+        if date_to:
+            call_qs = call_qs.filter(created_at__date__lte=date_to)
+            cb_qs = cb_qs.filter(scheduled_at__date__lte=date_to)
+            lead_qs = lead_qs.filter(updated_at__date__lte=date_to)
+
+        staff_qs = User.objects.filter(company=company, is_active=True)
+        if emp_id and emp_id != 'ALL':
+            staff_qs = staff_qs.filter(id=emp_id)
+
+        rows = []
+        total_calls_all = 0
+        connected_all = 0
+        duration_all = 0
+        for emp in staff_qs.order_by('first_name'):
+            ecalls = call_qs.filter(employee=emp)
+            c_count = ecalls.count()
+            conn_count = ecalls.filter(outcome__in=['CONNECTED', 'INTERESTED', 'CALLBACK']).count()
+            dur = ecalls.aggregate(tot=Sum('duration_seconds'))['tot'] or 0
+            cb_done = cb_qs.filter(assigned_employee=emp, status='COMPLETED').count()
+            conv = lead_qs.filter(assigned_to=emp).count()
+            if c_count == 0 and cb_done == 0 and conv == 0:
+                continue
+            total_calls_all += c_count
+            connected_all += conn_count
+            duration_all += dur
+            rows.append({
+                'employee_id': str(emp.id),
+                'employee_name': emp.full_name,
+                'role': emp.role,
+                'total_calls': c_count,
+                'connected_calls': conn_count,
+                'connect_rate': round((conn_count / c_count) * 100, 1) if c_count > 0 else 0.0,
+                'talk_time_minutes': round(dur / 60, 1),
+                'callbacks_completed': cb_done,
+                'leads_converted': conv,
+            })
+
+        return Response({
+            'summary': {
+                'total_calls': total_calls_all,
+                'connected_calls': connected_all,
+                'connect_rate': round((connected_all / total_calls_all) * 100, 1) if total_calls_all > 0 else 0.0,
+                'talk_time_minutes': round(duration_all / 60, 1),
+                'active_telecallers': len(rows),
+            },
+            'rows': rows,
+        })
+
+
+class LeadsPipelineReportView(views.APIView):
+    permission_classes = [require_permission('reports.leads_conversion')]
+
+    def get(self, request):
+        company = request.user.company
+        if not company:
+            return Response({"summary": {}, "by_status": [], "by_branch": []})
+
+        date_from = request.query_params.get('date_from')
+        date_to = request.query_params.get('date_to')
+        branch_id = request.query_params.get('branch_id')
+
+        qs = Lead.objects.filter(company=company)
+        if date_from:
+            qs = qs.filter(created_at__date__gte=date_from)
+        if date_to:
+            qs = qs.filter(created_at__date__lte=date_to)
+        if branch_id and branch_id != 'ALL':
+            qs = qs.filter(branch_id=branch_id)
+
+        total = qs.count()
+        completed = qs.filter(status='COMPLETED').count()
+        conv_rate = round((completed / total) * 100, 1) if total > 0 else 0.0
+
+        by_status = list(qs.values('status').annotate(count=Count('id')).order_by('-count'))
+        by_branch = list(qs.values('branch__name').annotate(count=Count('id')).order_by('-count'))
+
+        return Response({
+            'summary': {
+                'total_leads': total,
+                'completed_leads': completed,
+                'unassigned_leads': qs.filter(status='UNASSIGNED').count(),
+                'in_progress_leads': qs.filter(status__in=['ASSIGNED', 'IN_PROGRESS', 'CALLBACK_REQUESTED']).count(),
+                'conversion_rate': conv_rate,
+            },
+            'by_status': by_status,
+            'by_branch': [
+                {'branch': b['branch__name'] or 'Unassigned Branch', 'count': b['count']}
+                for b in by_branch
+            ],
+        })
+
+
+class HrAttendanceReportView(views.APIView):
+    permission_classes = [require_permission('reports.hr_attendance')]
+
+    def get(self, request):
+        company = request.user.company
+        if not company:
+            return Response({"summary": {}, "rows": []})
+
+        date_from = request.query_params.get('date_from')
+        date_to = request.query_params.get('date_to')
+        dept_id = request.query_params.get('department_id')
+
+        qs = AttendanceRecord.objects.filter(company=company).select_related('user', 'department')
+        if date_from:
+            qs = qs.filter(date__gte=date_from)
+        if date_to:
+            qs = qs.filter(date__lte=date_to)
+        if dept_id and dept_id != 'ALL':
+            qs = qs.filter(department_id=dept_id)
+
+        agg_map = {}
+        for rec in qs:
+            uid = str(rec.user_id)
+            if uid not in agg_map:
+                agg_map[uid] = {
+                    'employee_id': uid,
+                    'employee_name': rec.user.full_name if rec.user else 'Unknown',
+                    'department': rec.department.name if rec.department else '-',
+                    'present_days': 0,
+                    'late_days': 0,
+                    'out_of_fence_days': 0,
+                    'total_hours': 0.0,
+                }
+            entry = agg_map[uid]
+            if rec.status in ('PRESENT', 'LATE'):
+                entry['present_days'] += 1
+            if rec.status == 'LATE':
+                entry['late_days'] += 1
+            if rec.status == 'OUT_OF_FENCE':
+                entry['out_of_fence_days'] += 1
+            entry['total_hours'] = round(entry['total_hours'] + float(rec.working_hours or 0.0), 2)
+
+        rows = sorted(agg_map.values(), key=lambda x: x['employee_name'])
+        return Response({
+            'summary': {
+                'total_records': qs.count(),
+                'employees_tracked': len(rows),
+                'total_late': sum(r['late_days'] for r in rows),
+                'total_out_of_fence': sum(r['out_of_fence_days'] for r in rows),
+                'total_hours': round(sum(r['total_hours'] for r in rows), 1),
+            },
+            'rows': rows,
         })

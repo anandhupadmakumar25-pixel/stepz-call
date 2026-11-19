@@ -1,7 +1,10 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/app_back_button.dart';
+import '../../core/widgets/glass/app_background.dart';
 import '../../core/widgets/glass/glass_card.dart';
 import '../../core/widgets/glass/gradient_button.dart';
 import '../../core/services/pdf_invoice_service.dart';
@@ -10,7 +13,9 @@ import '../../models/lead_model.dart';
 import '../../models/quotation_model.dart';
 import '../../models/invoice_model.dart';
 import '../../models/product_model.dart';
+import '../../models/document_template_model.dart';
 import '../../providers/billing_provider.dart';
+import '../../providers/employee_provider.dart';
 import '../../providers/lead_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/company_provider.dart';
@@ -20,6 +25,7 @@ class QuotationFormDialog extends StatefulWidget {
   final bool isBill;
   final QuotationModel? quotationToEdit;
   final InvoiceModel? invoiceToEdit;
+  final bool asPage;
 
   const QuotationFormDialog({
     super.key,
@@ -27,6 +33,7 @@ class QuotationFormDialog extends StatefulWidget {
     this.isBill = false,
     this.quotationToEdit,
     this.invoiceToEdit,
+    this.asPage = false,
   });
 
   @override
@@ -163,6 +170,16 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
   final ScrollController _horizontalScrollController = ScrollController();
   final List<_LineItemEntry> _items = [];
   bool _isSaving = false;
+  bool _showMobilePreview = false;
+  String? _selectedTemplateId;
+  Map<String, dynamic> _selectedTemplateSnapshot = {};
+  final Map<String, TextEditingController> _customFieldControllers = {};
+  final TextEditingController _bankDetailsController = TextEditingController();
+
+  TemplateLayoutConfig get _activeTemplateLayout => TemplateLayoutConfig.fromJson(
+        _selectedTemplateSnapshot,
+        docType: _createAsInvoice ? 'INVOICE' : 'QUOTATION',
+      );
 
   @override
   void initState() {
@@ -174,6 +191,7 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
 
     final user = context.read<AuthProvider>().currentUser;
     final comp = context.read<CompanyProvider>().activeCompanyDetail;
+    _showMarginAnalysis = user?.hasPermission('quotations.view_cost_cst') ?? false;
 
     if (editQ != null && editQ.currency.isNotEmpty) {
       _currency = editQ.currency;
@@ -186,9 +204,7 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
     }
 
     _clientCodeController = TextEditingController(
-      text: editQ?.clientCode.isNotEmpty == true
-          ? editQ!.clientCode
-          : (lead != null ? 'SP-${lead.phoneNumber.replaceAll(RegExp(r'[^0-9]'), '').padLeft(4).substring(0, 4)}' : ''),
+      text: editQ?.clientCode ?? '',
     );
     _salesRepController = TextEditingController(
       text: editQ?.salesRepName.isNotEmpty == true
@@ -196,10 +212,10 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
           : (user?.fullName.isNotEmpty == true ? user!.fullName : (user?.username ?? '')),
     );
     _incotermsController = TextEditingController(
-      text: editQ?.incoterms.isNotEmpty == true ? editQ!.incoterms : 'EX WORKSHOP DOHA',
+      text: editQ?.incoterms ?? '',
     );
     _locationController = TextEditingController(
-      text: editQ?.location.isNotEmpty == true ? editQ!.location : (lead?.city.isNotEmpty == true ? lead!.city : 'DOHA'),
+      text: editQ?.location.isNotEmpty == true ? editQ!.location : (lead?.city ?? ''),
     );
     _contactPersonController = TextEditingController(
       text: editQ?.contactPerson.isNotEmpty == true ? editQ!.contactPerson : (lead?.fullName ?? ''),
@@ -269,14 +285,118 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
       _addItemRow();
     }
 
-    // Fetch saved product catalog and leads
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<BillingProvider>().fetchProducts();
+    if (editQ != null) {
+      _selectedTemplateId = editQ.templateId;
+      _selectedTemplateSnapshot = Map<String, dynamic>.from(editQ.templateSnapshot);
+      _syncTemplateControllers();
+    } else if (widget.invoiceToEdit != null) {
+      _selectedTemplateId = widget.invoiceToEdit!.templateId;
+      _selectedTemplateSnapshot = Map<String, dynamic>.from(widget.invoiceToEdit!.templateSnapshot);
+      _syncTemplateControllers();
+    }
+
+    // Fetch saved product catalog, leads, and document templates
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      final bp = context.read<BillingProvider>();
+      bp.fetchProducts();
       final leadP = context.read<LeadProvider>();
       if (leadP.leads.isEmpty) {
         leadP.fetchLeads();
       }
+      final empP = context.read<EmployeeProvider>();
+      if (empP.employees.isEmpty) {
+        empP.fetchEmployees();
+      }
+      final docType = _createAsInvoice ? 'INVOICE' : 'QUOTATION';
+      await bp.fetchTemplates(docType: docType);
+      if (!mounted) return;
+      if (widget.quotationToEdit == null && widget.invoiceToEdit == null && _selectedTemplateId == null) {
+        final def = bp.defaultTemplateFor(docType);
+        if (def != null) {
+          _applyTemplate(def);
+        }
+      }
     });
+  }
+
+  void _resetToStandardTemplate() {
+    setState(() {
+      _selectedTemplateId = null;
+      _selectedTemplateSnapshot = {};
+      _showQty = true;
+      _showPrice = true;
+      _showTax = true;
+      _hideCostInPdf = true;
+      _customColumns.clear();
+      _bankDetailsController.clear();
+      _syncTemplateControllers();
+    });
+  }
+
+  void _applyTemplate(DocumentTemplateModel tpl) {
+    setState(() {
+      _selectedTemplateId = tpl.id;
+      _selectedTemplateSnapshot = tpl.layout.toJson();
+      _showQty = tpl.layout.showQty;
+      _showPrice = tpl.layout.showPrice;
+      _showTax = tpl.layout.showTax;
+      _hideCostInPdf = tpl.layout.hideCostInPdf;
+      _customColumns
+        ..clear()
+        ..addAll(tpl.layout.customColumns);
+      if (tpl.layout.incoterms.isNotEmpty) {
+        _incotermsController.text = tpl.layout.incoterms;
+      }
+      if (tpl.layout.termsAndConditions.isNotEmpty) {
+        _termsController.text = tpl.layout.termsAndConditions;
+      } else {
+        _termsController.text = _createAsInvoice
+            ? '1. Payment due within 15 days of invoice date.\n2. Applicable GST and duties included.'
+            : '1. Quotation is valid for 15 days from issue date.\n2. Payment terms as agreed.\n3. All prices include applicable taxes.';
+      }
+      _syncTemplateControllers();
+    });
+  }
+
+  void _syncTemplateControllers() {
+    final layout = _activeTemplateLayout;
+    final activeSet = layout.customHeaderFields.toSet();
+    final staleKeys = _customFieldControllers.keys.where((k) => !activeSet.contains(k)).toList();
+    for (final k in staleKeys) {
+      _customFieldControllers[k]?.dispose();
+      _customFieldControllers.remove(k);
+    }
+    for (final field in layout.customHeaderFields) {
+      if (!_customFieldControllers.containsKey(field)) {
+        _customFieldControllers[field] = TextEditingController(
+          text: layout.filledFields[field] ?? '',
+        );
+      }
+    }
+    _bankDetailsController.text = layout.bankDetailsText;
+  }
+
+  Map<String, dynamic> _buildFinalTemplateSnapshot() {
+    if (_selectedTemplateSnapshot.isEmpty && _customFieldControllers.isEmpty && _bankDetailsController.text.trim().isEmpty) {
+      return {};
+    }
+    final snap = Map<String, dynamic>.from(_selectedTemplateSnapshot);
+    final filled = <String, String>{};
+    for (final entry in _customFieldControllers.entries) {
+      if (entry.value.text.trim().isNotEmpty) {
+        filled[entry.key] = entry.value.text.trim();
+      }
+    }
+    if (filled.isNotEmpty) {
+      snap['filled_fields'] = filled;
+    }
+    if (_bankDetailsController.text.trim().isNotEmpty) {
+      final defs = Map<String, dynamic>.from((snap['defaults'] as Map?) ?? {});
+      defs['bank_details_text'] = _bankDetailsController.text.trim();
+      snap['defaults'] = defs;
+    }
+    return snap;
   }
 
   void _onItemValuesChanged(_LineItemEntry row) {
@@ -858,6 +978,8 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
       'contact_person': _contactPersonController.text.trim(),
       'cr_number': _crNumberController.text.trim(),
       'currency': _currency,
+      if (_selectedTemplateId != null) 'template': _selectedTemplateId,
+      if (_buildFinalTemplateSnapshot().isNotEmpty) 'template_snapshot': _buildFinalTemplateSnapshot(),
       if (_validUntil != null) 'valid_until': _validUntil!.toIso8601String().split('T').first,
       'custom_columns': {
         'columns': _customColumns,
@@ -917,6 +1039,8 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
       'contact_person': _contactPersonController.text.trim(),
       'cr_number': _crNumberController.text.trim(),
       'currency': _currency,
+      if (_selectedTemplateId != null) 'template': _selectedTemplateId,
+      if (_buildFinalTemplateSnapshot().isNotEmpty) 'template_snapshot': _buildFinalTemplateSnapshot(),
       if (_validUntil != null) 'due_date': _validUntil!.toIso8601String().split('T').first,
       'custom_columns': {
         'columns': _customColumns,
@@ -954,33 +1078,27 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
   Widget build(BuildContext context) {
     final products = context.watch<BillingProvider>().products;
     final leads = context.watch<LeadProvider>().leads;
+    final employees = context.watch<EmployeeProvider>().employees;
     final isMobile = ResponsiveLayout.isMobile(context);
 
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      insetPadding: EdgeInsets.symmetric(horizontal: isMobile ? 8 : 16, vertical: isMobile ? 10 : 20),
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: 900, maxHeight: isMobile ? MediaQuery.of(context).size.height * 0.96 : 870),
-        child: GlassCard(
-          blur: 24,
-          opacity: 0.98,
-          borderRadius: BorderRadius.circular(20),
-          borderColor: const Color(0xFFCBD5E1),
-          padding: EdgeInsets.all(isMobile ? 14 : 24),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Header
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    final contentBody = Form(
+      key: _formKey,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Header
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Row(
                   children: [
-                    Expanded(
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(8),
+                    if (widget.asPage) ...[
+                      const AppBackButton(),
+                      const SizedBox(width: 10),
+                    ],
+                    Container(
+                      padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
                               gradient: _createAsInvoice
                                   ? const LinearGradient(colors: [Color(0xFF2563EB), Color(0xFF1D4ED8)])
@@ -1043,130 +1161,53 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                         ],
                       ),
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.close_rounded, color: Color(0xFF64748B), size: 20),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                      onPressed: () => Navigator.of(context).pop(),
-                    ),
+                    if (MediaQuery.of(context).size.width < 1020)
+                      Container(
+                        margin: const EdgeInsets.only(right: 6),
+                        padding: const EdgeInsets.all(2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            InkWell(
+                              onTap: () => setState(() => _showMobilePreview = false),
+                              borderRadius: BorderRadius.circular(6),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: !_showMobilePreview ? Colors.white : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text('Form', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: !_showMobilePreview ? const Color(0xFF0F172A) : const Color(0xFF64748B))),
+                              ),
+                            ),
+                            InkWell(
+                              onTap: () => setState(() => _showMobilePreview = true),
+                              borderRadius: BorderRadius.circular(6),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: _showMobilePreview ? Colors.white : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text('Preview', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: _showMobilePreview ? const Color(0xFF059669) : const Color(0xFF64748B))),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    if (!widget.asPage)
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded, color: Color(0xFF64748B), size: 20),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
                   ],
-                ),
-                const SizedBox(height: 12),
-
-                // Mode Toggle Row: Quotation vs Fixed Price Bill
-                Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF1F5F9),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFFE2E8F0)),
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: InkWell(
-                          onTap: () {
-                            setState(() {
-                              _createAsInvoice = false;
-                              _termsController.text =
-                                  '1. Quotation is valid for 15 days from issue date.\n2. Payment terms as agreed.\n3. All prices include applicable taxes.';
-                            });
-                          },
-                          borderRadius: BorderRadius.circular(8),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 8),
-                            decoration: BoxDecoration(
-                              color: !_createAsInvoice ? const Color(0xFF059669) : Colors.transparent,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.request_quote_rounded, size: 16, color: !_createAsInvoice ? Colors.white : const Color(0xFF475569)),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'Quotation (Estimate)',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 12,
-                                    fontWeight: !_createAsInvoice ? FontWeight.w700 : FontWeight.w500,
-                                    color: !_createAsInvoice ? Colors.white : const Color(0xFF475569),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: InkWell(
-                          onTap: () {
-                            setState(() {
-                              _createAsInvoice = true;
-                              _termsController.text =
-                                  '1. Payment due within 15 days of invoice date.\n2. Applicable GST and duties included.\n3. Goods/Services once sold are governed by standard service terms.';
-                            });
-                          },
-                          borderRadius: BorderRadius.circular(8),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 8),
-                            decoration: BoxDecoration(
-                              color: _createAsInvoice ? const Color(0xFF2563EB) : Colors.transparent,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.receipt_long_rounded, size: 16, color: _createAsInvoice ? Colors.white : const Color(0xFF475569)),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'Tax Invoice / Bill (Fixed Price)',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 12,
-                                    fontWeight: _createAsInvoice ? FontWeight.w700 : FontWeight.w500,
-                                    color: _createAsInvoice ? Colors.white : const Color(0xFF475569),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 10),
-
-                // Note banner explaining Quotation vs Fixed Price Bill
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: _createAsInvoice ? const Color(0xFFEFF6FF) : const Color(0xFFECFDF5),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: _createAsInvoice ? const Color(0xFFBFDBFE) : const Color(0xFFA7F3D0)),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        _createAsInvoice ? Icons.receipt_long_rounded : Icons.info_outline_rounded,
-                        size: 16,
-                        color: _createAsInvoice ? const Color(0xFF2563EB) : const Color(0xFF059669),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          _createAsInvoice
-                              ? 'Official Tax Invoice: Product prices entered here will be saved directly as a Fixed Price Bill in Billing & Invoices.'
-                              : 'Sales Quotation: Official commercial offer. When converted to an Invoice, amounts are finalized as a Fixed Price Bill.',
-                          style: GoogleFonts.inter(
-                            fontSize: 11,
-                            color: _createAsInvoice ? const Color(0xFF1E40AF) : const Color(0xFF065F46),
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
                 ),
                 if (_errorMessage != null) ...[
                   const SizedBox(height: 10),
@@ -1201,12 +1242,15 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                 const Divider(color: Color(0xFFE2E8F0), height: 1),
                 const SizedBox(height: 12),
 
-                // Main Form Body
+                // Main Form Body + Live Preview (Split-Screen on Desktop, Toggle on Mobile)
                 Expanded(
-                  child: SingleChildScrollView(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
+                  child: LayoutBuilder(
+                    builder: (ctx, bodyConstraints) {
+                      final isSplit = bodyConstraints.maxWidth >= 960;
+                      final formScroll = SingleChildScrollView(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
                         // Customer Details Section Header & Lead Search Bar
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1292,6 +1336,71 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                           _buildLeadSearchAutocomplete(leads),
                           const SizedBox(height: 12),
                         ],
+                        // Visual Document Template Selector Cards (from Company Settings)
+                        Builder(
+                          builder: (ctx) {
+                            final docType = _createAsInvoice ? 'INVOICE' : 'QUOTATION';
+                            final bp = ctx.watch<BillingProvider>();
+                            final templates = bp.templatesForType(docType);
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Icon(Icons.design_services_rounded, size: 15, color: Color(0xFF6D28D9)),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      'Select Template (${templates.length} custom)',
+                                      style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w700, color: const Color(0xFF5B21B6)),
+                                    ),
+                                    const Spacer(),
+                                    InkWell(
+                                      onTap: () => bp.fetchTemplates(docType: docType),
+                                      borderRadius: BorderRadius.circular(6),
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        child: Row(
+                                          children: [
+                                            const Icon(Icons.refresh_rounded, size: 13, color: Color(0xFF6D28D9)),
+                                            const SizedBox(width: 3),
+                                            Text('Refresh', style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w600, color: const Color(0xFF6D28D9))),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
+                                SizedBox(
+                                  height: 54,
+                                  child: ListView(
+                                    scrollDirection: Axis.horizontal,
+                                    children: [
+                                      _buildTemplateChipCard(
+                                        title: 'Standard Layout',
+                                        subtitle: 'System Default',
+                                        accentColor: const Color(0xFF475569),
+                                        isSelected: _selectedTemplateId == null,
+                                        onTap: _resetToStandardTemplate,
+                                      ),
+                                      ...templates.map((t) {
+                                        final color = _parseHexColor(t.layout.primaryColorHex, fallback: const Color(0xFF059669));
+                                        return _buildTemplateChipCard(
+                                          title: t.name,
+                                          subtitle: t.isDefault ? 'Default Template' : 'Custom Template',
+                                          accentColor: color,
+                                          isSelected: _selectedTemplateId == t.id,
+                                          onTap: () => _applyTemplate(t),
+                                        );
+                                      }),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                              ],
+                            );
+                          },
+                        ),
                         // Customer & Commercial Metadata - Row 1
                         Row(
                           children: [
@@ -1306,16 +1415,18 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                             ),
                             const SizedBox(width: 10),
                             Expanded(
-                              flex: 15,
+                              flex: 2,
                               child: _buildInput(
-                                label: 'Client Code',
-                                controller: _clientCodeController,
-                                icon: Icons.tag_rounded,
+                                label: 'Phone Number *',
+                                controller: _phoneController,
+                                icon: Icons.phone_outlined,
+                                keyboardType: TextInputType.phone,
+                                validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
                               ),
                             ),
                             const SizedBox(width: 10),
                             Expanded(
-                              flex: 15,
+                              flex: 2,
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
@@ -1355,22 +1466,11 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                                 ],
                               ),
                             ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              flex: 2,
-                              child: _buildInput(
-                                label: 'Phone Number *',
-                                controller: _phoneController,
-                                icon: Icons.phone_outlined,
-                                keyboardType: TextInputType.phone,
-                                validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
-                              ),
-                            ),
                           ],
                         ),
                         const SizedBox(height: 10),
 
-                        // Row 2: Contact Person, Location, CR Number, Email
+                        // Row 2: Contact Person, Location, Email
                         Row(
                           children: [
                             Expanded(
@@ -1394,15 +1494,6 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                             Expanded(
                               flex: 2,
                               child: _buildInput(
-                                label: 'CR / Reg Number',
-                                controller: _crNumberController,
-                                icon: Icons.badge_outlined,
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              flex: 2,
-                              child: _buildInput(
                                 label: 'Email',
                                 controller: _emailController,
                                 icon: Icons.email_outlined,
@@ -1412,24 +1503,46 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                         ),
                         const SizedBox(height: 10),
 
-                        // Row 3: Sales Rep, Incoterms, Billing Address, Valid Until
+                        // Row 3: Sales Rep (Editable + Staff Picker), Billing Address, Valid Until
                         Row(
                           children: [
                             Expanded(
                               flex: 2,
-                              child: _buildInput(
-                                label: 'Sales Rep',
-                                controller: _salesRepController,
-                                icon: Icons.support_agent_outlined,
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              flex: 2,
-                              child: _buildInput(
-                                label: 'Incoterms',
-                                controller: _incotermsController,
-                                icon: Icons.local_shipping_outlined,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('Sales Representative', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF475569))),
+                                  const SizedBox(height: 5),
+                                  TextFormField(
+                                    controller: _salesRepController,
+                                    style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w500, color: const Color(0xFF0F172A)),
+                                    decoration: InputDecoration(
+                                      isDense: true,
+                                      filled: true,
+                                      fillColor: Colors.white,
+                                      prefixIcon: const Icon(Icons.support_agent_outlined, size: 16, color: Color(0xFF64748B)),
+                                      suffixIcon: employees.isEmpty
+                                          ? null
+                                          : PopupMenuButton<String>(
+                                              tooltip: 'Select from staff',
+                                              icon: const Icon(Icons.arrow_drop_down_rounded, color: Color(0xFF64748B)),
+                                              onSelected: (name) => setState(() => _salesRepController.text = name),
+                                              itemBuilder: (_) => employees
+                                                  .where((e) => e['is_active'] != false)
+                                                  .map((e) {
+                                                    final full = '${e['first_name'] ?? ''} ${e['last_name'] ?? ''}'.trim();
+                                                    final disp = full.isNotEmpty ? full : (e['email']?.toString() ?? 'Staff');
+                                                    return PopupMenuItem<String>(value: disp, child: Text(disp, style: GoogleFonts.inter(fontSize: 12.5)));
+                                                  })
+                                                  .toList(),
+                                            ),
+                                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFCBD5E1))),
+                                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+                                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.5)),
+                                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                             const SizedBox(width: 10),
@@ -1487,7 +1600,59 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                             ),
                           ],
                         ),
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 16),
+
+                        // Dynamic Template Custom Fields & Bank Details
+                        if (_activeTemplateLayout.customHeaderFields.isNotEmpty ||
+                            _activeTemplateLayout.isBlockVisible('bank_details')) ...[
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF8FAFC),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: const Color(0xFFE2E8F0)),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Template Fields & Payment Details',
+                                  style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w800, color: const Color(0xFF475569)),
+                                ),
+                                if (_activeTemplateLayout.customHeaderFields.isNotEmpty) ...[
+                                  const SizedBox(height: 10),
+                                  Wrap(
+                                    spacing: 10,
+                                    runSpacing: 10,
+                                    children: _activeTemplateLayout.customHeaderFields.map((fieldName) {
+                                      final ctrl = _customFieldControllers.putIfAbsent(
+                                        fieldName,
+                                        () => TextEditingController(text: _activeTemplateLayout.filledFields[fieldName] ?? ''),
+                                      );
+                                      return SizedBox(
+                                        width: 220,
+                                        child: _buildInput(
+                                          label: fieldName,
+                                          controller: ctrl,
+                                          icon: Icons.edit_note_rounded,
+                                        ),
+                                      );
+                                    }).toList(),
+                                  ),
+                                ],
+                                if (_activeTemplateLayout.isBlockVisible('bank_details')) ...[
+                                  const SizedBox(height: 10),
+                                  _buildInput(
+                                    label: 'Bank / UPI Payment Details',
+                                    controller: _bankDetailsController,
+                                    icon: Icons.account_balance_outlined,
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                        ],
 
                         // Saved Products Quick Tag Bar
                         if (products.isNotEmpty) ...[
@@ -1615,17 +1780,18 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                                     visualDensity: VisualDensity.compact,
                                     onPressed: () => setState(() => _showTax = true),
                                   ),
-                                OutlinedButton.icon(
-                                  style: OutlinedButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                    backgroundColor: _showMarginAnalysis ? const Color(0xFFF0FDF4) : Colors.transparent,
-                                    side: BorderSide(color: _showMarginAnalysis ? const Color(0xFF16A34A) : const Color(0xFFCBD5E1)),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                if (context.read<AuthProvider>().currentUser?.hasPermission('quotations.view_cost_cst') ?? false)
+                                  OutlinedButton.icon(
+                                    style: OutlinedButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                      backgroundColor: _showMarginAnalysis ? const Color(0xFFF0FDF4) : Colors.transparent,
+                                      side: BorderSide(color: _showMarginAnalysis ? const Color(0xFF16A34A) : const Color(0xFFCBD5E1)),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    ),
+                                    onPressed: () => setState(() => _showMarginAnalysis = !_showMarginAnalysis),
+                                    icon: Icon(_showMarginAnalysis ? Icons.query_stats_rounded : Icons.visibility_off_outlined, size: 15, color: _showMarginAnalysis ? const Color(0xFF15803D) : const Color(0xFF64748B)),
+                                    label: Text(_showMarginAnalysis ? 'Cost & Margin: ON' : 'Cost & Margin: OFF', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: _showMarginAnalysis ? const Color(0xFF15803D) : const Color(0xFF64748B))),
                                   ),
-                                  onPressed: () => setState(() => _showMarginAnalysis = !_showMarginAnalysis),
-                                  icon: Icon(_showMarginAnalysis ? Icons.query_stats_rounded : Icons.visibility_off_outlined, size: 15, color: _showMarginAnalysis ? const Color(0xFF15803D) : const Color(0xFF64748B)),
-                                  label: Text(_showMarginAnalysis ? 'Cost & Margin: ON' : 'Cost & Margin: OFF', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: _showMarginAnalysis ? const Color(0xFF15803D) : const Color(0xFF64748B))),
-                                ),
                                 InkWell(
                                   onTap: () => setState(() => _hideCostInPdf = !_hideCostInPdf),
                                   borderRadius: BorderRadius.circular(8),
@@ -2195,34 +2361,36 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                                     icon: Icons.notes_outlined,
                                     maxLines: 2,
                                   ),
-                                  const SizedBox(height: 10),
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Text('Terms & Conditions', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF475569))),
-                                      TextButton.icon(
-                                        onPressed: _applyDynamicTerms,
-                                        icon: const Icon(Icons.auto_fix_high_rounded, size: 14, color: Color(0xFF2563EB)),
-                                        label: Text('⚡ Auto-fill Terms (<5k / ≥5k Rule)', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF2563EB))),
-                                        style: TextButton.styleFrom(visualDensity: VisualDensity.compact, padding: EdgeInsets.zero),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 4),
-                                  TextFormField(
-                                    controller: _termsController,
-                                    maxLines: 3,
-                                    style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF0F172A)),
-                                    decoration: InputDecoration(
-                                      isDense: true,
-                                      filled: true,
-                                      fillColor: Colors.white,
-                                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFCBD5E1))),
-                                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
-                                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.5)),
-                                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                  if (_activeTemplateLayout.isBlockVisible('terms')) ...[
+                                    const SizedBox(height: 10),
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text('Terms & Conditions', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF475569))),
+                                        TextButton.icon(
+                                          onPressed: _applyDynamicTerms,
+                                          icon: const Icon(Icons.auto_fix_high_rounded, size: 14, color: Color(0xFF2563EB)),
+                                          label: Text('⚡ Auto-fill Terms (<5k / ≥5k Rule)', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF2563EB))),
+                                          style: TextButton.styleFrom(visualDensity: VisualDensity.compact, padding: EdgeInsets.zero),
+                                        ),
+                                      ],
                                     ),
-                                  ),
+                                    const SizedBox(height: 4),
+                                    TextFormField(
+                                      controller: _termsController,
+                                      maxLines: 3,
+                                      style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF0F172A)),
+                                      decoration: InputDecoration(
+                                        isDense: true,
+                                        filled: true,
+                                        fillColor: Colors.white,
+                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFCBD5E1))),
+                                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+                                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.5)),
+                                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                      ),
+                                    ),
+                                  ],
                                 ],
                               ),
                             ),
@@ -2290,6 +2458,37 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                         ),
                       ],
                     ),
+                  );
+
+                      final previewPanel = ListenableBuilder(
+                        listenable: Listenable.merge([
+                          _nameController,
+                          _phoneController,
+                          _clientCodeController,
+                          _emailController,
+                          _addressController,
+                          _locationController,
+                          _salesRepController,
+                          _incotermsController,
+                          _termsController,
+                          _bankDetailsController,
+                          ..._customFieldControllers.values,
+                        ]),
+                        builder: (_, __) => _buildLiveDocumentPreview(),
+                      );
+
+                      if (isSplit) {
+                        return Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Expanded(flex: 6, child: formScroll),
+                            const SizedBox(width: 16),
+                            Expanded(flex: 4, child: previewPanel),
+                          ],
+                        );
+                      }
+                      return _showMobilePreview ? previewPanel : formScroll;
+                    },
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -2437,7 +2636,35 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                 ),
               ],
             ),
+    );
+
+    if (widget.asPage) {
+      return Scaffold(
+        backgroundColor: Colors.transparent,
+        body: AppBackground(
+          preset: AppBackgroundPreset.cleanEnterprise,
+          child: SafeArea(
+            child: Padding(
+              padding: EdgeInsets.all(isMobile ? 12 : 20),
+              child: contentBody,
+            ),
           ),
+        ),
+      );
+    }
+
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: EdgeInsets.symmetric(horizontal: isMobile ? 8 : 16, vertical: isMobile ? 10 : 20),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: 1260, maxHeight: isMobile ? MediaQuery.of(context).size.height * 0.96 : 890),
+        child: GlassCard(
+          blur: 24,
+          opacity: 0.98,
+          borderRadius: BorderRadius.circular(20),
+          borderColor: const Color(0xFFCBD5E1),
+          padding: EdgeInsets.all(isMobile ? 14 : 24),
+          child: contentBody,
         ),
       ),
     );
@@ -2668,6 +2895,504 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
         children: [
           Text(label, style: GoogleFonts.inter(fontSize: fontSize, fontWeight: isBold ? FontWeight.w700 : FontWeight.w500, color: textColor ?? const Color(0xFF475569))),
           Text(value, style: GoogleFonts.robotoMono(fontSize: fontSize, fontWeight: isBold ? FontWeight.w800 : FontWeight.w600, color: textColor ?? const Color(0xFF0F172A))),
+        ],
+      ),
+    );
+  }
+
+  Color _parseHexColor(String hex, {Color fallback = const Color(0xFF059669)}) {
+    try {
+      final clean = hex.replaceAll('#', '').trim();
+      if (clean.length == 6) {
+        return Color(int.parse('FF$clean', radix: 16));
+      }
+      if (clean.length == 8) {
+        return Color(int.parse(clean, radix: 16));
+      }
+    } catch (_) {}
+    return fallback;
+  }
+
+  Widget _buildTemplateChipCard({
+    required String title,
+    required String subtitle,
+    required Color accentColor,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          width: 168,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+          decoration: BoxDecoration(
+            color: isSelected ? accentColor.withValues(alpha: 0.1) : Colors.white,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: isSelected ? accentColor : const Color(0xFFE2E8F0),
+              width: isSelected ? 1.6 : 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 4,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: accentColor,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.inter(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF0F172A),
+                      ),
+                    ),
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.inter(
+                        fontSize: 9.5,
+                        color: const Color(0xFF64748B),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (isSelected)
+                Icon(Icons.check_circle_rounded, size: 15, color: accentColor),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPreviewLogo(String rawLogo) {
+    final trimmed = rawLogo.trim();
+    if (trimmed.isEmpty) return const SizedBox.shrink();
+    if (trimmed.startsWith('data:image')) {
+      try {
+        final base64Str = trimmed.split(',').last;
+        final bytes = base64Decode(base64Str);
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(6),
+          child: Image.memory(bytes, height: 38, width: 54, fit: BoxFit.contain),
+        );
+      } catch (_) {}
+    }
+    if (trimmed.startsWith('http')) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(6),
+        child: Image.network(trimmed, height: 38, width: 54, fit: BoxFit.contain, errorBuilder: (_, __, ___) => const SizedBox.shrink()),
+      );
+    }
+    return const SizedBox.shrink();
+  }
+
+  Widget _buildLiveDocumentPreview() {
+    final layout = _activeTemplateLayout;
+    final primary = _parseHexColor(
+      layout.primaryColorHex,
+      fallback: _createAsInvoice ? const Color(0xFF2563EB) : const Color(0xFF059669),
+    );
+    final accent = _parseHexColor(layout.accentColorHex, fallback: primary);
+    final authUser = context.read<AuthProvider>().currentUser;
+    final comp = context.read<CompanyProvider>().activeCompanyDetail;
+    final bp = context.read<BillingProvider>();
+    final docType = _createAsInvoice ? 'INVOICE' : 'QUOTATION';
+    final selectedTpl = _selectedTemplateId != null
+        ? bp.templatesForType(docType).where((t) => t.id == _selectedTemplateId).firstOrNull
+        : null;
+    final compName = comp?.name.isNotEmpty == true
+        ? comp!.name
+        : ((authUser?.companyName?.isNotEmpty == true) ? authUser!.companyName! : 'Your Company');
+    final compAddress = comp?.address.isNotEmpty == true ? comp!.address : (authUser?.companyAddress ?? '');
+    final compPhone = comp?.contactPhone.isNotEmpty == true ? comp!.contactPhone : (authUser?.companyPhone ?? '');
+    final compEmail = comp?.contactEmail.isNotEmpty == true ? comp!.contactEmail : (authUser?.companyEmail ?? '');
+    final compGstin = comp?.gstin.isNotEmpty == true ? comp!.gstin : (authUser?.companyGstin ?? '');
+
+    final docTitle = layout.titleOverride.isNotEmpty
+        ? layout.titleOverride.toUpperCase()
+        : (_createAsInvoice ? 'TAX INVOICE' : 'QUOTATION');
+    final customerName = _nameController.text.trim().isNotEmpty
+        ? _nameController.text.trim()
+        : 'Customer / Company Name';
+    final phone = _phoneController.text.trim();
+    final city = _locationController.text.trim();
+    final salesRep = _salesRepController.text.trim();
+    final branchObj = layout.branchId.isNotEmpty
+        ? context.read<LeadProvider>().branches.where((b) => b.id == layout.branchId).firstOrNull
+        : null;
+    final branchName = branchObj?.name ?? '';
+    final effectiveLogo = layout.logoOverride.isNotEmpty
+        ? layout.logoOverride
+        : (branchObj?.effectiveLogo.isNotEmpty == true
+            ? branchObj!.effectiveLogo
+            : (comp?.logo.isNotEmpty == true ? comp!.logo : (authUser?.companyLogo ?? '')));
+
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFFF1F5F9),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(14)),
+              border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.visibility_rounded, size: 15, color: primary),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    selectedTpl != null
+                        ? 'Preview · ${selectedTpl.name}'
+                        : 'Preview · Standard Layout',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(5),
+                  ),
+                  child: Text(
+                    docTitle,
+                    style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w800, color: primary),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(12),
+              child: Stack(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(layout.borderStyle == 'rounded' ? 12 : 4),
+                      border: layout.borderStyle == 'none'
+                          ? null
+                          : Border.all(
+                              color: layout.borderStyle == 'double' ? primary : const Color(0xFFCBD5E1),
+                              width: layout.borderStyle == 'double' ? 2 : 1,
+                            ),
+                      boxShadow: [
+                        BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 3)),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // Header Block
+                        if (layout.isBlockVisible('header'))
+                          Container(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            decoration: BoxDecoration(
+                              border: Border(bottom: BorderSide(color: primary, width: 2)),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                if (effectiveLogo.isNotEmpty && layout.logoPosition != 'right') ...[
+                                  _buildPreviewLogo(effectiveLogo),
+                                  const SizedBox(width: 10),
+                                ],
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: layout.logoPosition == 'center'
+                                        ? CrossAxisAlignment.center
+                                        : CrossAxisAlignment.start,
+                                    children: [
+                                      Text(compName, style: GoogleFonts.inter(fontSize: 13.5, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A))),
+                                      if (branchName.isNotEmpty)
+                                        Text('Branch: $branchName', style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w600, color: primary)),
+                                      if (compAddress.isNotEmpty)
+                                        Text(compAddress, maxLines: 2, overflow: TextOverflow.ellipsis, style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF64748B))),
+                                      if (compPhone.isNotEmpty || compEmail.isNotEmpty)
+                                        Text([if (compPhone.isNotEmpty) compPhone, if (compEmail.isNotEmpty) compEmail].join(' · '), style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF64748B))),
+                                      if (compGstin.isNotEmpty)
+                                        Text('Tax / GSTIN: $compGstin', style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w600, color: const Color(0xFF475569))),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    if (effectiveLogo.isNotEmpty && layout.logoPosition == 'right') ...[
+                                      _buildPreviewLogo(effectiveLogo),
+                                      const SizedBox(height: 4),
+                                    ],
+                                    Text(docTitle, style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w900, color: primary)),
+                                    Text('${layout.numberPrefix.isNotEmpty ? layout.numberPrefix : (_createAsInvoice ? "INV-" : "QTN-")}DRAFT', style: GoogleFonts.robotoMono(fontSize: 9.5, fontWeight: FontWeight.w700, color: const Color(0xFF475569))),
+                                    if (_validUntil != null)
+                                      Text('Valid: ${_validUntil!.toIso8601String().split("T").first}', style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF64748B))),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        const SizedBox(height: 10),
+
+                        // Client & Commercial Meta Block
+                        if (layout.isBlockVisible('client_meta')) ...[
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF8FAFC),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: const Color(0xFFE2E8F0)),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text('BILL / QUOTE TO', style: GoogleFonts.inter(fontSize: 8.5, fontWeight: FontWeight.w800, color: primary)),
+                                          const SizedBox(height: 2),
+                                          Text(customerName, style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A))),
+                                          if (_contactPersonController.text.trim().isNotEmpty)
+                                            Text('Attn: ${_contactPersonController.text.trim()}', style: GoogleFonts.inter(fontSize: 9.5, color: const Color(0xFF475569))),
+                                          if (phone.isNotEmpty || city.isNotEmpty)
+                                            Text([if (phone.isNotEmpty) phone, if (city.isNotEmpty) city].join(' · '), style: GoogleFonts.inter(fontSize: 9.5, color: const Color(0xFF475569))),
+                                          if (_addressController.text.trim().isNotEmpty)
+                                            Text(_addressController.text.trim(), style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF64748B))),
+                                        ],
+                                      ),
+                                    ),
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.end,
+                                      children: [
+                                        if (_clientCodeController.text.trim().isNotEmpty)
+                                          Text('Code: ${_clientCodeController.text.trim()}', style: GoogleFonts.robotoMono(fontSize: 9, color: const Color(0xFF475569))),
+                                        if (salesRep.isNotEmpty)
+                                          Text('Rep: $salesRep', style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w600, color: const Color(0xFF334155))),
+                                        if (_incotermsController.text.trim().isNotEmpty)
+                                          Text(_incotermsController.text.trim(), style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w600, color: accent)),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                                if (layout.customHeaderFields.isNotEmpty) ...[
+                                  const SizedBox(height: 6),
+                                  Wrap(
+                                    spacing: 10,
+                                    runSpacing: 4,
+                                    children: layout.customHeaderFields.map((field) {
+                                      final val = _customFieldControllers[field]?.text.trim() ?? '';
+                                      return Text(
+                                        '$field: ${val.isNotEmpty ? val : "—"}',
+                                        style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w600, color: const Color(0xFF334155)),
+                                      );
+                                    }).toList(),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                        ],
+
+                        // Line Items Table
+                        if (layout.isBlockVisible('items_table')) ...[
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: primary,
+                              borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(flex: 4, child: Text('Description', style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w700, color: Colors.white))),
+                                if (_showQty)
+                                  Expanded(flex: 1, child: Text('Qty', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w700, color: Colors.white))),
+                                if (_showPrice)
+                                  Expanded(flex: 2, child: Text('Rate', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w700, color: Colors.white))),
+                                Expanded(flex: 2, child: Text('Total', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w700, color: Colors.white))),
+                              ],
+                            ),
+                          ),
+                          ..._items.map((item) {
+                            if (item.isSectionTitle) {
+                              return Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                color: const Color(0xFFF1F5F9),
+                                child: Text(
+                                  item.titleController.text.trim().isEmpty ? 'Section' : item.titleController.text.trim(),
+                                  style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w700, color: const Color(0xFF334155)),
+                                ),
+                              );
+                            }
+                            final name = item.descriptionController.text.trim().isEmpty ? 'Line Item' : item.descriptionController.text.trim();
+                            final qty = double.tryParse(item.qtyController.text) ?? 1;
+                            final price = double.tryParse(item.rateController.text) ?? 0;
+                            final tax = double.tryParse(item.taxController.text) ?? 0;
+                            final lineTotal = (qty * price) * (1 + tax / 100);
+                            return Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                              decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0)))),
+                              child: Row(
+                                children: [
+                                  Expanded(flex: 4, child: Text(name, maxLines: 2, overflow: TextOverflow.ellipsis, style: GoogleFonts.inter(fontSize: 9.5, color: const Color(0xFF0F172A)))),
+                                  if (_showQty)
+                                    Expanded(flex: 1, child: Text(qty.toStringAsFixed(0), textAlign: TextAlign.right, style: GoogleFonts.robotoMono(fontSize: 9.5, color: const Color(0xFF475569)))),
+                                  if (_showPrice)
+                                    Expanded(flex: 2, child: Text(price.toStringAsFixed(2), textAlign: TextAlign.right, style: GoogleFonts.robotoMono(fontSize: 9.5, color: const Color(0xFF475569)))),
+                                  Expanded(flex: 2, child: Text('$_currency ${lineTotal.toStringAsFixed(2)}', textAlign: TextAlign.right, style: GoogleFonts.robotoMono(fontSize: 9.5, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)))),
+                                ],
+                              ),
+                            );
+                          }),
+                          const SizedBox(height: 10),
+                        ],
+
+                        // Totals Breakdown
+                        if (layout.isBlockVisible('totals_words'))
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: Container(
+                              width: 210,
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF8FAFC),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: const Color(0xFFE2E8F0)),
+                              ),
+                              child: Column(
+                                children: [
+                                  _buildSummaryRow('Subtotal', '$_currency ${_calculatedSubtotal.toStringAsFixed(2)}', fontSize: 9.5),
+                                  if (_calculatedDiscount > 0)
+                                    _buildSummaryRow('Discount', '-$_currency ${_calculatedDiscount.toStringAsFixed(2)}', fontSize: 9.5, textColor: const Color(0xFFDC2626)),
+                                  if (_calculatedTax > 0)
+                                    _buildSummaryRow('Tax / GST', '$_currency ${_calculatedTax.toStringAsFixed(2)}', fontSize: 9.5),
+                                  const Divider(height: 10),
+                                  _buildSummaryRow('Grand Total', '$_currency ${_calculatedGrandTotal.toStringAsFixed(2)}', isBold: true, fontSize: 10.5, textColor: primary),
+                                ],
+                              ),
+                            ),
+                          ),
+
+                        if (layout.isBlockVisible('bank_details') && _bankDetailsController.text.trim().isNotEmpty) ...[
+                          const SizedBox(height: 10),
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF8FAFC),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: const Color(0xFFE2E8F0)),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('BANK & PAYMENT DETAILS', style: GoogleFonts.inter(fontSize: 8.5, fontWeight: FontWeight.w800, color: primary)),
+                                const SizedBox(height: 2),
+                                Text(_bankDetailsController.text.trim(), style: GoogleFonts.inter(fontSize: 9.5, color: const Color(0xFF334155))),
+                              ],
+                            ),
+                          ),
+                        ],
+
+                        if (layout.isBlockVisible('terms') && _termsController.text.trim().isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Text('TERMS & CONDITIONS', style: GoogleFonts.inter(fontSize: 8.5, fontWeight: FontWeight.w800, color: const Color(0xFF64748B))),
+                          const SizedBox(height: 2),
+                          Text(_termsController.text.trim(), style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF475569))),
+                        ],
+
+                        if (layout.isBlockVisible('signatures')) ...[
+                          const SizedBox(height: 14),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Container(width: 90, height: 1, color: const Color(0xFFCBD5E1)),
+                                  const SizedBox(height: 3),
+                                  Text('Customer Signature', style: GoogleFonts.inter(fontSize: 8.5, color: const Color(0xFF64748B))),
+                                ],
+                              ),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Container(width: 90, height: 1, color: const Color(0xFFCBD5E1)),
+                                  const SizedBox(height: 3),
+                                  Text('Authorized Signatory', style: GoogleFonts.inter(fontSize: 8.5, color: const Color(0xFF64748B))),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  if (layout.stamp.enabled)
+                    Positioned(
+                      right: 18,
+                      bottom: 24,
+                      child: Transform.rotate(
+                        angle: layout.stamp.rotationDeg * 3.14159 / 180,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            border: Border.all(
+                              color: _parseHexColor(layout.stamp.colorHex, fallback: primary).withValues(alpha: 0.7),
+                              width: 2,
+                            ),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            layout.stamp.label.toUpperCase(),
+                            style: GoogleFonts.inter(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 1.2,
+                              color: _parseHexColor(layout.stamp.colorHex, fallback: primary).withValues(alpha: 0.8),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );

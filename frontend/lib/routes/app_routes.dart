@@ -5,6 +5,7 @@ import '../screens/leads/lead_detail_screen.dart';
 import '../screens/tasks/create_calling_task_screen.dart';
 import '../screens/tasks/task_detail_execution_screen.dart';
 import '../screens/companies/company_detail_screen.dart';
+import '../screens/employees/add_employee_screen.dart';
 import '../models/company_model.dart';
 
 class AppRoutes {
@@ -20,6 +21,7 @@ class AppRoutes {
   static const String callHistory = '/calls/history';
   static const String callRecordings = '/calls/recordings';
   static const String employees = '/employees';
+  static const String addEmployee = '/employees/add';
   static const String attendance = '/attendance';
   static const String branches = '/branches';
   static const String companies = '/companies';
@@ -99,6 +101,12 @@ class AppRoutes {
         return MaterialPageRoute(
           settings: settings,
           builder: (_) => const MainLayout(initialRouteKey: 'employees'),
+        );
+
+      case addEmployee:
+        return MaterialPageRoute(
+          settings: settings,
+          builder: (_) => const AddEmployeeScreen(),
         );
 
       case attendance:

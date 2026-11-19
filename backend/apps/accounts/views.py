@@ -8,7 +8,13 @@ from django.contrib.auth import get_user_model
 from django.db import transaction, models
 from django.utils import timezone
 
-from apps.accounts.models import Team, EmployeeProfile, Department, AttendanceRecord, FieldVisit, CustomRole
+from apps.accounts.models import (
+    Team, EmployeeProfile, Department, AttendanceRecord, FieldVisit, CustomRole,
+    SectionDelegation, PermissionAuditLog,
+)
+from apps.accounts.permissions_catalog import (
+    PERMISSION_GROUPS, ALL_PERMISSION_KEYS, get_menu_key_for_permission,
+)
 from apps.leads.models import Branch
 from apps.accounts.serializers import (
     CustomTokenObtainPairSerializer,
@@ -20,9 +26,36 @@ from apps.accounts.serializers import (
     CustomRoleSerializer,
     AttendanceRecordSerializer,
     FieldVisitSerializer,
-    ChangePasswordSerializer
+    ChangePasswordSerializer,
+    SectionDelegationSerializer,
+    PermissionAuditLogSerializer,
 )
-from apps.core.permissions import IsCompanyAdmin, IsManager
+from apps.core.permissions import (
+    IsCompanyAdmin, IsManager, require_permission, require_any_permission,
+)
+
+
+def _get_client_ip(request):
+    xff = request.META.get('HTTP_X_FORWARDED_FOR')
+    if xff:
+        return xff.split(',')[0].strip()
+    return request.META.get('REMOTE_ADDR')
+
+
+def _log_permission_audit(request, action, target_model='', target_id='', details=None, on_behalf_of=None):
+    company = getattr(request.user, 'company', None)
+    if not company:
+        return
+    PermissionAuditLog.objects.create(
+        company=company,
+        actor=request.user,
+        on_behalf_of=on_behalf_of,
+        action=action,
+        target_model=target_model,
+        target_id=str(target_id) if target_id else '',
+        details=details or {},
+        ip_address=_get_client_ip(request),
+    )
 
 User = get_user_model()
 
@@ -51,7 +84,10 @@ class UserProfileView(generics.RetrieveUpdateAPIView):
         return self.request.user
 
 class EmployeeListCreateView(views.APIView):
-    permission_classes = [IsCompanyAdmin]
+    def get_permissions(self):
+        if self.request.method == 'GET':
+            return [require_any_permission('employees.view', 'employees.create', 'employees.edit', 'delegation.manage', 'leads.assign', 'tasks.manage_team')()]
+        return [require_permission('employees.create')()]
 
     def get(self, request):
         company = request.user.company
@@ -151,7 +187,12 @@ class EmployeeListCreateView(views.APIView):
         return Response(EmployeeListSerializer(user).data, status=status.HTTP_201_CREATED)
 
 class EmployeeDetailView(views.APIView):
-    permission_classes = [IsCompanyAdmin]
+    def get_permissions(self):
+        if self.request.method == 'GET':
+            return [require_permission('employees.view')()]
+        if self.request.method == 'DELETE':
+            return [require_permission('employees.deactivate')()]
+        return [require_permission('employees.edit')()]
 
     def get(self, request, pk):
         company = request.user.company
@@ -167,7 +208,13 @@ class EmployeeDetailView(views.APIView):
             return Response({"error": "Employee not found."}, status=status.HTTP_404_NOT_FOUND)
 
         if 'is_active' in request.data:
-            user.is_active = bool(request.data['is_active'])
+            new_active = bool(request.data['is_active'])
+            if not new_active and str(user.id) == str(request.user.id):
+                return Response(
+                    {"error": "You cannot deactivate your own currently logged-in account."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            user.is_active = new_active
         if 'branch_id' in request.data:
             bid = request.data['branch_id']
             user.branch = Branch.objects.filter(id=bid, company=company).first() if bid else None
@@ -212,7 +259,10 @@ class EmployeeDetailView(views.APIView):
         return Response(EmployeeListSerializer(user).data)
 
 class DepartmentListCreateView(views.APIView):
-    permission_classes = [IsCompanyAdmin]
+    def get_permissions(self):
+        if self.request.method == 'GET':
+            return [require_any_permission('departments.manage', 'employees.view', 'attendance.view_team')()]
+        return [require_permission('departments.manage')()]
 
     def get(self, request):
         company = request.user.company
@@ -249,7 +299,7 @@ class DepartmentListCreateView(views.APIView):
         return Response(DepartmentSerializer(dept).data, status=status.HTTP_201_CREATED)
 
 class DepartmentDetailView(views.APIView):
-    permission_classes = [IsCompanyAdmin]
+    permission_classes = [require_permission('departments.manage')]
 
     def get(self, request, pk):
         company = request.user.company
@@ -292,7 +342,10 @@ class DepartmentDetailView(views.APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 class CustomRoleListCreateView(views.APIView):
-    permission_classes = [IsCompanyAdmin]
+    def get_permissions(self):
+        if self.request.method == 'GET':
+            return [require_any_permission('roles.manage', 'employees.view')()]
+        return [require_permission('roles.manage')()]
 
     def get(self, request):
         company = request.user.company
@@ -318,6 +371,14 @@ class CustomRoleListCreateView(views.APIView):
         description = request.data.get('description', '').strip()
         permissions = request.data.get('permissions', [])
 
+        if request.user.role != 'COMPANY_ADMIN' and not request.user.is_superuser:
+            disallowed = [p for p in permissions if not request.user.has_permission(p)]
+            if disallowed:
+                return Response(
+                    {"error": f"You cannot grant permissions you do not hold: {', '.join(disallowed)}"},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
         role = CustomRole.objects.create(
             company=company,
             name=name,
@@ -331,7 +392,7 @@ class CustomRoleListCreateView(views.APIView):
         return Response(CustomRoleSerializer(role).data, status=status.HTTP_201_CREATED)
 
 class CustomRoleDetailView(views.APIView):
-    permission_classes = [IsCompanyAdmin]
+    permission_classes = [require_permission('roles.manage')]
 
     def get(self, request, pk):
         company = request.user.company
@@ -353,7 +414,15 @@ class CustomRoleDetailView(views.APIView):
         if 'description' in request.data:
             role.description = request.data['description'].strip()
         if 'permissions' in request.data:
-            role.permissions = request.data['permissions']
+            new_perms = request.data['permissions']
+            if request.user.role != 'COMPANY_ADMIN' and not request.user.is_superuser:
+                disallowed = [p for p in new_perms if not request.user.has_permission(p)]
+                if disallowed:
+                    return Response(
+                        {"error": f"You cannot grant permissions you do not hold: {', '.join(disallowed)}"},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+            role.permissions = new_perms
         if 'is_active' in request.data:
             role.is_active = bool(request.data['is_active'])
 
@@ -448,8 +517,12 @@ class AttendanceCheckInView(views.APIView):
                         is_in_geofence = True
                         att_status = 'PRESENT'
                     else:
-                        is_in_geofence = False
-                        att_status = 'OUT_OF_FENCE'
+                        return Response(
+                            {
+                                "error": f"Check-in blocked: You are {min_distance}m away from {closest_branch.name} (allowed radius: {radius}m). Move inside the office radius to check in."
+                            },
+                            status=status.HTTP_403_FORBIDDEN,
+                        )
                 else:
                     # No branch has GPS configured; accept check-in
                     is_in_geofence = True
@@ -591,23 +664,32 @@ class AttendanceAdminRecordsView(views.APIView):
 
     def get(self, request):
         user = request.user
-        if not (user.is_company_admin or user.has_permission('attendance.view_team_board')):
-            return Response({"error": "Permission denied: requires 'attendance.view_team_board' permission."}, status=status.HTTP_403_FORBIDDEN)
+        if not (user.is_company_admin or user.has_permission('attendance.view_team') or user.has_permission('attendance.view_team_board')):
+            return Response({"error": "Permission denied: requires 'attendance.view_team' permission."}, status=status.HTTP_403_FORBIDDEN)
 
         company = request.user.company
         if not company:
             return Response({"error": "Company required"}, status=status.HTTP_400_BAD_REQUEST)
 
+        date_from = request.query_params.get('date_from')
+        date_to = request.query_params.get('date_to')
         date_str = request.query_params.get('date')
-        if date_str:
-            try:
-                target_date = timezone.datetime.strptime(date_str, '%Y-%m-%d').date()
-            except ValueError:
-                target_date = timezone.now().date()
-        else:
+        if date_from or date_to:
+            records = AttendanceRecord.objects.filter(company=company).select_related('user', 'department', 'matched_branch')
+            if date_from:
+                records = records.filter(date__gte=date_from)
+            if date_to:
+                records = records.filter(date__lte=date_to)
             target_date = timezone.now().date()
-
-        records = AttendanceRecord.objects.filter(company=company, date=target_date).select_related('user', 'department', 'matched_branch')
+        else:
+            if date_str:
+                try:
+                    target_date = timezone.datetime.strptime(date_str, '%Y-%m-%d').date()
+                except ValueError:
+                    target_date = timezone.now().date()
+            else:
+                target_date = timezone.now().date()
+            records = AttendanceRecord.objects.filter(company=company, date=target_date).select_related('user', 'department', 'matched_branch')
 
         branch_id = request.query_params.get('branch_id')
         if branch_id and branch_id != 'ALL':
@@ -642,7 +724,10 @@ class AttendanceAdminRecordsView(views.APIView):
         })
 
 class TeamListCreateView(views.APIView):
-    permission_classes = [IsCompanyAdmin]
+    def get_permissions(self):
+        if self.request.method == 'GET':
+            return [require_any_permission('departments.manage', 'employees.view')()]
+        return [require_permission('departments.manage')()]
 
     def get(self, request):
         company = request.user.company
@@ -661,7 +746,7 @@ class TeamListCreateView(views.APIView):
 
 class TeamDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = TeamSerializer
-    permission_classes = [IsCompanyAdmin]
+    permission_classes = [require_permission('departments.manage')]
 
     def get_queryset(self):
         if self.request.user.is_super_admin:
@@ -684,3 +769,160 @@ class ChangePasswordView(views.APIView):
         user.set_password(serializer.validated_data['new_password'])
         user.save()
         return Response({"message": "Password changed successfully."})
+
+
+class PermissionCatalogView(views.APIView):
+    """
+    Returns the grouped permission catalog filtered by the company's enabled plan modules.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        company = request.user.company
+        groups = []
+        for grp in PERMISSION_GROUPS:
+            if company and not request.user.is_super_admin:
+                if not company.has_menu_permission(grp['menu_key']):
+                    continue
+            groups.append(grp)
+        return Response({'groups': groups})
+
+
+class SectionDelegationListCreateView(views.APIView):
+    """
+    GET: Lists company delegations (or own received delegations).
+    POST: Grants a time-bound section delegation ("Acting In-Charge") to an employee.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        company = request.user.company
+        if not company:
+            return Response({"error": "Company required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        qs = SectionDelegation.objects.filter(company=company).select_related('delegator', 'delegatee', 'revoked_by')
+        if not request.user.has_permission('delegation.manage'):
+            qs = qs.filter(models.Q(delegator=request.user) | models.Q(delegatee=request.user))
+
+        status_filter = request.query_params.get('status')
+        today = timezone.localdate()
+        if status_filter == 'ACTIVE':
+            qs = qs.filter(is_active=True, start_date__lte=today, end_date__gte=today)
+        elif status_filter == 'UPCOMING':
+            qs = qs.filter(is_active=True, start_date__gt=today)
+        elif status_filter == 'EXPIRED':
+            qs = qs.filter(models.Q(is_active=False) | models.Q(end_date__lt=today))
+
+        return Response(SectionDelegationSerializer(qs, many=True).data)
+
+    def post(self, request):
+        if not request.user.has_permission('delegation.manage'):
+            return Response({"error": "Permission denied: requires 'delegation.manage'."}, status=status.HTTP_403_FORBIDDEN)
+
+        company = request.user.company
+        if not company:
+            return Response({"error": "Company required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        serializer = SectionDelegationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        delegatee = serializer.validated_data['delegatee']
+        if delegatee.company_id != company.id or not delegatee.is_active:
+            return Response({"error": "Delegatee must be an active employee of your company."}, status=status.HTTP_400_BAD_REQUEST)
+        if delegatee.id == request.user.id:
+            return Response({"error": "You cannot delegate sections to yourself."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Prevent privilege escalation: validate requested permissions
+        requested_perms = serializer.validated_data.get('permissions') or []
+        requested_sections = serializer.validated_data.get('sections') or []
+
+        # If sections are specified without explicit permissions, expand all permissions in those sections
+        if requested_sections and not requested_perms:
+            for grp in PERMISSION_GROUPS:
+                if grp['key'] in requested_sections:
+                    for p in grp['permissions']:
+                        if request.user.has_permission(p['key']):
+                            requested_perms.append(p['key'])
+
+        invalid_perms = [p for p in requested_perms if p not in ALL_PERMISSION_KEYS and not p.endswith('.*')]
+        if invalid_perms:
+            return Response({"error": f"Unknown permission keys: {invalid_perms}"}, status=status.HTTP_400_BAD_REQUEST)
+
+        unauthorized_perms = [
+            p for p in requested_perms
+            if not p.endswith('.*') and not request.user.has_permission(p)
+        ]
+        if unauthorized_perms:
+            return Response(
+                {"error": f"You cannot delegate permissions you do not hold: {unauthorized_perms}"},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        with transaction.atomic():
+            delegation = serializer.save(
+                company=company,
+                delegator=request.user,
+                permissions=list(dict.fromkeys(requested_perms)),
+                sections=list(dict.fromkeys(requested_sections)),
+            )
+            _log_permission_audit(
+                request,
+                action='DELEGATION_CREATED',
+                target_model='SectionDelegation',
+                target_id=delegation.id,
+                details={
+                    'delegatee_id': str(delegatee.id),
+                    'delegatee_name': delegatee.full_name,
+                    'sections': delegation.sections,
+                    'permissions_count': len(delegation.permissions),
+                    'start_date': str(delegation.start_date),
+                    'end_date': str(delegation.end_date),
+                },
+            )
+
+        return Response(SectionDelegationSerializer(delegation).data, status=status.HTTP_201_CREATED)
+
+
+class SectionDelegationRevokeView(views.APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        company = request.user.company
+        delegation = SectionDelegation.objects.filter(id=pk, company=company).first()
+        if not delegation:
+            return Response({"error": "Delegation not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        if delegation.delegator_id != request.user.id and not request.user.has_permission('delegation.manage'):
+            return Response({"error": "Permission denied."}, status=status.HTTP_403_FORBIDDEN)
+
+        if not delegation.is_active:
+            return Response({"message": "Delegation is already inactive."})
+
+        with transaction.atomic():
+            delegation.is_active = False
+            delegation.revoked_at = timezone.now()
+            delegation.revoked_by = request.user
+            delegation.save(update_fields=['is_active', 'revoked_at', 'revoked_by', 'updated_at'])
+            _log_permission_audit(
+                request,
+                action='DELEGATION_REVOKED',
+                target_model='SectionDelegation',
+                target_id=delegation.id,
+                details={
+                    'delegatee_name': delegation.delegatee.full_name,
+                    'sections': delegation.sections,
+                },
+            )
+
+        return Response(SectionDelegationSerializer(delegation).data)
+
+
+class PermissionAuditLogListView(views.APIView):
+    permission_classes = [require_any_permission('roles.manage', 'delegation.manage')]
+
+    def get(self, request):
+        company = request.user.company
+        if not company:
+            return Response({"error": "Company required"}, status=status.HTTP_400_BAD_REQUEST)
+        logs = PermissionAuditLog.objects.filter(company=company).select_related('actor', 'on_behalf_of')[:100]
+        return Response(PermissionAuditLogSerializer(logs, many=True).data)

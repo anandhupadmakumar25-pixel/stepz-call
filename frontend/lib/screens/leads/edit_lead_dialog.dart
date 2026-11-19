@@ -342,40 +342,6 @@ class _EditLeadDialogState extends State<EditLeadDialog> {
                         ),
                         const SizedBox(height: 14),
 
-                        // Category Dropdown
-                        if (categories.isNotEmpty) ...[
-                          Text(
-                            'Category / Tag',
-                            style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF475569)),
-                          ),
-                          const SizedBox(height: 6),
-                          DropdownButtonFormField<String?>(
-                            initialValue: _selectedCategory,
-                            decoration: const InputDecoration(
-                              isDense: true,
-                              border: OutlineInputBorder(),
-                              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                              filled: true,
-                              fillColor: Colors.white,
-                            ),
-                            items: [
-                              const DropdownMenuItem(value: null, child: Text('-- No Category --')),
-                              ...categories.map((c) => DropdownMenuItem(
-                                    value: c.id,
-                                    child: Row(
-                                      children: [
-                                        Container(width: 10, height: 10, decoration: BoxDecoration(color: HexColor.fromHex(c.colorCode), shape: BoxShape.circle)),
-                                        const SizedBox(width: 8),
-                                        Text(c.name),
-                                      ],
-                                    ),
-                                  )),
-                            ],
-                            onChanged: (val) => setState(() => _selectedCategory = val),
-                          ),
-                          const SizedBox(height: 14),
-                        ],
-
                         // Notes Field
                         _buildTextField(
                           label: 'Notes & Customer Requirements',
