@@ -1849,7 +1849,7 @@ class _BranchManagementScreenState extends State<BranchManagementScreen>
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              'Manage company profile, branches, departments, roles, payroll rules, and templates',
+                              'Manage company profile, branches, departments, roles, rules, and templates',
                               style: GoogleFonts.inter(
                                 fontSize: 12,
                                 color: const Color(0xFF64748B),
@@ -2072,7 +2072,7 @@ class _BranchManagementScreenState extends State<BranchManagementScreen>
                     Tab(text: 'Branches (${leadProvider.branches.length})'),
                     Tab(text: 'Departments (${deptProvider.departments.length})'),
                     Tab(text: 'Roles & RBAC (${roleProvider.roles.length})'),
-                    Tab(text: 'Rules & Payroll (${compProvider.companyRules.length})'),
+                    Tab(text: 'Company Rules (${compProvider.companyRules.length})'),
                     const Tab(text: 'Document Templates'),
                   ],
                 ),

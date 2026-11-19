@@ -1029,8 +1029,7 @@ class CompanyRenewalRequestListCreateView(views.APIView):
             queryset = queryset.filter(
                 Q(assigned_super_admin=user) |
                 Q(company__assigned_super_admin=user) |
-                Q(company__created_by=user) |
-                Q(company__assigned_super_admin__isnull=True)
+                Q(company__created_by=user)
             )
         elif user.role in ['COMPANY_ADMIN', 'MANAGER', 'EMPLOYEE']:
             if not user.company:
@@ -1299,7 +1298,7 @@ class CompanySubscriptionHistoryListView(views.APIView):
             pass  # Master admin sees all
         elif user.role == 'SUPER_ADMIN':
             queryset = queryset.filter(
-                Q(company__assigned_super_admin=user) | Q(company__created_by=user) | Q(company__assigned_super_admin__isnull=True)
+                Q(company__assigned_super_admin=user) | Q(company__created_by=user)
             )
         elif user.role in ['COMPANY_ADMIN', 'MANAGER', 'EMPLOYEE']:
             if not user.company:
@@ -1375,7 +1374,7 @@ class FeatureRequestListCreateView(views.APIView):
             pass
         elif user.role == 'SUPER_ADMIN':
             qs = qs.filter(request_type='COMPANY_FEATURE').filter(
-                Q(company__assigned_super_admin=user) | Q(company__created_by=user) | Q(company__assigned_super_admin__isnull=True)
+                Q(company__assigned_super_admin=user) | Q(company__created_by=user)
             )
         elif user.role == 'COMPANY_ADMIN' and user.company:
             qs = qs.filter(company=user.company)

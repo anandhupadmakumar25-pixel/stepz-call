@@ -22,7 +22,7 @@ class _HrPayrollScreenState extends State<HrPayrollScreen> with SingleTickerProv
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 2, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadAll());
   }
 
@@ -197,8 +197,8 @@ class _HrPayrollScreenState extends State<HrPayrollScreen> with SingleTickerProv
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('HR, Leave & Payroll Center', style: GoogleFonts.inter(fontSize: 22, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A))),
-            Text('Leave balances, holiday calendar, attendance regularization, salary structures & payslips', style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B))),
+            Text('HR & Leave Management', style: GoogleFonts.inter(fontSize: 22, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A))),
+            Text('Leave balances, holiday calendar & attendance regularization', style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B))),
             const SizedBox(height: 14),
             Container(
               decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFFE2E8F0))),
@@ -210,8 +210,6 @@ class _HrPayrollScreenState extends State<HrPayrollScreen> with SingleTickerProv
                 tabs: const [
                   Tab(text: 'Leaves & Holidays'),
                   Tab(text: 'Regularization'),
-                  Tab(text: 'Salary & Payroll'),
-                  Tab(text: 'My Payslips'),
                 ],
               ),
             ),
@@ -222,8 +220,6 @@ class _HrPayrollScreenState extends State<HrPayrollScreen> with SingleTickerProv
                 children: [
                   _buildLeavesHolidaysTab(hr, user),
                   _buildRegularizationTab(hr, user),
-                  _buildPayrollTab(hr, user),
-                  _buildMyPayslipsTab(hr),
                 ],
               ),
             ),
@@ -377,6 +373,7 @@ class _HrPayrollScreenState extends State<HrPayrollScreen> with SingleTickerProv
     );
   }
 
+  // ignore: unused_element
   Widget _buildPayrollTab(HrPayrollProvider hr, dynamic user) {
     final canRules = user?.hasPermission('payroll.manage_rules') ?? false;
     final canProcess = user?.hasPermission('payroll.process_salary') ?? false;
@@ -477,6 +474,7 @@ class _HrPayrollScreenState extends State<HrPayrollScreen> with SingleTickerProv
     );
   }
 
+  // ignore: unused_element
   Widget _buildMyPayslipsTab(HrPayrollProvider hr) {
     if (hr.myPayslips.isEmpty) {
       return Center(child: Text('No finalized payslips available yet.', style: GoogleFonts.inter(color: const Color(0xFF64748B))));

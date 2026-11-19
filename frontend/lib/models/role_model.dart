@@ -116,16 +116,11 @@ class PermissionCatalog {
       {'key': 'leave.approve', 'label': 'Approve / Reject Leave Requests', 'desc': 'Can approve or reject team leave applications'},
       {'key': 'leave.manage_types', 'label': 'Manage Leave Types & Holidays', 'desc': 'Can configure leave quotas and holiday calendar'},
     ],
-    'Payroll & Payslips': [
-      {'key': 'payroll.view_own_payslip', 'label': 'View Own Payslips', 'desc': 'Can view and download personal monthly payslips'},
-      {'key': 'payroll.manage_rules', 'label': 'Manage Salary Structures & Rules', 'desc': 'Can configure employee salary breakdowns and payroll policies'},
-      {'key': 'payroll.process_salary', 'label': 'Process & Finalize Payroll', 'desc': 'Can run monthly payroll and lock/pay salaries'},
-    ],
     'Analytics & Reporting': [
       {'key': 'reports.sales_billing', 'label': 'Sales & Billing Reports', 'desc': 'Can view quotation, invoice, and collection reports'},
       {'key': 'reports.calls_telecaller', 'label': 'Call & Telecaller Reports', 'desc': 'Can view call performance and telecaller productivity'},
       {'key': 'reports.leads_conversion', 'label': 'Lead Pipeline Reports', 'desc': 'Can view lead source and conversion funnel reports'},
-      {'key': 'reports.hr_attendance', 'label': 'HR, Attendance & Payroll Reports', 'desc': 'Can view attendance, leave, and payroll reports'},
+      {'key': 'reports.hr_attendance', 'label': 'HR & Attendance Reports', 'desc': 'Can view attendance and leave reports'},
       {'key': 'reports.export', 'label': 'Export Reports (PDF / CSV)', 'desc': 'Can download report exports'},
     ],
   };

@@ -481,13 +481,6 @@ FEATURE_CATALOG = [
         'highlights': ['Leave requests & approvals', 'Leave balance tracking', 'Holiday calendar'],
     },
     {
-        'key': 'payroll',
-        'name': 'Payroll & Salary Slips',
-        'category': 'HR & Operations',
-        'description': 'Automated monthly payroll calculation, deductions, and downloadable salary slips.',
-        'highlights': ['Attendance-linked payroll', 'Custom salary rules', 'Payslip generation'],
-    },
-    {
         'key': 'delegation',
         'name': 'Delegation & Access Handover',
         'category': 'Organization',

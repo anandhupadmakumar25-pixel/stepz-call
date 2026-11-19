@@ -270,22 +270,19 @@ class _MainLayoutState extends State<MainLayout> {
         );
       }
 
-      // Leave, Holidays, Regularization & Payroll
+      // Leave, Holidays & Regularization
       if (user.hasAnyPermission([
         'leave.apply_own',
         'leave.approve',
         'leave.manage_types',
-        'payroll.view_own_payslip',
-        'payroll.manage_rules',
-        'payroll.process_salary',
       ])) {
-        final delegated = user.isDelegatedFor('attendance_leave') || user.isDelegatedFor('payroll');
+        final delegated = user.isDelegatedFor('attendance_leave');
         navItems.add(
           _NavItem(
             section: 'HR & ORGANIZATION',
-            title: 'Leave & Payroll',
-            icon: Icons.payments_outlined,
-            activeIcon: Icons.payments_rounded,
+            title: 'Leave & Attendance',
+            icon: Icons.event_note_outlined,
+            activeIcon: Icons.event_note_rounded,
             badge: delegated ? 'Delegated' : null,
             badgeColor: delegated ? const Color(0xFF7C3AED) : null,
             routeKey: 'hr_payroll',

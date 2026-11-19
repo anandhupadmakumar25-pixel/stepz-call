@@ -266,7 +266,10 @@ class DepartmentListCreateView(views.APIView):
 
     def get(self, request):
         company = request.user.company
-        depts = Department.objects.filter(company=company) if company else Department.objects.all()
+        if not company:
+            depts = Department.objects.all() if request.user.is_super_admin else Department.objects.none()
+        else:
+            depts = Department.objects.filter(company=company)
         return Response(DepartmentSerializer(depts, many=True).data)
 
     def post(self, request):
@@ -731,7 +734,10 @@ class TeamListCreateView(views.APIView):
 
     def get(self, request):
         company = request.user.company
-        teams = Team.objects.filter(company=company) if company else Team.objects.all()
+        if not company:
+            teams = Team.objects.all() if request.user.is_super_admin else Team.objects.none()
+        else:
+            teams = Team.objects.filter(company=company)
         return Response(TeamSerializer(teams, many=True).data)
 
     def post(self, request):

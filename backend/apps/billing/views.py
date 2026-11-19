@@ -287,7 +287,7 @@ class QuotationDetailView(views.APIView):
         if not quote:
             return Response({"error": "Quotation not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        if not user.is_super_admin and quote.company_id != company.id:
+        if not user.is_super_admin and (not company or quote.company_id != company.id):
             return Response({"error": "Unauthorized access."}, status=status.HTTP_403_FORBIDDEN)
 
         if user.role == 'EMPLOYEE' and quote.created_by_id != user.id and (not quote.lead or quote.lead.assigned_to_id != user.id):
@@ -302,7 +302,7 @@ class QuotationDetailView(views.APIView):
         if not quote:
             return Response({"error": "Quotation not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        if not user.is_super_admin and quote.company_id != company.id:
+        if not user.is_super_admin and (not company or quote.company_id != company.id):
             return Response({"error": "Unauthorized access."}, status=status.HTTP_403_FORBIDDEN)
 
         if user.role == 'EMPLOYEE' and quote.created_by_id != user.id and (not quote.lead or quote.lead.assigned_to_id != user.id):
@@ -324,7 +324,7 @@ class QuotationDetailView(views.APIView):
         if not quote:
             return Response({"error": "Quotation not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        if not user.is_super_admin and quote.company_id != company.id:
+        if not user.is_super_admin and (not company or quote.company_id != company.id):
             return Response({"error": "Unauthorized access."}, status=status.HTTP_403_FORBIDDEN)
 
         if not (user.is_company_admin or (user.role == 'EMPLOYEE' and quote.created_by_id == user.id)):
@@ -344,7 +344,7 @@ class QuotationConvertToInvoiceView(views.APIView):
         if not quote:
             return Response({"error": "Quotation not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        if not user.is_super_admin and quote.company_id != company.id:
+        if not user.is_super_admin and (not company or quote.company_id != company.id):
             return Response({"error": "Unauthorized access."}, status=status.HTTP_403_FORBIDDEN)
 
         if user.role == 'EMPLOYEE' and quote.created_by_id != user.id and (not quote.lead or quote.lead.assigned_to_id != user.id):
@@ -518,7 +518,7 @@ class InvoiceDetailView(views.APIView):
         if not inv:
             return Response({"error": "Invoice not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        if not user.is_super_admin and inv.company_id != company.id:
+        if not user.is_super_admin and (not company or inv.company_id != company.id):
             return Response({"error": "Unauthorized access."}, status=status.HTTP_403_FORBIDDEN)
 
         if user.role == 'EMPLOYEE' and inv.created_by_id != user.id and (not inv.lead or inv.lead.assigned_to_id != user.id):
@@ -533,7 +533,7 @@ class InvoiceDetailView(views.APIView):
         if not inv:
             return Response({"error": "Invoice not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        if not user.is_super_admin and inv.company_id != company.id:
+        if not user.is_super_admin and (not company or inv.company_id != company.id):
             return Response({"error": "Unauthorized access."}, status=status.HTTP_403_FORBIDDEN)
 
         if user.role == 'EMPLOYEE' and inv.created_by_id != user.id and (not inv.lead or inv.lead.assigned_to_id != user.id):
@@ -558,7 +558,7 @@ class InvoiceDetailView(views.APIView):
         if not inv:
             return Response({"error": "Invoice not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        if not user.is_super_admin and inv.company_id != company.id:
+        if not user.is_super_admin and (not company or inv.company_id != company.id):
             return Response({"error": "Unauthorized access."}, status=status.HTTP_403_FORBIDDEN)
 
         if not user.is_company_admin:
