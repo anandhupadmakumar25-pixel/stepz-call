@@ -126,9 +126,12 @@ class MainActivity : FlutterActivity() {
     private fun checkAndRequestPermissions(): Boolean {
         val needed = mutableListOf(
             Manifest.permission.RECORD_AUDIO,
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION,
             Manifest.permission.READ_PHONE_STATE
         )
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            needed.add(Manifest.permission.POST_NOTIFICATIONS)
             needed.add(Manifest.permission.READ_MEDIA_AUDIO)
         } else {
             needed.add(Manifest.permission.READ_EXTERNAL_STORAGE)
@@ -163,16 +166,17 @@ class MainActivity : FlutterActivity() {
         val outFile = File(outDir, "call_${callStartTimeMs}.m4a")
         activeOutputFile = outFile
 
-        // Try audio sources in order that best captures voice + headset communication
+        // Try audio sources in order that best captures clear voice during calls
         val sourcesToTry = intArrayOf(
-            MediaRecorder.AudioSource.VOICE_COMMUNICATION,
             MediaRecorder.AudioSource.VOICE_RECOGNITION,
-            MediaRecorder.AudioSource.MIC
+            MediaRecorder.AudioSource.MIC,
+            MediaRecorder.AudioSource.VOICE_COMMUNICATION
         )
 
         for (source in sourcesToTry) {
+            var tempRecorder: MediaRecorder? = null
             try {
-                val recorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                tempRecorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                     MediaRecorder(this)
                 } else {
                     @Suppress("DEPRECATION")
@@ -187,22 +191,23 @@ class MainActivity : FlutterActivity() {
                     }
                 } catch (_: Exception) {}
 
-                recorder.setAudioSource(source)
-                recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-                recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-                recorder.setAudioEncodingBitRate(128000)
-                recorder.setAudioSamplingRate(44100)
-                recorder.setOutputFile(outFile.absolutePath)
-                recorder.prepare()
-                recorder.start()
+                tempRecorder.setAudioSource(source)
+                tempRecorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+                tempRecorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+                tempRecorder.setAudioEncodingBitRate(128000)
+                tempRecorder.setAudioSamplingRate(44100)
+                tempRecorder.setOutputFile(outFile.absolutePath)
+                tempRecorder.prepare()
+                tempRecorder.start()
 
-                mediaRecorder = recorder
+                mediaRecorder = tempRecorder
                 isRecordingActive = true
                 isRecordingPaused = false
                 return true
             } catch (e: Exception) {
                 try {
-                    mediaRecorder?.release()
+                    tempRecorder?.reset()
+                    tempRecorder?.release()
                 } catch (_: Exception) {}
                 mediaRecorder = null
             }

@@ -21,7 +21,7 @@ class ApiClient {
         defaultTargetPlatform == TargetPlatform.linux) {
       return 'http://127.0.0.1:8000';
     }
-    return 'http://10.224.188.176:8000';
+    return 'http://192.168.1.11:8000';
   }
 
   static String get baseUrl => '$serverOrigin/api/v1';

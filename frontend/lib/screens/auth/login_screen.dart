@@ -6,6 +6,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/widgets/brand_logo.dart';
 import '../../core/widgets/glass/app_background.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/recording_provider.dart';
 import '../../routes/app_routes.dart';
 import '../companies/renewal_request_dialog.dart';
 
@@ -22,6 +23,16 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
   String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        context.read<RecordingProvider>().ensurePermissions();
+      }
+    });
+  }
 
   @override
   void dispose() {
@@ -433,37 +444,38 @@ class _LoginScreenState extends State<LoginScreen> {
                     ],
                   ),
                 )
-              : SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const Center(
-                        child: TelecallerLogo(
-                          isDark: false,
-                          iconSize: 24,
-                          titleSize: 18,
-                        ),
+              : Center(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 440),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const Center(
+                            child: TelecallerLogo(
+                              isDark: false,
+                              iconSize: 24,
+                              titleSize: 18,
+                            ),
+                          ),
+                          const SizedBox(height: 18),
+                          Text(
+                            'Smarter Calls. Bigger Revenue.',
+                            style: GoogleFonts.inter(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w800,
+                              color: const Color(0xFF0F172A),
+                              letterSpacing: -0.5,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 22),
+                          _buildLoginFormCard(auth),
+                        ],
                       ),
-                      const SizedBox(height: 22),
-                      Text(
-                        'Smarter Calls. Bigger Revenue.',
-                        style: GoogleFonts.inter(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w800,
-                          color: const Color(0xFF0F172A),
-                          letterSpacing: -0.5,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 24),
-                      Center(
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 440),
-                          child: _buildLoginFormCard(auth),
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
         ),

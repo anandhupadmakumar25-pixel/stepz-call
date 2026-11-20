@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import '../core/network/api_client.dart';
+import '../core/services/web_audio_player.dart';
 import '../models/recording_model.dart';
 
 class RecordingProvider extends ChangeNotifier {
@@ -309,11 +310,14 @@ class RecordingProvider extends ChangeNotifier {
     return false;
   }
 
-  // Native Audio Playback Helpers
+  // Native & Web Audio Playback Helpers
   static Future<bool> playAudioUrl(String url) async {
-    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return false;
+    final resolved = ApiClient.resolveMediaUrl(url) ?? url;
+    if (kIsWeb) {
+      return webPlayAudio(resolved);
+    }
+    if (defaultTargetPlatform != TargetPlatform.android) return false;
     try {
-      final resolved = ApiClient.resolveMediaUrl(url) ?? url;
       final ok = await _channel.invokeMethod('playAudio', {'url': resolved});
       return ok == true;
     } catch (_) {
@@ -322,28 +326,43 @@ class RecordingProvider extends ChangeNotifier {
   }
 
   static Future<void> pauseAudioPlayback() async {
-    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
+    if (kIsWeb) {
+      await webPauseAudio();
+      return;
+    }
+    if (defaultTargetPlatform != TargetPlatform.android) return;
     try {
       await _channel.invokeMethod('pauseAudio');
     } catch (_) {}
   }
 
   static Future<void> stopAudioPlayback() async {
-    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
+    if (kIsWeb) {
+      await webStopAudio();
+      return;
+    }
+    if (defaultTargetPlatform != TargetPlatform.android) return;
     try {
       await _channel.invokeMethod('stopAudio');
     } catch (_) {}
   }
 
   static Future<void> seekAudioPlayback(double seconds) async {
-    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
+    if (kIsWeb) {
+      await webSeekAudio(seconds);
+      return;
+    }
+    if (defaultTargetPlatform != TargetPlatform.android) return;
     try {
       await _channel.invokeMethod('seekAudio', {'positionSeconds': seconds});
     } catch (_) {}
   }
 
   static Future<Map<String, dynamic>> getAudioPlaybackStatus() async {
-    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
+    if (kIsWeb) {
+      return webGetAudioStatus();
+    }
+    if (defaultTargetPlatform != TargetPlatform.android) {
       return {'isPlaying': false, 'positionSeconds': 0.0, 'durationSeconds': 0.0, 'url': ''};
     }
     try {

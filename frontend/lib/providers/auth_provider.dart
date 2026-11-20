@@ -22,9 +22,21 @@ class AuthProvider extends ChangeNotifier {
     try {
       final userMap = await ApiClient.getUser();
       final token = await ApiClient.getToken();
-      if (token != null && userMap != null) {
-        _currentUser = UserModel.fromJson(userMap);
+      if (token != null && token.isNotEmpty && userMap != null) {
+        // Verify cached token & user against live backend (clears stale session after DB reset)
+        final liveRes = await ApiClient.get('/accounts/profile/');
+        if (liveRes is Map<String, dynamic>) {
+          final freshToken = await ApiClient.getToken() ?? token;
+          await ApiClient.saveSession(freshToken, '', liveRes);
+          _currentUser = UserModel.fromJson(liveRes);
+        } else {
+          await ApiClient.clearSession();
+          _currentUser = null;
+        }
       }
+    } on ApiException {
+      await ApiClient.clearSession();
+      _currentUser = null;
     } catch (_) {
       await ApiClient.clearSession();
       _currentUser = null;
@@ -32,6 +44,28 @@ class AuthProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     }
+  }
+
+  /// Silently refreshes the logged-in user's profile and resolved permissions
+  /// from the backend so role/permission updates take effect without re-login.
+  Future<void> refreshProfile() async {
+    try {
+      final token = await ApiClient.getToken();
+      if (token == null || token.isEmpty) return;
+      final liveRes = await ApiClient.get('/accounts/profile/');
+      if (liveRes is Map<String, dynamic>) {
+        final freshToken = await ApiClient.getToken() ?? token;
+        await ApiClient.saveSession(freshToken, '', liveRes);
+        _currentUser = UserModel.fromJson(liveRes);
+        notifyListeners();
+      }
+    } on ApiException catch (e) {
+      if (e.statusCode == 401 || e.statusCode == 403 || e.statusCode == 404) {
+        await ApiClient.clearSession();
+        _currentUser = null;
+        notifyListeners();
+      }
+    } catch (_) {}
   }
 
   Future<bool> login(String usernameOrEmail, String password) async {

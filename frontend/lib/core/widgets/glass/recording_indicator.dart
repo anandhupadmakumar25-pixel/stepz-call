@@ -434,290 +434,228 @@ class _GlassAudioPlayerWidgetState extends State<GlassAudioPlayerWidget> {
     }
 
     return GlassCard(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // 1. Detailed Header: Customer, Staff, Date, Duration & Action Buttons
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Lead Initials Circle Avatar
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  gradient: AppColors.primaryGradient,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.neonViolet.withValues(alpha: 0.3),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
+      padding: EdgeInsets.zero,
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          tilePadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+          childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+          leading: Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              gradient: AppColors.primaryGradient,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.neonViolet.withValues(alpha: 0.25),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
                 ),
-                child: Center(
-                  child: Text(
-                    leadName.isNotEmpty ? leadName[0].toUpperCase() : 'L',
-                    style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.white),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-
-              // Contact & Call Information
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            leadName,
-                            style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        if (callOutcome.isNotEmpty) ...[
-                          const SizedBox(width: 8),
-                          Builder(builder: (_) {
-                            final ocColor = _outcomeColor(callOutcome);
-                            return Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: ocColor.withValues(alpha: 0.12),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                callOutcome.replaceAll('_', ' '),
-                                style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w800, color: ocColor),
-                              ),
-                            );
-                          }),
-                        ],
-                      ],
-                    ),
-                    const SizedBox(height: 2),
-                    if (leadPhone.isNotEmpty)
-                      Text(
-                        '$leadPhone${leadCity.isNotEmpty ? ' • $leadCity' : ''}',
-                        style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF334155)),
-                      ),
-                    const SizedBox(height: 6),
-
-                    // Metadata Badges (Whose Record, Exact Date & Time, Duration, Source)
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 4,
-                      children: [
-                        // Telecaller who recorded this call
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFEFF6FF),
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(color: const Color(0xFFBFDBFE)),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.person_outline_rounded, size: 12, color: Color(0xFF1D4ED8)),
-                              const SizedBox(width: 4),
-                              Text(
-                                'Recorded by: $staffName',
-                                style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF1D4ED8)),
-                              ),
-                            ],
-                          ),
-                        ),
-                        // Exact Date and Time
-                        if (dateFormatted.isNotEmpty)
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF8FAFC),
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: const Color(0xFFE2E8F0)),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.calendar_today_outlined, size: 12, color: Color(0xFF475569)),
-                                const SizedBox(width: 4),
-                                Text(
-                                  dateFormatted,
-                                  style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF475569)),
-                                ),
-                              ],
-                            ),
-                          ),
-                        // Duration & Size
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF8FAFC),
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(color: const Color(0xFFE2E8F0)),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.timer_outlined, size: 12, color: Color(0xFF64748B)),
-                              const SizedBox(width: 4),
-                              Text(
-                                durationFormatted + (fileSizeFormatted.isNotEmpty ? ' ($fileSizeFormatted)' : ''),
-                                style: GoogleFonts.robotoMono(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF334155)),
-                              ),
-                            ],
-                          ),
-                        ),
-                        // Audio Source
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF1F5F9),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            sourceLabel,
-                            style: GoogleFonts.inter(fontSize: 10, color: const Color(0xFF64748B)),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-
-              // Action buttons (Save to Device, Open URL & Delete)
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (_effectiveAudioUrl != null && _effectiveAudioUrl!.isNotEmpty) ...[
-                    IconButton(
-                      icon: _isExporting
-                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                          : const Icon(Icons.download_rounded, size: 19, color: Color(0xFF059669)),
-                      tooltip: 'Save / Export to Device',
-                      onPressed: _isExporting ? null : () => _exportToDevice(leadName),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.open_in_new_rounded, size: 18, color: Color(0xFF2563EB)),
-                      tooltip: 'Open Audio File URL',
-                      onPressed: () async {
-                        final uri = Uri.parse(_effectiveAudioUrl!);
-                        if (await canLaunchUrl(uri)) {
-                          await launchUrl(uri);
-                        }
-                      },
-                    ),
-                  ],
-                  if (widget.onDelete != null)
-                    IconButton(
-                      icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.neonCoral),
-                      onPressed: widget.onDelete,
-                      tooltip: 'Delete Recording',
-                    ),
-                ],
-              ),
-            ],
-          ),
-          if (notes.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF8FAFC),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: const Color(0xFFE2E8F0)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.notes_rounded, size: 14, color: Color(0xFF64748B)),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      notes,
-                      style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF334155), fontStyle: FontStyle.italic),
-                    ),
-                  ),
-                ],
+              ],
+            ),
+            child: Center(
+              child: Text(
+                leadName.isNotEmpty ? leadName[0].toUpperCase() : 'L',
+                style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w800, color: Colors.white),
               ),
             ),
-          ],
-          const SizedBox(height: 12),
-
-          // Audio Spectrum Waves
-          AudioWaveformVisualizer(
-            isRecording: false,
-            isPlaying: _isPlaying,
-            barCount: 42,
-            height: 38,
-            barColor: AppColors.neonCyan,
           ),
-          const SizedBox(height: 8),
-
-          // Controls & Seek Bar
-          Row(
+          title: Row(
             children: [
-              GestureDetector(
+              Flexible(
+                child: Text(
+                  leadName,
+                  style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (callOutcome.isNotEmpty) ...[
+                const SizedBox(width: 8),
+                Builder(builder: (_) {
+                  final ocColor = _outcomeColor(callOutcome);
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: ocColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      callOutcome.replaceAll('_', ' '),
+                      style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w800, color: ocColor),
+                    ),
+                  );
+                }),
+              ],
+            ],
+          ),
+          subtitle: Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                if (leadPhone.isNotEmpty)
+                  Text(
+                    '$leadPhone${leadCity.isNotEmpty ? ' • $leadCity' : ''}',
+                    style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w600, color: const Color(0xFF334155)),
+                  ),
+                Text(
+                  'By: $staffName',
+                  style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF1D4ED8)),
+                ),
+                if (dateFormatted.isNotEmpty)
+                  Text(
+                    dateFormatted,
+                    style: GoogleFonts.inter(fontSize: 10.5, color: const Color(0xFF64748B)),
+                  ),
+                Text(
+                  durationFormatted + (fileSizeFormatted.isNotEmpty ? ' ($fileSizeFormatted)' : ''),
+                  style: GoogleFonts.robotoMono(fontSize: 10.5, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
+                ),
+              ],
+            ),
+          ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              InkWell(
                 onTap: _togglePlay,
+                borderRadius: BorderRadius.circular(20),
                 child: Container(
-                  padding: const EdgeInsets.all(8),
+                  padding: const EdgeInsets.all(7),
                   decoration: BoxDecoration(
                     gradient: AppColors.cyanGradient,
                     shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.neonCyan.withValues(alpha: 0.35),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
                   ),
                   child: Icon(
                     _isPlaying ? Icons.pause : Icons.play_arrow,
-                    size: 18,
+                    size: 16,
                     color: Colors.white,
                   ),
                 ),
               ),
-              const SizedBox(width: 10),
-              Text(
-                _formatTime(_currentPosition),
-                style: GoogleFonts.robotoMono(fontSize: 11, color: AppColors.neonCyan, fontWeight: FontWeight.w600),
-              ),
-              Expanded(
-                child: SliderTheme(
-                  data: SliderTheme.of(context).copyWith(
-                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-                    overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
-                    trackHeight: 3,
-                    activeTrackColor: AppColors.neonCyan,
-                    inactiveTrackColor: const Color(0xFFCBD5E1),
-                    thumbColor: AppColors.neonCyan,
-                  ),
-                  child: Slider(
-                    value: _currentPosition.clamp(0, maxSec),
-                    min: 0,
-                    max: maxSec,
-                    onChanged: (v) {
-                      setState(() => _currentPosition = v);
-                      RecordingProvider.seekAudioPlayback(v);
-                    },
-                  ),
-                ),
-              ),
-              Text(
-                _formatTime(maxSec),
-                style: GoogleFonts.robotoMono(fontSize: 11, color: const Color(0xFF64748B)),
-              ),
+              const SizedBox(width: 6),
+              const Icon(Icons.expand_more_rounded, color: Color(0xFF64748B)),
             ],
           ),
-        ],
+          children: [
+            const Divider(height: 12, color: Color(0xFFE2E8F0)),
+            if (notes.isNotEmpty) ...[
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.notes_rounded, size: 14, color: Color(0xFF64748B)),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        notes,
+                        style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF334155), fontStyle: FontStyle.italic),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
+            ],
+            AudioWaveformVisualizer(
+              isRecording: false,
+              isPlaying: _isPlaying,
+              barCount: 38,
+              height: 32,
+              barColor: AppColors.neonCyan,
+            ),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Text(
+                  _formatTime(_currentPosition),
+                  style: GoogleFonts.robotoMono(fontSize: 11, color: AppColors.neonCyan, fontWeight: FontWeight.w600),
+                ),
+                Expanded(
+                  child: SliderTheme(
+                    data: SliderTheme.of(context).copyWith(
+                      thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                      overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+                      trackHeight: 3,
+                      activeTrackColor: AppColors.neonCyan,
+                      inactiveTrackColor: const Color(0xFFCBD5E1),
+                      thumbColor: AppColors.neonCyan,
+                    ),
+                    child: Slider(
+                      value: _currentPosition.clamp(0, maxSec),
+                      min: 0,
+                      max: maxSec,
+                      onChanged: (v) {
+                        setState(() => _currentPosition = v);
+                        RecordingProvider.seekAudioPlayback(v);
+                      },
+                    ),
+                  ),
+                ),
+                Text(
+                  _formatTime(maxSec),
+                  style: GoogleFonts.robotoMono(fontSize: 11, color: const Color(0xFF64748B)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    sourceLabel,
+                    style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w600, color: const Color(0xFF475569)),
+                  ),
+                ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (_effectiveAudioUrl != null && _effectiveAudioUrl!.isNotEmpty) ...[
+                      TextButton.icon(
+                        onPressed: _isExporting ? null : () => _exportToDevice(leadName),
+                        icon: _isExporting
+                            ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                            : const Icon(Icons.download_rounded, size: 16, color: Color(0xFF059669)),
+                        label: Text('Save', style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w700, color: const Color(0xFF059669))),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.open_in_new_rounded, size: 17, color: Color(0xFF2563EB)),
+                        tooltip: 'Open Audio File URL',
+                        onPressed: () async {
+                          final uri = Uri.parse(_effectiveAudioUrl!);
+                          if (await canLaunchUrl(uri)) {
+                            await launchUrl(uri);
+                          }
+                        },
+                      ),
+                    ],
+                    if (widget.onDelete != null)
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.neonCoral),
+                        onPressed: widget.onDelete,
+                        tooltip: 'Delete Recording',
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

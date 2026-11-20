@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
@@ -49,11 +50,12 @@ class MainLayout extends StatefulWidget {
   State<MainLayout> createState() => _MainLayoutState();
 }
 
-class _MainLayoutState extends State<MainLayout> {
+class _MainLayoutState extends State<MainLayout> with WidgetsBindingObserver {
   int _selectedIndex = 0;
   bool _initialRouteApplied = false;
   bool _isSidebarCollapsed = false;
   String? _lastUserId;
+  Timer? _profileRefreshTimer;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final TextEditingController _searchController = TextEditingController();
 
@@ -66,14 +68,41 @@ class _MainLayoutState extends State<MainLayout> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final auth = context.read<AuthProvider>();
       if (auth.isAuthenticated) {
+        auth.refreshProfile();
         context.read<NotificationProvider>().fetchNotifications();
         context.read<CallbackProvider>().checkReminders();
       }
     });
+    _profileRefreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (!mounted) return;
+      final auth = context.read<AuthProvider>();
+      if (auth.isAuthenticated) {
+        auth.refreshProfile();
+      }
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) {
+      final auth = context.read<AuthProvider>();
+      if (auth.isAuthenticated) {
+        auth.refreshProfile();
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _profileRefreshTimer?.cancel();
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _performLogout(AuthProvider auth, {bool isDrawer = false}) async {
@@ -88,12 +117,6 @@ class _MainLayoutState extends State<MainLayout> {
       _lastUserId = null;
     });
     rootNav.pushNamedAndRemoveUntil(AppRoutes.login, (route) => false);
-  }
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
   }
 
   void _openAddLeadDialog() {
@@ -752,6 +775,7 @@ class _MainLayoutState extends State<MainLayout> {
                         child: InkWell(
                           onTap: () {
                             setState(() => _selectedIndex = index);
+                            context.read<AuthProvider>().refreshProfile();
                             if (isDrawer) {
                               Navigator.of(context).pop();
                             }
