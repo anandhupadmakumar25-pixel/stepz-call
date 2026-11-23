@@ -462,17 +462,25 @@ class AttendanceCheckInView(views.APIView):
 
     def post(self, request):
         user = request.user
-        if not (user.is_company_admin or user.has_permission('attendance.punch')):
-            return Response({"error": "Permission denied: requires 'attendance.punch' permission."}, status=status.HTTP_403_FORBIDDEN)
+        if not (user.is_company_admin or user.has_permission('attendance.mark_own') or user.has_permission('attendance.punch')):
+            return Response({"error": "Permission denied: requires 'attendance.mark_own' permission."}, status=status.HTTP_403_FORBIDDEN)
 
         company = user.company
         if not company:
             return Response({"error": "Company not found for user."}, status=status.HTTP_400_BAD_REQUEST)
 
-        today = timezone.now().date()
-        att = AttendanceRecord.objects.filter(user=user, date=today).first()
-        if att and att.check_in_time:
-            return Response({"error": "You have already checked in today.", "attendance": AttendanceRecordSerializer(att).data}, status=status.HTTP_400_BAD_REQUEST)
+        today = timezone.localdate()
+        open_att = AttendanceRecord.objects.filter(
+            user=user, date=today, check_in_time__isnull=False, check_out_time__isnull=True
+        ).order_by('-check_in_time').first()
+        if open_att:
+            return Response(
+                {"error": "You are already checked in. Please check out first.", "attendance": AttendanceRecordSerializer(open_att).data},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        has_prior_today = AttendanceRecord.objects.filter(
+            user=user, date=today, check_in_time__isnull=False
+        ).exists()
 
         lat = request.data.get('latitude')
         lng = request.data.get('longitude')
@@ -539,27 +547,23 @@ class AttendanceCheckInView(views.APIView):
             att_status = 'PRESENT'
 
         now = timezone.now()
-        # Lateness evaluation if within fence or field staff
-        if att_status != 'OUT_OF_FENCE' and profile and profile.shift_start_time:
+        # Lateness evaluation only on the first check-in of the day
+        if not has_prior_today and att_status != 'OUT_OF_FENCE' and profile and profile.shift_start_time:
+            local_now = timezone.localtime(now)
             grace = profile.grace_period_minutes or 15
-            current_minute = now.hour * 60 + now.minute
+            current_minute = local_now.hour * 60 + local_now.minute
             shift_minute = profile.shift_start_time.hour * 60 + profile.shift_start_time.minute
             if current_minute > shift_minute + grace:
                 att_status = 'LATE'
 
-        if not att:
-            att = AttendanceRecord(
-                company=company,
-                user=user,
-                department=department,
-                matched_branch=matched_branch,
-                date=today,
-                tracking_mode=tracking_mode,
-            )
-        else:
-            att.department = department
-            att.matched_branch = matched_branch
-            att.tracking_mode = tracking_mode
+        att = AttendanceRecord(
+            company=company,
+            user=user,
+            department=department,
+            matched_branch=matched_branch,
+            date=today,
+            tracking_mode=tracking_mode,
+        )
 
         att.check_in_time = now
         att.check_in_lat = lat
@@ -579,16 +583,27 @@ class AttendanceCheckOutView(views.APIView):
 
     def post(self, request):
         user = request.user
-        today = timezone.now().date()
-        att = AttendanceRecord.objects.filter(user=user, date=today).first()
-        if not att or not att.check_in_time:
-            return Response({"error": "No check-in record found for today. Please check-in first."}, status=status.HTTP_400_BAD_REQUEST)
+        today = timezone.localdate()
+        att = AttendanceRecord.objects.filter(
+            user=user, date=today, check_in_time__isnull=False, check_out_time__isnull=True
+        ).order_by('-check_in_time').first()
+        if not att:
+            return Response({"error": "No active check-in session found. Please check in first."}, status=status.HTTP_400_BAD_REQUEST)
 
         now = timezone.now()
+        local_now = timezone.localtime(now)
         lat = request.data.get('latitude')
         lng = request.data.get('longitude')
         address = request.data.get('address', '')
-        notes = request.data.get('notes', '')
+        notes = (request.data.get('notes') or '').strip()
+
+        profile = getattr(user, 'employee_profile', None)
+        shift_end = profile.shift_end_time if profile and profile.shift_end_time else None
+        if shift_end and local_now.time() < shift_end and not notes:
+            return Response(
+                {"error": "Please provide a reason for checking out before office shift end time."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         att.check_out_time = now
         att.check_out_lat = lat
@@ -652,14 +667,29 @@ class AttendanceTodayView(views.APIView):
 
     def get(self, request):
         user = request.user
-        today = timezone.now().date()
-        att = AttendanceRecord.objects.filter(user=user, date=today).first()
+        today = timezone.localdate()
+        records_today = list(AttendanceRecord.objects.filter(user=user, date=today).order_by('-check_in_time'))
+        att = records_today[0] if records_today else None
+        profile = getattr(user, 'employee_profile', None)
+        shift_end_str = profile.shift_end_time.strftime('%H:%M:%S') if profile and profile.shift_end_time else '18:00:00'
+        total_hours_today = round(sum(float(r.working_hours or 0) for r in records_today), 2)
+
         if not att:
-            return Response({"checked_in": False, "attendance": None})
+            return Response({
+                "checked_in": False,
+                "checked_out": False,
+                "shift_end_time": shift_end_str,
+                "sessions_today_count": 0,
+                "total_hours_today": 0.0,
+                "attendance": None,
+            })
         return Response({
             "checked_in": att.check_in_time is not None,
             "checked_out": att.check_out_time is not None,
-            "attendance": AttendanceRecordSerializer(att).data
+            "shift_end_time": shift_end_str,
+            "sessions_today_count": len(records_today),
+            "total_hours_today": total_hours_today,
+            "attendance": AttendanceRecordSerializer(att).data,
         })
 
 class AttendanceAdminRecordsView(views.APIView):
@@ -707,10 +737,10 @@ class AttendanceAdminRecordsView(views.APIView):
             records = records.filter(status=status_filter)
 
         total_employees = User.objects.filter(company=company, role__in=['MANAGER', 'EMPLOYEE'], is_active=True).count()
-        present_count = records.filter(status__in=['PRESENT', 'LATE']).count()
-        late_count = records.filter(status='LATE').count()
-        out_of_fence_count = records.filter(status='OUT_OF_FENCE').count()
-        checked_in_count = records.filter(check_in_time__isnull=False).count()
+        present_count = records.filter(status__in=['PRESENT', 'LATE']).values('user_id').distinct().count()
+        late_count = records.filter(status='LATE').values('user_id').distinct().count()
+        out_of_fence_count = records.filter(status='OUT_OF_FENCE').values('user_id').distinct().count()
+        checked_in_count = records.filter(check_in_time__isnull=False).values('user_id').distinct().count()
         absent_count = max(0, total_employees - checked_in_count)
 
         return Response({

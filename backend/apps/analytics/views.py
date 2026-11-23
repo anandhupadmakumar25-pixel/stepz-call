@@ -118,7 +118,7 @@ class AdminDashboardMetricsView(views.APIView):
         employee_performance = []
         for emp in emp_qs:
             assigned = lead_qs.filter(assigned_to=emp, status__in=['ASSIGNED', 'IN_PROGRESS', 'CALLBACK_REQUESTED']).count()
-            calls_today = call_qs.filter(employee=emp, created_at__date=today).count()
+            calls_today = call_qs.filter(employee=emp, created_at__date=today).values('lead_id').distinct().count()
             calls_total = call_qs.filter(employee=emp).count()
             completed = lead_qs.filter(assigned_to=emp, status='COMPLETED').count()
             cbs_due = cb_qs.filter(assigned_employee=emp, status='DUE').count()
@@ -196,7 +196,7 @@ class TelecallerDashboardMetricsView(views.APIView):
             company=company,
             employee=user,
             created_at__date=today
-        ).count()
+        ).values('lead_id').distinct().count()
 
         daily_target = 50
         if hasattr(user, 'employee_profile') and user.employee_profile:

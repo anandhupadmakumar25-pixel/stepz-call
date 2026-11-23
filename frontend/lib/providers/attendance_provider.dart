@@ -6,6 +6,9 @@ class AttendanceProvider extends ChangeNotifier {
   AttendanceModel? _todayAttendance;
   bool _isCheckedIn = false;
   bool _isCheckedOut = false;
+  String? _shiftEndTime;
+  int _sessionsTodayCount = 0;
+  double _totalHoursToday = 0.0;
   List<FieldVisitModel> _todayVisits = [];
 
   List<AttendanceModel> _adminRecords = [];
@@ -24,6 +27,9 @@ class AttendanceProvider extends ChangeNotifier {
   AttendanceModel? get todayAttendance => _todayAttendance;
   bool get isCheckedIn => _isCheckedIn;
   bool get isCheckedOut => _isCheckedOut;
+  String? get shiftEndTime => _shiftEndTime;
+  int get sessionsTodayCount => _sessionsTodayCount;
+  double get totalHoursToday => _totalHoursToday;
   List<FieldVisitModel> get todayVisits => _todayVisits;
 
   List<AttendanceModel> get adminRecords => _adminRecords;
@@ -36,6 +42,9 @@ class AttendanceProvider extends ChangeNotifier {
       final res = await ApiClient.get('/accounts/attendance/today/');
       _isCheckedIn = res['checked_in'] == true;
       _isCheckedOut = res['checked_out'] == true;
+      _shiftEndTime = res['shift_end_time']?.toString();
+      _sessionsTodayCount = (res['sessions_today_count'] as num?)?.toInt() ?? 0;
+      _totalHoursToday = (res['total_hours_today'] as num?)?.toDouble() ?? 0.0;
       if (res['attendance'] != null) {
         _todayAttendance = AttendanceModel.fromJson(res['attendance'] as Map<String, dynamic>);
         _todayVisits = _todayAttendance!.fieldVisits;

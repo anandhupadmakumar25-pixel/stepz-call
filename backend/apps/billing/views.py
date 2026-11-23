@@ -350,6 +350,16 @@ class QuotationConvertToInvoiceView(views.APIView):
         if user.role == 'EMPLOYEE' and quote.created_by_id != user.id and (not quote.lead or quote.lead.assigned_to_id != user.id):
             return Response({"error": "Unauthorized. You can only convert your own quotations."}, status=status.HTTP_403_FORBIDDEN)
 
+        existing_invoice = Invoice.objects.filter(quotation=quote).first()
+        if quote.status == 'CONVERTED' or existing_invoice:
+            return Response(
+                {
+                    "error": "Quotation has already been converted to an invoice.",
+                    "invoice_id": str(existing_invoice.id) if existing_invoice else None,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         items = request.data.get('items', quote.items)
         custom_columns = request.data.get('custom_columns', quote.custom_columns or [])
         subtotal = request.data.get('subtotal', quote.subtotal)
@@ -598,6 +608,15 @@ class InvoiceRecordPaymentView(views.APIView):
         p_notes = serializer.validated_data.get('notes', '')
 
         prev_paid = float(inv.amount_paid)
+        remaining_balance = max(0.0, float(inv.grand_total) - prev_paid)
+        if amount <= 0:
+            return Response({"error": "Payment amount must be greater than 0."}, status=status.HTTP_400_BAD_REQUEST)
+        if amount > remaining_balance + 0.01:
+            return Response(
+                {"error": f"Payment amount ({amount:.2f}) exceeds remaining balance ({remaining_balance:.2f})."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         new_paid = prev_paid + amount
         inv.amount_paid = new_paid
         inv.payment_mode = mode

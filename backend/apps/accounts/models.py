@@ -484,12 +484,6 @@ class AttendanceRecord(TenantModel):
 
     class Meta:
         ordering = ['-date', '-check_in_time']
-        constraints = [
-            models.UniqueConstraint(
-                fields=['user', 'date'],
-                name='unique_user_daily_attendance'
-            )
-        ]
 
     def __str__(self):
         return f"{self.user.full_name} - {self.date} ({self.status})"

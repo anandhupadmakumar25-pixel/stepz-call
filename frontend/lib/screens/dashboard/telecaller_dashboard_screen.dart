@@ -141,7 +141,7 @@ class _TelecallerDashboardScreenState extends State<TelecallerDashboardScreen> {
             // Side-by-side Attendance & Daily Target Pacing on Desktop/Tablet
             LayoutBuilder(
               builder: (ctx, c) {
-                final showPunch = user?.hasPermission('attendance.punch') ?? true;
+                final showPunch = user?.hasAnyPermission(['attendance.mark_own', 'attendance.punch']) ?? false;
                 final pacingCard = _buildPacingHeroCard(
                   dash: dash,
                   targetPct: targetPct,

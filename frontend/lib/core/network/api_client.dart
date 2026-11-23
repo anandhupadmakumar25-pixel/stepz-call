@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+// flutter build apk --release --dart-define=API_URL=https://web-production-4e39b.up.railway.app
 
 class ApiClient {
   static const String _tokenKey = 'auth_token';
@@ -12,6 +13,7 @@ class ApiClient {
   static const String _envApiUrl = String.fromEnvironment('API_URL');
 
   static String get serverOrigin {
+    
     if (_envApiUrl.isNotEmpty) {
       return _envApiUrl.endsWith('/') ? _envApiUrl.substring(0, _envApiUrl.length - 1) : _envApiUrl;
     }

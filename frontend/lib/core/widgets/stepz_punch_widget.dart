@@ -233,61 +233,110 @@ class _StepzPunchWidgetState extends State<StepzPunchWidget> {
     }
     if (!mounted) return;
 
+    final attP = context.read<AttendanceProvider>();
+    final now = DateTime.now();
+    bool isEarlyCheckout = false;
+    final endStr = attP.shiftEndTime ?? '18:00:00';
+    final parts = endStr.split(':');
+    if (parts.length >= 2) {
+      final endH = int.tryParse(parts[0]) ?? 18;
+      final endM = int.tryParse(parts[1]) ?? 0;
+      final shiftEndToday = DateTime(now.year, now.month, now.day, endH, endM);
+      isEarlyCheckout = now.isBefore(shiftEndToday);
+    }
+
+    final reasonCtrl = TextEditingController();
+    String? dialogError;
+
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(
-          children: [
-            const Icon(Icons.logout_rounded, color: AppColors.neonCoral, size: 22),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                'Confirm Check Out?',
-                style: GoogleFonts.inter(color: const Color(0xFF0F172A), fontWeight: FontWeight.w800, fontSize: 16),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlgState) => AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              const Icon(Icons.logout_rounded, color: AppColors.neonCoral, size: 22),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  isEarlyCheckout ? 'Early Check Out — Reason Required' : 'Confirm Check Out?',
+                  style: GoogleFonts.inter(color: const Color(0xFF0F172A), fontWeight: FontWeight.w800, fontSize: 16),
+                ),
               ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                isEarlyCheckout
+                    ? 'You are checking out before office shift end time ($endStr). Please enter your reason (e.g. outside client visit, break, personal work).'
+                    : 'Are you sure you want to check out? You can check in again later today if you return.',
+                style: GoogleFonts.inter(color: const Color(0xFF475569), fontSize: 13, height: 1.4),
+              ),
+              if (isEarlyCheckout) ...[
+                const SizedBox(height: 12),
+                TextField(
+                  controller: reasonCtrl,
+                  maxLines: 2,
+                  decoration: InputDecoration(
+                    labelText: 'Checkout Reason *',
+                    hintText: 'Why are you checking out early?',
+                    errorText: dialogError,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    isDense: true,
+                  ),
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.neonCoral,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: () {
+                if (isEarlyCheckout && reasonCtrl.text.trim().isEmpty) {
+                  setDlgState(() => dialogError = 'Please enter a reason');
+                  return;
+                }
+                Navigator.pop(ctx, true);
+              },
+              child: const Text('Confirm Check Out', style: TextStyle(fontWeight: FontWeight.w700)),
             ),
           ],
         ),
-        content: Text(
-          'Are you sure you want to check out for today? Your working hours will be calculated using your current timestamp.',
-          style: GoogleFonts.inter(color: const Color(0xFF475569), fontSize: 13, height: 1.4),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.neonCoral,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Confirm Check Out', style: TextStyle(fontWeight: FontWeight.w700)),
-          ),
-        ],
       ),
     );
 
     if (confirm != true || !mounted) return;
 
-    final attP = context.read<AttendanceProvider>();
     final ok = await attP.checkOut(
       latitude: _currentPosition?.latitude,
       longitude: _currentPosition?.longitude,
-      address: _closestBranch != null ? '${_closestBranch!.name} Perimeter' : 'Live GPS Punch-out',
+      address: _closestBranch != null ? '${_closestBranch!.name} Perimeter' : 'Live GPS Check-out',
+      notes: reasonCtrl.text.trim(),
     );
-
     if (ok && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Punch-out recorded! Shift closed for today.'),
+          content: Text('Checked out successfully!'),
           backgroundColor: AppColors.success,
         ),
       );
       await attP.fetchTodayStatus();
       widget.onAttendanceChanged?.call();
+    } else if (attP.errorMessage != null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(attP.errorMessage!), backgroundColor: AppColors.neonCoral),
+      );
     }
+    return;
   }
 
   @override
@@ -600,37 +649,49 @@ class _StepzPunchWidgetState extends State<StepzPunchWidget> {
               ],
             ),
           ] else ...[
-            // Status: Shift Completed
+            // Status: Checked Out -> Show Today's Logged Hours + Allow Re-Check-In
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
-                color: const Color(0xFF10B981).withValues(alpha: 0.1),
+                color: const Color(0xFF10B981).withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.3)),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.check_circle_rounded, color: Color(0xFF10B981), size: 22),
+                  const Icon(Icons.check_circle_rounded, color: Color(0xFF10B981), size: 20),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Shift Completed for Today',
+                          'Last Checked Out (${attP.sessionsTodayCount} session${attP.sessionsTodayCount == 1 ? '' : 's'} today)',
                           style: GoogleFonts.inter(
-                            fontSize: 13,
+                            fontSize: 12.5,
                             fontWeight: FontWeight.w700,
                             color: const Color(0xFF0F172A),
                           ),
                         ),
                         Text(
-                          'Total Logged: ${today?.workingHours.toStringAsFixed(1) ?? '0.0'} hrs (${today?.checkInTime != null ? DateFormat('hh:mm a').format(today!.checkInTime!.toLocal()) : '--'} to ${today?.checkOutTime != null ? DateFormat('hh:mm a').format(today!.checkOutTime!.toLocal()) : '--'})',
+                          'Total Logged Today: ${attP.totalHoursToday.toStringAsFixed(2)} hrs · Last: ${today?.checkOutTime != null ? DateFormat('hh:mm a').format(today!.checkOutTime!.toLocal()) : '--'}',
                           style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
                         ),
                       ],
                     ),
                   ),
+                  const SizedBox(width: 8),
+                  attP.isLoading
+                      ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2))
+                      : GradientPrimaryButton(
+                          text: 'Check In',
+                          icon: Icons.fingerprint_rounded,
+                          height: 36,
+                          gradient: _isInsideGeofence || isFieldStaff
+                              ? AppColors.primaryGradient
+                              : const LinearGradient(colors: [Color(0xFF94A3B8), Color(0xFF64748B)]),
+                          onPressed: () => _handlePunchIn(isFieldStaff),
+                        ),
                 ],
               ),
             ),
