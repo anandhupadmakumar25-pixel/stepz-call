@@ -20,10 +20,22 @@ class PushNotificationService {
   bool _listenersAttached = false;
   String? _lastRegisteredToken;
 
-  static const String _apiKey = String.fromEnvironment('FIREBASE_API_KEY');
-  static const String _appId = String.fromEnvironment('FIREBASE_APP_ID');
-  static const String _senderId = String.fromEnvironment('FIREBASE_MESSAGING_SENDER_ID');
-  static const String _projectId = String.fromEnvironment('FIREBASE_PROJECT_ID');
+  static const String _apiKey = String.fromEnvironment(
+    'FIREBASE_API_KEY',
+    defaultValue: 'AIzaSyARM09F0FUHQSUi1PMezEerveHK3RHShMQ',
+  );
+  static const String _appId = String.fromEnvironment(
+    'FIREBASE_APP_ID',
+    defaultValue: '1:800980554425:web:08be0780abe4377171c168',
+  );
+  static const String _senderId = String.fromEnvironment(
+    'FIREBASE_MESSAGING_SENDER_ID',
+    defaultValue: '800980554425',
+  );
+  static const String _projectId = String.fromEnvironment(
+    'FIREBASE_PROJECT_ID',
+    defaultValue: 'stepz-call',
+  );
   static const String _vapidKey = String.fromEnvironment('FIREBASE_VAPID_KEY');
 
   /// Maps backend `notification_type` / `entity_type` to a MainLayout `routeKey`.

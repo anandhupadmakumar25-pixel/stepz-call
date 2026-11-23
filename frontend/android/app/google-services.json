@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "800980554425",
+    "project_id": "stepz-call",
+    "storage_bucket": "stepz-call.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:800980554425:android:2f9b5369a6bf33ad71c168",
+        "android_client_info": {
+          "package_name": "com.stepz.call"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCHvnw_izcJTnejrAZ9tsYBI8JsR0JZUkM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
