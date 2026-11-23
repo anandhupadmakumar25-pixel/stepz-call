@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/responsive/responsive_layout.dart';
+import '../../core/services/push_notification_service.dart';
 import '../../core/widgets/glass/app_background.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/notification_provider.dart';
@@ -76,6 +77,7 @@ class _MainLayoutState extends State<MainLayout> with WidgetsBindingObserver {
         auth.refreshProfile();
         context.read<NotificationProvider>().fetchNotifications();
         context.read<CallbackProvider>().checkReminders();
+        _initPushNotifications();
       }
     });
     _profileRefreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
@@ -83,7 +85,60 @@ class _MainLayoutState extends State<MainLayout> with WidgetsBindingObserver {
       final auth = context.read<AuthProvider>();
       if (auth.isAuthenticated) {
         auth.refreshProfile();
+        context.read<NotificationProvider>().fetchNotifications();
       }
+    });
+  }
+
+  void _initPushNotifications() {
+    PushNotificationService.instance.registerDeviceToken();
+    PushNotificationService.instance.attachListeners(
+      onForegroundMessage: (message) {
+        if (!mounted) return;
+        context.read<NotificationProvider>().fetchNotifications();
+        final title = message.notification?.title ?? message.data['title']?.toString() ?? 'New Notification';
+        final body = message.notification?.body ?? message.data['body']?.toString() ?? '';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(body.isNotEmpty ? '$title: $body' : title),
+            behavior: SnackBarBehavior.floating,
+            action: SnackBarAction(
+              label: 'View',
+              onPressed: () {
+                final nid = message.data['notification_id']?.toString();
+                if (nid != null && nid.isNotEmpty) {
+                  context.read<NotificationProvider>().markAsRead(nid);
+                }
+                _navigateByNotification(
+                  message.data['notification_type']?.toString() ?? '',
+                  message.data['entity_type']?.toString() ?? '',
+                );
+              },
+            ),
+          ),
+        );
+      },
+      onNotificationOpened: (data) {
+        if (!mounted) return;
+        final nid = data['notification_id']?.toString();
+        if (nid != null && nid.isNotEmpty) {
+          context.read<NotificationProvider>().markAsRead(nid);
+        }
+        _navigateByNotification(
+          data['notification_type']?.toString() ?? '',
+          data['entity_type']?.toString() ?? '',
+        );
+      },
+    );
+  }
+
+  String? _pendingRouteKey;
+
+  void _navigateByNotification(String notificationType, String entityType) {
+    final routeKey = PushNotificationService.resolveRouteKey(notificationType, entityType);
+    if (!mounted) return;
+    setState(() {
+      _pendingRouteKey = routeKey;
     });
   }
 
@@ -93,6 +148,7 @@ class _MainLayoutState extends State<MainLayout> with WidgetsBindingObserver {
       final auth = context.read<AuthProvider>();
       if (auth.isAuthenticated) {
         auth.refreshProfile();
+        context.read<NotificationProvider>().fetchNotifications();
       }
     }
   }
@@ -482,6 +538,17 @@ class _MainLayoutState extends State<MainLayout> with WidgetsBindingObserver {
       }
     }
 
+    if (_pendingRouteKey != null) {
+      final routeTarget = _pendingRouteKey!;
+      _pendingRouteKey = null;
+      final targetIdx = navItems.indexWhere((it) => it.routeKey == routeTarget);
+      if (targetIdx != -1) {
+        _selectedIndex = targetIdx;
+      } else {
+        _selectedIndex = 0;
+      }
+    }
+
     if (_selectedIndex >= navItems.length) {
       _selectedIndex = 0;
     }
@@ -509,7 +576,10 @@ class _MainLayoutState extends State<MainLayout> with WidgetsBindingObserver {
                 ),
               )
             : null,
-        endDrawer: const NotificationDrawer(),
+        endDrawer: NotificationDrawer(
+          onNavigateNotification: (item) =>
+              _navigateByNotification(item.notificationType, item.entityType),
+        ),
         body: Row(
           children: [
             // Desktop Executive Navigation Sidebar in Crisp White & Gold/Emerald

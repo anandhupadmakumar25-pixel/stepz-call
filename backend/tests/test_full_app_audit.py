@@ -432,3 +432,49 @@ class FullAppLogicAuditTests(TestCase):
         # Company B admin cannot access Company A recording
         res_other = admin_b_client.get(f'/api/v1/calls/recordings/{rec_id}/')
         self.assertIn(res_other.status_code, [403, 404])
+
+    # ------------------------------------------------------------------
+    # 8. NOTIFICATIONS: TRIGGER, READ/UNREAD & PUSH TOKEN REGISTRATION
+    # ------------------------------------------------------------------
+    def test_notifications_trigger_read_unread_and_push_token_registration(self):
+        from apps.notifications.models import Notification, PushDeviceToken
+
+        notif = Notification.objects.create(
+            company=self.company_a,
+            user=self.emp_a,
+            title='Callback Due',
+            message='Call back Buyer in 10 minutes',
+            notification_type='CALLBACK_REMINDER',
+            entity_type='callback',
+            entity_id='cb-123',
+        )
+
+        emp_client = self._client(self.emp_a)
+        admin_client = self._client(self.admin_a)
+
+        # Unread initially
+        r_list = emp_client.get('/api/v1/notifications/')
+        self.assertEqual(r_list.status_code, 200)
+        self.assertEqual(r_list.data['unread_count'], 1)
+        self.assertEqual(r_list.data['notifications'][0]['entity_type'], 'callback')
+
+        # Mark read
+        r_read = emp_client.post(f'/api/v1/notifications/{notif.id}/mark-read/', {}, format='json')
+        self.assertEqual(r_read.status_code, 200)
+        r_unread_list = emp_client.get('/api/v1/notifications/?filter=unread')
+        self.assertEqual(r_unread_list.data['unread_count'], 0)
+        self.assertEqual(len(r_unread_list.data['notifications']), 0)
+
+        # Mark unread
+        r_unread = emp_client.post(f'/api/v1/notifications/{notif.id}/mark-unread/', {}, format='json')
+        self.assertEqual(r_unread.status_code, 200)
+        r_unread_list2 = emp_client.get('/api/v1/notifications/?filter=unread')
+        self.assertEqual(r_unread_list2.data['unread_count'], 1)
+        self.assertEqual(len(r_unread_list2.data['notifications']), 1)
+
+        # Push token registration + device user switch does not throw IntegrityError
+        r_tok1 = emp_client.post('/api/v1/notifications/register-token/', {'token': 'fcm-tok-1', 'device_type': 'android'}, format='json')
+        self.assertEqual(r_tok1.status_code, 200)
+        r_tok2 = admin_client.post('/api/v1/notifications/register-token/', {'token': 'fcm-tok-1', 'device_type': 'android'}, format='json')
+        self.assertEqual(r_tok2.status_code, 200)
+        self.assertEqual(PushDeviceToken.objects.get(token='fcm-tok-1').user_id, self.admin_a.id)

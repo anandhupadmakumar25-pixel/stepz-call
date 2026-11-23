@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:telecaller_crm/core/services/push_notification_service.dart';
 import 'package:telecaller_crm/core/widgets/stepz_punch_widget.dart';
 import 'package:telecaller_crm/models/attendance_model.dart';
 import 'package:telecaller_crm/models/user_model.dart';
 import 'package:telecaller_crm/providers/attendance_provider.dart';
 import 'package:telecaller_crm/providers/auth_provider.dart';
 import 'package:telecaller_crm/providers/lead_provider.dart';
+import 'package:telecaller_crm/providers/notification_provider.dart';
 
 void main() {
   setUp(() {
@@ -108,6 +110,31 @@ void main() {
       await tester.pump();
       expect(find.byType(StepzPunchWidget), findsOneWidget);
       expect(find.textContaining('Check In'), findsWidgets);
+    });
+  });
+
+  group('Notification Deep-Link & Model Logic', () {
+    test('Maps notification types and entity types to target screens', () {
+      expect(PushNotificationService.resolveRouteKey('CALLBACK_REMINDER', 'callback'), 'callbacks');
+      expect(PushNotificationService.resolveRouteKey('LEAD_ASSIGNED', 'lead'), 'leads');
+      expect(PushNotificationService.resolveRouteKey('SYSTEM', 'invoice'), 'billing');
+      expect(PushNotificationService.resolveRouteKey('SYSTEM', 'attendance'), 'attendance');
+    });
+
+    test('Parses NotificationItem entityType and entityId', () {
+      final n = NotificationItem.fromJson({
+        'id': 'n1',
+        'title': 'Callback Due',
+        'message': 'Call Lead',
+        'notification_type': 'CALLBACK_REMINDER',
+        'entity_type': 'callback',
+        'entity_id': 'cb-1',
+        'is_read': false,
+        'created_at': '2026-11-23T10:00:00Z',
+      });
+      expect(n.entityType, 'callback');
+      expect(n.entityId, 'cb-1');
+      expect(n.isRead, isFalse);
     });
   });
 }

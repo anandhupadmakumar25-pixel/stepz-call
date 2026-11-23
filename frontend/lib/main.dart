@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'core/theme/app_theme.dart';
+import 'core/services/push_notification_service.dart';
 import 'providers/auth_provider.dart';
 import 'providers/dashboard_provider.dart';
 import 'providers/lead_provider.dart';
@@ -20,8 +21,9 @@ import 'screens/auth/login_screen.dart';
 import 'screens/layout/main_layout.dart';
 import 'routes/app_routes.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await PushNotificationService.instance.initialize();
   runApp(const TelecallerCrmApp());
 }
 
