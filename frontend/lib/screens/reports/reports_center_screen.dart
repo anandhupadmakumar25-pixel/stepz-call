@@ -7,6 +7,7 @@ import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 import '../../core/network/api_client.dart';
 import '../../core/widgets/date_range_filter_bar.dart';
+import '../../core/widgets/action_loader.dart';
 import '../../core/widgets/glass/glass_card.dart';
 import '../../providers/auth_provider.dart';
 
@@ -82,13 +83,19 @@ class _ReportsCenterScreenState extends State<ReportsCenterScreen> {
   Future<void> _exportCsv(String activeKey) async {
     final rows = _getRowsFor(activeKey);
     if (rows.isEmpty) return;
-    final headers = rows.first.keys.toList();
-    final buf = StringBuffer();
-    buf.writeln(headers.join(','));
-    for (final r in rows) {
-      buf.writeln(headers.map((h) => '"${(r[h] ?? '').toString().replaceAll('"', '""')}"').join(','));
-    }
-    await Clipboard.setData(ClipboardData(text: buf.toString()));
+    await ActionLoader.run(
+      context,
+      message: 'Exporting CSV Report...',
+      task: () async {
+        final headers = rows.first.keys.toList();
+        final buf = StringBuffer();
+        buf.writeln(headers.join(','));
+        for (final r in rows) {
+          buf.writeln(headers.map((h) => '"${(r[h] ?? '').toString().replaceAll('"', '""')}"').join(','));
+        }
+        await Clipboard.setData(ClipboardData(text: buf.toString()));
+      },
+    );
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -99,42 +106,47 @@ class _ReportsCenterScreenState extends State<ReportsCenterScreen> {
   }
 
   Future<void> _exportPdf(String activeKey) async {
-    final user = context.read<AuthProvider>().currentUser;
-    final rows = _getRowsFor(activeKey);
-    final doc = pw.Document();
-    final title = {
-      'sales': 'Sales & Billing Report',
-      'calls': 'Telecaller & Call Performance Report',
-      'leads': 'Lead Pipeline Report',
-      'attendance': 'HR & Attendance Report',
-    }[activeKey] ?? 'Report';
+    await ActionLoader.run(
+      context,
+      message: 'Generating PDF Report...',
+      task: () async {
+        final user = context.read<AuthProvider>().currentUser;
+        final rows = _getRowsFor(activeKey);
+        final doc = pw.Document();
+        final title = {
+          'sales': 'Sales & Billing Report',
+          'calls': 'Telecaller & Call Performance Report',
+          'leads': 'Lead Pipeline Report',
+          'attendance': 'HR & Attendance Report',
+        }[activeKey] ?? 'Report';
 
-    doc.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.a4.landscape,
-        build: (ctx) {
-          final headers = rows.isNotEmpty ? rows.first.keys.toList() : <String>[];
-          return [
-            pw.Text(user?.companyName ?? 'Company Report', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo900)),
-            pw.SizedBox(height: 4),
-            pw.Text('$title  |  Range: ${_dateFrom ?? "All Time"} to ${_dateTo ?? "Present"}', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
-            pw.SizedBox(height: 14),
-            if (rows.isEmpty)
-              pw.Text('No records found for selected date range.')
-            else
-              pw.TableHelper.fromTextArray(
-                headers: headers.map((h) => h.toUpperCase().replaceAll('_', ' ')).toList(),
-                data: rows.map((r) => headers.map((h) => '${r[h] ?? ''}').toList()).toList(),
-                headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8, color: PdfColors.white),
-                headerDecoration: const pw.BoxDecoration(color: PdfColors.indigo900),
-                cellStyle: const pw.TextStyle(fontSize: 8),
-              ),
-          ];
-        },
-      ),
+        doc.addPage(
+          pw.MultiPage(
+            pageFormat: PdfPageFormat.a4.landscape,
+            build: (ctx) {
+              final headers = rows.isNotEmpty ? rows.first.keys.toList() : <String>[];
+              return [
+                pw.Text(user?.companyName ?? 'Company Report', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo900)),
+                pw.SizedBox(height: 4),
+                pw.Text('$title  |  Range: ${_dateFrom ?? "All Time"} to ${_dateTo ?? "Present"}', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
+                pw.SizedBox(height: 14),
+                if (rows.isEmpty)
+                  pw.Text('No records found for selected date range.')
+                else
+                  pw.TableHelper.fromTextArray(
+                    headers: headers.map((h) => h.toUpperCase().replaceAll('_', ' ')).toList(),
+                    data: rows.map((r) => headers.map((h) => '${r[h] ?? ''}').toList()).toList(),
+                    headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8, color: PdfColors.white),
+                    headerDecoration: const pw.BoxDecoration(color: PdfColors.indigo900),
+                    cellStyle: const pw.TextStyle(fontSize: 8),
+                  ),
+              ];
+            },
+          ),
+        );
+        await Printing.layoutPdf(onLayout: (_) async => doc.save(), name: '${activeKey}_report.pdf');
+      },
     );
-
-    await Printing.layoutPdf(onLayout: (_) async => doc.save(), name: '${activeKey}_report.pdf');
   }
 
   List<Map<String, dynamic>> _getRowsFor(String key) {

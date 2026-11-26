@@ -78,13 +78,20 @@ class CompanyListCreateView(views.APIView):
             qs = Company.objects.all().select_related('plan', 'created_by', 'assigned_super_admin')
             if super_admin_filter:
                 qs = qs.filter(Q(created_by_id=super_admin_filter) | Q(assigned_super_admin_id=super_admin_filter))
-            return Response(CompanySerializer(qs.order_by('-created_at'), many=True).data)
+            companies = list(qs.order_by('-created_at'))
+            for c in companies:
+                c.check_and_update_status()
+            return Response(CompanySerializer(companies, many=True).data)
         elif request.user.role == 'SUPER_ADMIN':
             qs = Company.objects.filter(
                 Q(created_by=request.user) | Q(assigned_super_admin=request.user)
             ).select_related('plan', 'created_by', 'assigned_super_admin').order_by('-created_at')
-            return Response(CompanySerializer(qs, many=True).data)
+            companies = list(qs)
+            for c in companies:
+                c.check_and_update_status()
+            return Response(CompanySerializer(companies, many=True).data)
         elif request.user.company:
+            request.user.company.check_and_update_status()
             return Response([CompanySerializer(request.user.company).data])
         return Response([])
 
@@ -188,6 +195,18 @@ class CompanyListCreateView(views.APIView):
                     plan.price_yearly if plan_billing_cycle == 'YEARLY'
                     else plan.price_monthly
                 )
+                init_status = str(request.data.get('initial_payment_status') or 'DUE').upper()
+                if init_status == 'DUE':
+                    paid_val = 0.00
+                    due_val = initial_amount
+                    pay_mode = 'DUE'
+                    pay_notes = 'Initial plan billing marked as Due on company creation'
+                else:
+                    paid_val = float(request.data.get('initial_amount_paid') or initial_amount)
+                    due_val = max(0.0, float(initial_amount) - paid_val)
+                    init_status = 'PARTIAL' if due_val > 0 and paid_val > 0 else 'PAID'
+                    pay_mode = str(request.data.get('payment_mode') or 'BANK_TRANSFER').upper()
+                    pay_notes = 'Initial plan billing on company creation'
                 CompanySubscriptionHistory.objects.create(
                     company=company,
                     plan_name=plan.name,
@@ -195,10 +214,14 @@ class CompanyListCreateView(views.APIView):
                     extension_days=plan_duration_days,
                     previous_expiry=None,
                     new_expiry=plan_expires_at,
-                    amount_paid=initial_amount,
+                    amount_paid=paid_val,
+                    due_amount=due_val,
                     currency=plan.currency,
+                    payment_status=init_status,
+                    payment_mode=pay_mode,
+                    transaction_ref=str(request.data.get('transaction_ref') or '').strip(),
                     approved_by=request.user,
-                    notes='Initial plan billing on company creation',
+                    notes=pay_notes,
                 )
 
         return Response({
@@ -397,24 +420,174 @@ class CompanyRenewPlanView(views.APIView):
 
         company.save()
 
+        # Calculate expected renewal amount & payment status (defaults to DUE unless marked PAID/PARTIAL)
+        expected_amount = 0.0
+        if company.plan:
+            if billing_cycle == 'YEARLY':
+                expected_amount = float(company.plan.price_yearly or 0)
+            elif billing_cycle == 'QUARTERLY':
+                expected_amount = round(float(company.plan.price_monthly or 0) * 3, 2)
+            elif billing_cycle == 'MONTHLY':
+                expected_amount = float(company.plan.price_monthly or 0)
+            else:
+                expected_amount = round(float(company.plan.price_monthly or 0) * max(1.0, calc_days / 30.0), 2)
+
+        pay_status = str(request.data.get('payment_status') or 'DUE').upper()
+        if pay_status == 'DUE':
+            paid_val = 0.00
+            due_val = expected_amount
+            pay_mode = 'DUE'
+            pay_notes = 'Plan renewed (marked as Due)'
+        else:
+            try:
+                paid_val = float(request.data.get('amount_paid') or expected_amount)
+            except (TypeError, ValueError):
+                paid_val = expected_amount
+            due_val = max(0.0, expected_amount - paid_val)
+            pay_status = 'PARTIAL' if due_val > 0 and paid_val > 0 else 'PAID'
+            pay_mode = str(request.data.get('payment_mode') or 'BANK_TRANSFER').upper()
+            pay_notes = 'Plan renewed & payment recorded'
+
+        if paid_val > 0:
+            to_settle = paid_val
+            open_dues = CompanySubscriptionHistory.objects.filter(company=company, due_amount__gt=0).order_by('created_at')
+            for old_h in open_dues:
+                if to_settle <= 0:
+                    break
+                old_due = float(old_h.due_amount or 0)
+                if to_settle >= old_due:
+                    old_h.due_amount = 0
+                    old_h.payment_status = 'PAID'
+                    to_settle -= old_due
+                else:
+                    old_h.due_amount = old_due - to_settle
+                    old_h.payment_status = 'PARTIAL'
+                    to_settle = 0
+                old_h.save(update_fields=['due_amount', 'payment_status', 'updated_at'])
+
         # Log into history
         CompanySubscriptionHistory.objects.create(
             company=company,
             plan_name=company.plan.name if company.plan else 'Standard',
-            billing_cycle=billing_cycle,
+            billing_cycle=billing_cycle if billing_cycle in ['MONTHLY', 'YEARLY', 'DAYS', 'CUSTOM_DATE'] else 'MONTHLY',
             extension_days=calc_days,
             previous_expiry=previous_expiry,
             new_expiry=company.plan_expires_at,
-            amount_paid=0.00,
+            amount_paid=paid_val,
+            due_amount=due_val,
             currency=company.plan.currency if company.plan else 'INR',
+            payment_status=pay_status,
+            payment_mode=pay_mode,
+            transaction_ref=str(request.data.get('transaction_ref') or '').strip(),
             approved_by=request.user,
-            notes='Direct renewal by Admin'
+            notes=pay_notes,
         )
 
         return Response({
             "message": f"Plan renewed successfully until {company.plan_expires_at.strftime('%d %b %Y')}.",
             "company": CompanySerializer(company).data
         }, status=status.HTTP_200_OK)
+
+
+class CompanyCollectPaymentView(views.APIView):
+    """
+    Allows Master Admin (any tenant) or Super Admin (their own assigned/created tenants)
+    to mark a company payment as Paid / Partial, settle open dues, generate a receipt,
+    and optionally extend validity & reactivate a suspended tenant.
+    """
+    permission_classes = [IsSuperAdmin]
+
+    def post(self, request, pk):
+        company = Company.objects.select_related('plan', 'assigned_super_admin', 'created_by').filter(id=pk).first()
+        if not company:
+            return Response({"error": "Company not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        if not request.user.is_master_admin:
+            if company.assigned_super_admin_id != request.user.id and company.created_by_id != request.user.id:
+                return Response(
+                    {"error": "You can only record payments for tenants assigned to or created by you."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+        try:
+            amount_paid = float(request.data.get('amount_paid') or 0.0)
+        except (TypeError, ValueError):
+            return Response({"error": "Invalid amount_paid"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if amount_paid <= 0:
+            return Response({"error": "amount_paid must be greater than 0"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            remaining_due = max(0.0, float(request.data.get('due_amount') or 0.0))
+        except (TypeError, ValueError):
+            remaining_due = 0.0
+
+        billing_cycle = str(request.data.get('billing_cycle') or company.plan_billing_cycle or 'MONTHLY').upper()
+        if billing_cycle not in ['MONTHLY', 'YEARLY', 'DAYS', 'CUSTOM_DATE']:
+            billing_cycle = 'MONTHLY'
+
+        try:
+            extension_days = int(request.data.get('extension_days') or (365 if billing_cycle == 'YEARLY' else 30))
+        except (TypeError, ValueError):
+            extension_days = 30
+
+        payment_mode = str(request.data.get('payment_mode') or 'BANK_TRANSFER').upper()
+        transaction_ref = str(request.data.get('transaction_ref') or '').strip()
+        notes = str(request.data.get('notes') or 'Subscription payment collected').strip()
+        currency = str(request.data.get('currency') or (company.plan.currency if company.plan else 'INR')).strip().upper()
+
+        now = timezone.now()
+        previous_expiry = company.plan_expires_at
+        if extension_days > 0:
+            base_date = previous_expiry if (previous_expiry and previous_expiry > now) else now
+            company.plan_expires_at = base_date + timedelta(days=extension_days)
+
+        company.plan_billing_cycle = billing_cycle
+        if company.status != 'ACTIVE':
+            company.status = 'ACTIVE'
+        company.save()
+
+        # Clear/settle open DUE amounts on earlier history rows when payment is collected
+        open_dues = CompanySubscriptionHistory.objects.filter(company=company, due_amount__gt=0).order_by('created_at')
+        to_settle = amount_paid
+        for old_h in open_dues:
+            if to_settle <= 0:
+                break
+            old_due = float(old_h.due_amount or 0)
+            if to_settle >= old_due:
+                to_settle -= old_due
+                old_h.due_amount = 0.00
+                if old_h.payment_status == 'DUE':
+                    old_h.payment_status = 'PAID'
+                old_h.save(update_fields=['due_amount', 'payment_status', 'updated_at'])
+            else:
+                old_h.due_amount = round(old_due - to_settle, 2)
+                old_h.payment_status = 'PARTIAL'
+                to_settle = 0
+                old_h.save(update_fields=['due_amount', 'payment_status', 'updated_at'])
+
+        hist = CompanySubscriptionHistory.objects.create(
+            company=company,
+            plan_name=company.plan.name if company.plan else 'Standard',
+            billing_cycle=billing_cycle,
+            extension_days=max(0, extension_days),
+            previous_expiry=previous_expiry,
+            new_expiry=company.plan_expires_at or now,
+            amount_paid=amount_paid,
+            due_amount=remaining_due,
+            currency=currency,
+            payment_status='PARTIAL' if remaining_due > 0 else 'PAID',
+            payment_mode=payment_mode,
+            transaction_ref=transaction_ref,
+            approved_by=request.user,
+            notes=notes,
+        )
+
+        return Response({
+            "message": f"Payment recorded ({hist.receipt_number}) for {company.name}.",
+            "receipt": CompanySubscriptionHistorySerializer(hist).data,
+            "company": CompanySerializer(company).data,
+        }, status=status.HTTP_201_CREATED)
 
 class CompanyResetPasswordView(views.APIView):
     permission_classes = [IsSuperAdmin]
@@ -479,42 +652,222 @@ class PlatformBillingOverviewView(views.APIView):
     permission_classes = [IsSuperAdmin]
 
     def get(self, request):
+        from apps.accounts.region_utils import resolve_request_country
+        from apps.billing.fx_utils import get_fx_rates, convert_amount, build_fx_metric
+
         user = request.user
-        base_companies = Company.objects.all()
+        _, _, target_currency, target_symbol = resolve_request_country(request, company=None)
+        rates = get_fx_rates()
+        now_year = timezone.now().year
+
+        base_companies = Company.objects.all().select_related('plan', 'assigned_super_admin', 'created_by')
         if not user.is_master_admin:
             base_companies = base_companies.filter(
                 Q(assigned_super_admin=user) | Q(created_by=user)
             )
 
-        active_companies = base_companies.filter(status='ACTIVE')
-        total_companies = base_companies.count()
+        companies_list = list(base_companies)
+        for c in companies_list:
+            c.check_and_update_status()
+        total_companies = len(companies_list)
+        active_companies = [c for c in companies_list if c.status == 'ACTIVE']
+        suspended_count = total_companies - len(active_companies)
 
-        # Calculate MRR from active plans
+        # Actual collected revenue & open dues from subscription history
+        histories = list(
+            CompanySubscriptionHistory.objects.filter(company__in=base_companies)
+            .select_related('company', 'approved_by', 'company__assigned_super_admin', 'company__created_by')
+            .order_by('-created_at')
+        )
+        paid_by_company = {}
+        due_by_company = {}
+        collected_by_curr = {}
+        due_by_curr = {}
+        actual_collected_total = 0.0
+        actual_collected_ytd = 0.0
+        total_due = 0.0
+        receipts_payload = []
+        for h in histories:
+            amt = float(h.amount_paid or 0.0)
+            due_amt = float(h.due_amount or 0.0)
+            curr = (h.currency or 'INR').strip().upper()
+            conv = convert_amount(amt, curr, target_currency, rates)
+            conv_due = convert_amount(due_amt, curr, target_currency, rates)
+
+            if amt > 0:
+                actual_collected_total += conv
+                if h.created_at and h.created_at.year == now_year:
+                    actual_collected_ytd += conv
+                paid_by_company[h.company_id] = paid_by_company.get(h.company_id, 0.0) + conv
+                collected_by_curr[curr] = collected_by_curr.get(curr, 0.0) + amt
+
+            if due_amt > 0:
+                total_due += conv_due
+                due_by_company[h.company_id] = due_by_company.get(h.company_id, 0.0) + conv_due
+                due_by_curr[curr] = due_by_curr.get(curr, 0.0) + due_amt
+
+            if len(receipts_payload) < 40 and (amt > 0 or due_amt > 0):
+                h_owner = h.company.assigned_super_admin or h.company.created_by
+                h_owner_name = (
+                    'Platform Master (Direct)'
+                    if (h_owner is None or getattr(h_owner, 'is_master_admin', False))
+                    else (h_owner.full_name or h_owner.email)
+                )
+                receipts_payload.append({
+                    'id': str(h.id),
+                    'receipt_number': h.receipt_number or f'SUB-{str(h.id)[:6].upper()}',
+                    'company_id': str(h.company_id),
+                    'company_name': h.company.name,
+                    'company_email': h.company.contact_email,
+                    'owner_name': h_owner_name,
+                    'plan_name': h.plan_name,
+                    'billing_cycle': h.billing_cycle,
+                    'extension_days': h.extension_days,
+                    'previous_expiry': h.previous_expiry.isoformat() if h.previous_expiry else None,
+                    'new_expiry': h.new_expiry.isoformat() if h.new_expiry else None,
+                    'amount_paid': round(amt, 2),
+                    'due_amount': round(due_amt, 2),
+                    'converted_paid': round(conv, 2),
+                    'converted_due': round(conv_due, 2),
+                    'currency': curr,
+                    'payment_status': h.payment_status,
+                    'payment_mode': h.payment_mode,
+                    'transaction_ref': h.transaction_ref,
+                    'approved_by_name': h.approved_by.full_name if h.approved_by else 'System',
+                    'notes': h.notes,
+                    'created_at': h.created_at.isoformat() if h.created_at else None,
+                })
+
+        # Active MRR & Projected Annual (ACTIVE non-suspended tenants only)
         mrr = 0.0
-        for comp in active_companies.select_related('plan'):
-            if comp.plan:
-                mrr += float(comp.plan.price_monthly)
+        mrr_by_curr = {}
+        owner_map = {}
+        tenant_breakdown = []
 
-        arr = mrr * 12.0
+        for comp in companies_list:
+            owner = comp.assigned_super_admin or comp.created_by
+            if owner is None or getattr(owner, 'is_master_admin', False):
+                owner_key = 'MASTER'
+                owner_name = 'Platform Master (Direct)'
+                owner_email = getattr(owner, 'email', '') if owner else ''
+            else:
+                owner_key = str(owner.id)
+                owner_name = owner.full_name or owner.email
+                owner_email = owner.email
+
+            if owner_key not in owner_map:
+                owner_map[owner_key] = {
+                    'owner_id': owner_key,
+                    'owner_name': owner_name,
+                    'owner_email': owner_email,
+                    'total_tenants': 0,
+                    'active_tenants': 0,
+                    'suspended_tenants': 0,
+                    'active_mrr': 0.0,
+                    'projected_annual': 0.0,
+                    'actual_collected': 0.0,
+                    'due_amount': 0.0,
+                }
+
+            owner_entry = owner_map[owner_key]
+            owner_entry['total_tenants'] += 1
+            comp_paid = round(paid_by_company.get(comp.id, 0.0), 2)
+            comp_due = round(due_by_company.get(comp.id, 0.0), 2)
+            owner_entry['actual_collected'] = round(owner_entry['actual_collected'] + comp_paid, 2)
+            owner_entry['due_amount'] = round(owner_entry['due_amount'] + comp_due, 2)
+
+            plan_curr = (comp.plan.currency if comp.plan else 'INR').strip().upper()
+            monthly_raw = 0.0
+            if comp.plan:
+                if comp.plan_billing_cycle == 'YEARLY' and float(comp.plan.price_yearly or 0) > 0:
+                    monthly_raw = float(comp.plan.price_yearly) / 12.0
+                else:
+                    monthly_raw = float(comp.plan.price_monthly or 0)
+            monthly_conv = convert_amount(monthly_raw, plan_curr, target_currency, rates)
+
+            if comp.status == 'ACTIVE':
+                owner_entry['active_tenants'] += 1
+                mrr += monthly_conv
+                mrr_by_curr[plan_curr] = mrr_by_curr.get(plan_curr, 0.0) + monthly_raw
+                owner_entry['active_mrr'] = round(owner_entry['active_mrr'] + monthly_conv, 2)
+                owner_entry['projected_annual'] = round(owner_entry['active_mrr'] * 12.0, 2)
+            else:
+                owner_entry['suspended_tenants'] += 1
+
+            tenant_breakdown.append({
+                'id': str(comp.id),
+                'name': comp.name,
+                'admin_email': comp.contact_email,
+                'status': comp.status,
+                'plan_name': comp.plan.name if comp.plan else 'Starter',
+                'billing_cycle': comp.plan_billing_cycle,
+                'plan_currency': plan_curr,
+                'monthly_rate_converted': round(monthly_conv if comp.status == 'ACTIVE' else 0.0, 2),
+                'monthly_rate_raw': round(monthly_raw, 2),
+                'actual_paid': comp_paid,
+                'due_amount': comp_due,
+                'owner_name': owner_name,
+            })
+
+        arr = round(mrr * 12.0, 2)
+        mrr = round(mrr, 2)
+        actual_collected_total = round(actual_collected_total, 2)
+        actual_collected_ytd = round(actual_collected_ytd, 2)
+        total_due = round(total_due, 2)
+
+        _, mrr_fx, mrr_fx_text, _ = build_fx_metric(mrr_by_curr, target_currency, target_symbol, rates)
+        _, col_fx, col_fx_text, _ = build_fx_metric(collected_by_curr, target_currency, target_symbol, rates)
+        _, due_fx, due_fx_text, _ = build_fx_metric(due_by_curr, target_currency, target_symbol, rates)
 
         plan_breakdown = []
         for plan in Plan.objects.all():
-            comp_count = active_companies.filter(plan=plan).count()
+            plan_active = [c for c in active_companies if c.plan_id == plan.id]
+            plan_curr = (plan.currency or 'INR').strip().upper()
+            plan_mrr_conv = sum(
+                convert_amount(
+                    float(plan.price_yearly) / 12.0
+                    if (c.plan_billing_cycle == 'YEARLY' and float(plan.price_yearly or 0) > 0)
+                    else float(plan.price_monthly or 0),
+                    plan_curr,
+                    target_currency,
+                    rates,
+                )
+                for c in plan_active
+            )
             plan_breakdown.append({
                 'plan_name': plan.name,
                 'plan_code': plan.code,
+                'plan_currency': plan_curr,
                 'monthly_price': float(plan.price_monthly),
-                'active_subscribers': comp_count,
-                'monthly_revenue': comp_count * float(plan.price_monthly),
+                'active_subscribers': len(plan_active),
+                'monthly_revenue': round(plan_mrr_conv, 2),
             })
+
+        owner_breakdown = sorted(
+            owner_map.values(),
+            key=lambda x: (x['actual_collected'], x['active_mrr']),
+            reverse=True,
+        )
 
         return Response({
             'total_companies': total_companies,
-            'active_subscribers': active_companies.count(),
+            'active_subscribers': len(active_companies),
+            'suspended_subscribers': suspended_count,
             'monthly_recurring_revenue': mrr,
             'annual_recurring_revenue': arr,
-            'currency': 'INR',
+            'actual_collected_total': actual_collected_total,
+            'actual_collected_ytd': actual_collected_ytd,
+            'total_due': total_due,
+            'currency': target_currency,
+            'currency_symbol': target_symbol,
+            'has_fx_conversion': mrr_fx or col_fx or due_fx,
+            'fx_mrr_text': mrr_fx_text,
+            'fx_collected_text': col_fx_text,
+            'fx_due_text': due_fx_text,
             'plan_breakdown': plan_breakdown,
+            'owner_breakdown': owner_breakdown,
+            'tenant_breakdown': tenant_breakdown,
+            'receipts': receipts_payload,
         })
 
 

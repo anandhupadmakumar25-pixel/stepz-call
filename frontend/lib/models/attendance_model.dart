@@ -103,6 +103,7 @@ class AttendanceModel {
   bool get isFieldStaff => trackingMode == 'FIELD_STAFF';
   bool get isFieldStaffMode => trackingMode == 'FIELD_STAFF';
   bool get isGeofenceMode => trackingMode == 'GEOFENCE';
+  String get earlyCheckoutReason => notes.trim();
 
   factory AttendanceModel.fromJson(Map<String, dynamic> json) {
     double? parseCoord(dynamic val) {

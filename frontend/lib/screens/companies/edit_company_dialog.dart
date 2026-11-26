@@ -7,7 +7,9 @@ import '../../core/theme/app_theme.dart';
 import '../../core/widgets/glass/glass_card.dart';
 import '../../core/widgets/glass/gradient_button.dart';
 import '../../core/responsive/responsive_layout.dart';
+import '../../core/utils/region_detector.dart';
 import '../../models/company_model.dart';
+import '../../models/plan_model.dart';
 import '../../providers/company_provider.dart';
 import '../../providers/auth_provider.dart';
 
@@ -43,8 +45,26 @@ class _EditCompanyDialogState extends State<EditCompanyDialog> {
   late TextEditingController _logoUrlController;
 
   String _logoData = '';
+  late String _selectedCountryIso;
   bool _isSaving = false;
   String? _errorMessage;
+
+  static const List<Map<String, String>> _countryRegions = [
+    {'iso': 'IN', 'code': '+91', 'currency': 'INR', 'label': 'India (+91 / INR ₹)'},
+    {'iso': 'QA', 'code': '+974', 'currency': 'QAR', 'label': 'Qatar (+974 / QAR)'},
+    {'iso': 'AE', 'code': '+971', 'currency': 'AED', 'label': 'UAE (+971 / AED)'},
+    {'iso': 'SA', 'code': '+966', 'currency': 'SAR', 'label': 'Saudi Arabia (+966 / SAR)'},
+    {'iso': 'OM', 'code': '+968', 'currency': 'OMR', 'label': 'Oman (+968 / OMR)'},
+    {'iso': 'KW', 'code': '+965', 'currency': 'KWD', 'label': 'Kuwait (+965 / KWD)'},
+    {'iso': 'BH', 'code': '+973', 'currency': 'BHD', 'label': 'Bahrain (+973 / BHD)'},
+    {'iso': 'US', 'code': '+1', 'currency': 'USD', 'label': 'United States (+1 / USD \$)'},
+    {'iso': 'GB', 'code': '+44', 'currency': 'GBP', 'label': 'United Kingdom (+44 / GBP £)'},
+  ];
+
+  Map<String, String> get _currentRegion => _countryRegions.firstWhere(
+        (r) => r['iso'] == _selectedCountryIso,
+        orElse: () => _countryRegions.first,
+      );
 
   @override
   void initState() {
@@ -57,6 +77,14 @@ class _EditCompanyDialogState extends State<EditCompanyDialog> {
     _websiteController = TextEditingController(text: widget.company.website);
     _logoData = widget.company.logo;
     _logoUrlController = TextEditingController(text: widget.company.logo.startsWith('http') ? widget.company.logo : '');
+    final initialIso = widget.company.defaultCountryIso.toUpperCase();
+    final matchedByIso = _countryRegions.where((r) => r['iso'] == initialIso);
+    if (matchedByIso.isNotEmpty) {
+      _selectedCountryIso = matchedByIso.first['iso']!;
+    } else {
+      final matchedByCode = _countryRegions.where((r) => r['code'] == widget.company.defaultCountryCode);
+      _selectedCountryIso = matchedByCode.isNotEmpty ? matchedByCode.first['iso']! : 'IN';
+    }
   }
 
   @override
@@ -162,6 +190,7 @@ class _EditCompanyDialogState extends State<EditCompanyDialog> {
     final compProv = context.read<CompanyProvider>();
     final authProv = context.read<AuthProvider>();
 
+    final region = _currentRegion;
     final payload = {
       'name': _nameController.text.trim(),
       'contact_phone': _phoneController.text.trim(),
@@ -170,6 +199,8 @@ class _EditCompanyDialogState extends State<EditCompanyDialog> {
       'gstin': _gstinController.text.trim(),
       'website': _websiteController.text.trim(),
       'logo': _logoData.trim(),
+      'default_country_iso': region['iso']!,
+      'default_country_code': region['code']!,
     };
 
     final ok = widget.company.id.isNotEmpty
@@ -177,6 +208,7 @@ class _EditCompanyDialogState extends State<EditCompanyDialog> {
         : await compProv.updateMyCompany(payload);
 
     if (ok) {
+      final curr = region['currency']!;
       authProv.updateCurrentUserCompanyInfo(
         name: _nameController.text.trim(),
         logo: _logoData.trim(),
@@ -185,6 +217,10 @@ class _EditCompanyDialogState extends State<EditCompanyDialog> {
         address: _addressController.text.trim(),
         gstin: _gstinController.text.trim(),
         website: _websiteController.text.trim(),
+        countryCode: region['code']!,
+        countryIso: region['iso']!,
+        currency: curr,
+        currencySymbol: PlanModel.getSymbolForCurrency(curr),
       );
 
       if (mounted) {
@@ -402,6 +438,8 @@ class _EditCompanyDialogState extends State<EditCompanyDialog> {
                   const SizedBox(height: 6),
                   TextFormField(
                     controller: _nameController,
+                    textInputAction: TextInputAction.done,
+                    onFieldSubmitted: (_) { if (!_isSaving) _handleSave(); },
                     style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600),
                     decoration: InputDecoration(
                       hintText: 'e.g. Stepz Digital Solutions Pvt Ltd',
@@ -423,9 +461,11 @@ class _EditCompanyDialogState extends State<EditCompanyDialog> {
                             const SizedBox(height: 6),
                             TextFormField(
                               controller: _phoneController,
+                              textInputAction: TextInputAction.done,
+                              onFieldSubmitted: (_) { if (!_isSaving) _handleSave(); },
                               style: GoogleFonts.inter(fontSize: 13),
                               decoration: InputDecoration(
-                                hintText: '+91 9876543210',
+                                hintText: '${widget.company.defaultCountryCode.isNotEmpty ? widget.company.defaultCountryCode : '+91'} 9876543210',
                                 prefixIcon: const Icon(Icons.phone_outlined, size: 18),
                                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                                 contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
@@ -444,6 +484,8 @@ class _EditCompanyDialogState extends State<EditCompanyDialog> {
                             const SizedBox(height: 6),
                             TextFormField(
                               controller: _emailController,
+                              textInputAction: TextInputAction.done,
+                              onFieldSubmitted: (_) { if (!_isSaving) _handleSave(); },
                               style: GoogleFonts.inter(fontSize: 13),
                               decoration: InputDecoration(
                                 hintText: 'billing@company.com',
@@ -479,6 +521,27 @@ class _EditCompanyDialogState extends State<EditCompanyDialog> {
                   ),
                   const SizedBox(height: 14),
 
+                  Text('Country / Location & Currency *', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A))),
+                  const SizedBox(height: 6),
+                  DropdownButtonFormField<String>(
+                    initialValue: _selectedCountryIso,
+                    decoration: InputDecoration(
+                      prefixIcon: const Icon(Icons.public_rounded, size: 18),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                    ),
+                    items: _countryRegions
+                        .map((r) => DropdownMenuItem<String>(
+                              value: r['iso'],
+                              child: Text(r['label']!, style: GoogleFonts.inter(fontSize: 13)),
+                            ))
+                        .toList(),
+                    onChanged: (v) {
+                      if (v != null) setState(() => _selectedCountryIso = v);
+                    },
+                  ),
+                  const SizedBox(height: 14),
+
                   Text('Registered Office Address', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A))),
                   const SizedBox(height: 6),
                   TextFormField(
@@ -486,7 +549,7 @@ class _EditCompanyDialogState extends State<EditCompanyDialog> {
                     maxLines: 2,
                     style: GoogleFonts.inter(fontSize: 12.5),
                     decoration: InputDecoration(
-                      hintText: 'e.g. Suite 400, Techno Park, Phase 1, Kochi, Kerala 682030',
+                      hintText: RegionDetector.sampleAddress(_selectedCountryIso),
                       prefixIcon: const Icon(Icons.location_on_outlined, size: 18),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),

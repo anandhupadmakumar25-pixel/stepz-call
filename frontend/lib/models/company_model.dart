@@ -8,6 +8,7 @@ class CompanyModel {
   final String contactPhone;
   final String status;
   final String defaultCountryCode;
+  final String defaultCountryIso;
   final String logo;
   final String address;
   final String gstin;
@@ -38,6 +39,8 @@ class CompanyModel {
   final String planBillingCycle;
   final String? planStartsAt;
   final String? planExpiresAt;
+  final double dueAmount;
+  final String paymentStatus;
   final int gracePeriodDays;
   final bool isPlanExpired;
   final int? daysUntilExpiry;
@@ -51,6 +54,7 @@ class CompanyModel {
     required this.contactPhone,
     this.status = 'ACTIVE',
     this.defaultCountryCode = '+91',
+    this.defaultCountryIso = 'IN',
     this.logo = '',
     this.address = '',
     this.gstin = '',
@@ -65,6 +69,8 @@ class CompanyModel {
     this.planBillingCycle = 'MONTHLY',
     this.planStartsAt,
     this.planExpiresAt,
+    this.dueAmount = 0.0,
+    this.paymentStatus = 'PAID',
     this.gracePeriodDays = 0,
     this.isPlanExpired = false,
     this.daysUntilExpiry,
@@ -119,18 +125,19 @@ class CompanyModel {
   bool hasMenuPermission(String menuKey) => allowedMenus.contains(menuKey);
 
   String get currency {
-    if (planCurrency.isNotEmpty && planCurrency != 'INR') return planCurrency;
+    final iso = defaultCountryIso.trim().toUpperCase();
     final code = defaultCountryCode.trim();
-    if (code == '+91' || code == '91' || code == 'IN' || code == 'IND') return 'INR';
-    if (code == '+974' || code == '974' || code == 'QA' || code == 'QATAR') return 'QAR';
-    if (code == '+971' || code == '971' || code == 'AE' || code == 'UAE') return 'AED';
-    if (code == '+966' || code == '966' || code == 'SA') return 'SAR';
-    if (code == '+968' || code == '968' || code == 'OM') return 'OMR';
-    if (code == '+965' || code == '965' || code == 'KW') return 'KWD';
-    if (code == '+973' || code == '973' || code == 'BH') return 'BHD';
-    if (code == '+1' || code == '1' || code == 'US' || code == 'USA') return 'USD';
-    if (code == '+44' || code == '44' || code == 'GB' || code == 'UK') return 'GBP';
-    return planCurrency.isNotEmpty ? planCurrency : 'INR';
+    if (iso == 'IN' || code == '+91' || code == '91') return 'INR';
+    if (iso == 'QA' || code == '+974' || code == '974') return 'QAR';
+    if (iso == 'AE' || code == '+971' || code == '971') return 'AED';
+    if (iso == 'SA' || code == '+966' || code == '966') return 'SAR';
+    if (iso == 'OM' || code == '+968' || code == '968') return 'OMR';
+    if (iso == 'KW' || code == '+965' || code == '965') return 'KWD';
+    if (iso == 'BH' || code == '+973' || code == '973') return 'BHD';
+    if (iso == 'US' || code == '+1' || code == '1') return 'USD';
+    if (iso == 'GB' || iso == 'UK' || code == '+44' || code == '44') return 'GBP';
+    if (planCurrency.isNotEmpty) return planCurrency;
+    return 'INR';
   }
 
   String get currencySymbol {
@@ -178,6 +185,7 @@ class CompanyModel {
       contactPhone: json['contact_phone'] ?? '',
       status: json['status'] ?? 'ACTIVE',
       defaultCountryCode: json['default_country_code'] ?? '+91',
+      defaultCountryIso: json['default_country_iso'] ?? 'IN',
       logo: json['logo'] ?? '',
       address: json['address'] ?? '',
       gstin: json['gstin'] ?? '',
@@ -194,6 +202,8 @@ class CompanyModel {
       planBillingCycle: json['plan_billing_cycle']?.toString() ?? 'MONTHLY',
       planStartsAt: json['plan_starts_at']?.toString(),
       planExpiresAt: json['plan_expires_at']?.toString(),
+      dueAmount: parsePrice(json['due_amount']),
+      paymentStatus: json['payment_status']?.toString() ?? 'PAID',
       gracePeriodDays: json['grace_period_days'] is int ? json['grace_period_days'] : int.tryParse(json['grace_period_days']?.toString() ?? '0') ?? 0,
       isPlanExpired: json['is_plan_expired'] == true,
       daysUntilExpiry: json['days_until_expiry'] is int ? json['days_until_expiry'] : int.tryParse(json['days_until_expiry']?.toString() ?? ''),

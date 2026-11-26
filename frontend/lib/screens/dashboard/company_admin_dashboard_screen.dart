@@ -20,6 +20,7 @@ import '../../providers/lead_provider.dart';
 import '../../routes/app_routes.dart';
 import '../companies/edit_company_dialog.dart';
 import '../companies/renewal_request_dialog.dart';
+import '../attendance/attendance_screen.dart';
 import '../employees/employee_management_screen.dart';
 import '../leads/import_wizard_dialog.dart';
 import '../quotations/quotation_form_dialog.dart';
@@ -35,6 +36,8 @@ class CompanyAdminDashboardScreen extends StatefulWidget {
 class _CompanyAdminDashboardScreenState
     extends State<CompanyAdminDashboardScreen> {
   String _attendanceFilter = 'ALL'; // ALL, PRESENT, LATE, ABSENT
+  String _selectedBranchId = 'ALL';
+  String _attendanceSearchQuery = '';
 
   @override
   void initState() {
@@ -49,11 +52,14 @@ class _CompanyAdminDashboardScreenState
     await Future.wait([
       context.read<AuthProvider>().refreshUserProfile(),
       context.read<CompanyProvider>().fetchMyCompany(),
-      context.read<DashboardProvider>().fetchAdminDashboard(),
+      context.read<DashboardProvider>().fetchAdminDashboard(branchId: _selectedBranchId),
       context.read<LeadProvider>().fetchBranches(),
       context.read<EmployeeProvider>().fetchEmployees(),
       context.read<BillingProvider>().fetchBillingOverview(),
-      context.read<AttendanceProvider>().fetchAdminRecords(date: todayStr),
+      context.read<AttendanceProvider>().fetchAdminRecords(
+            date: todayStr,
+            branchId: _selectedBranchId == 'ALL' ? null : _selectedBranchId,
+          ),
     ]);
   }
 
@@ -606,6 +612,9 @@ class _CompanyAdminDashboardScreenState
             ],
             const SizedBox(height: 14),
 
+            // Branch Filter Bar (when company has branches)
+            _buildBranchFilterBar(context),
+
             // 2. 4 Essential Small KPI Tiles
             _buildCompactKpiGrid(kpis),
             const SizedBox(height: 14),
@@ -613,6 +622,9 @@ class _CompanyAdminDashboardScreenState
             // 3. Slim Sales & Billing Strip
             _buildSlimSalesBillingStrip(context),
             const SizedBox(height: 14),
+
+            // 3b. Branch-Wise Sales & Performance Breakdown
+            _buildBranchSalesSection(context),
 
             // 4. Employee Attendance Summary (Present / Absent / Late)
             _buildEmployeeAttendanceSection(context),
@@ -1040,6 +1052,8 @@ class _CompanyAdminDashboardScreenState
 
   Widget _buildSlimSalesBillingStrip(BuildContext context) {
     final kpi = context.watch<BillingProvider>().billingOverview;
+    final authSym = context.watch<AuthProvider>().currentUser?.companyCurrencySymbol ?? '₹';
+    final sym = (kpi?.targetCurrencySymbol.isNotEmpty == true) ? kpi!.targetCurrencySymbol : authSym;
 
     return GlassCard(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -1054,12 +1068,31 @@ class _CompanyAdminDashboardScreenState
                   size: 17, color: Color(0xFF059669)),
               const SizedBox(width: 8),
               Expanded(
-                child: Text(
-                  'Sales & Billing',
-                  style: GoogleFonts.inter(
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.w800,
-                      color: const Color(0xFF0F172A)),
+                child: Row(
+                  children: [
+                    Text(
+                      'Sales & Billing',
+                      style: GoogleFonts.inter(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w800,
+                          color: const Color(0xFF0F172A)),
+                    ),
+                    if (kpi?.hasFxConversion == true) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFEF3C7),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.4)),
+                        ),
+                        child: Text(
+                          'FX Converted (${kpi!.targetCurrency})',
+                          style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w700, color: const Color(0xFFB45309)),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
               TextButton(
@@ -1080,33 +1113,45 @@ class _CompanyAdminDashboardScreenState
           const SizedBox(height: 10),
           LayoutBuilder(
             builder: (ctx, constraints) {
+              final qCount = kpi?.quotationCount ?? 0;
+              final iCount = kpi?.invoiceCount ?? 0;
+              final paidCount = kpi?.paidInvoiceCount ?? 0;
+              final pendCount = kpi?.pendingInvoiceCount ?? 0;
+              final pendingAmt = kpi?.pendingReceivables ?? 0.0;
+
               final s1 = _buildMiniBillingCell(
-                'Quotations (${kpi?.quotationCount ?? 0})',
-                '₹${(kpi?.totalQuotationValue ?? 0.0).toStringAsFixed(0)}',
+                'Quoted Value',
+                _formatDashboardMoney(sym, kpi?.totalQuotationValue ?? 0.0),
                 const Color(0xFF7C3AED),
                 const Color(0xFFF5F3FF),
+                subtitle: '$qCount ${qCount == 1 ? 'estimate' : 'estimates'}',
               );
               final s2 = _buildMiniBillingCell(
-                'Invoiced (${kpi?.invoiceCount ?? 0})',
-                '₹${(kpi?.totalBilled ?? 0.0).toStringAsFixed(0)}',
+                'Total Invoiced',
+                _formatDashboardMoney(sym, kpi?.totalBilled ?? 0.0),
                 const Color(0xFF2563EB),
                 const Color(0xFFEFF6FF),
+                subtitle: '$iCount ${iCount == 1 ? 'fixed bill' : 'fixed bills'}',
               );
               final s3 = _buildMiniBillingCell(
-                'Collected (${kpi?.paidInvoiceCount ?? 0})',
-                '₹${(kpi?.totalCollected ?? 0.0).toStringAsFixed(0)}',
+                'Earned / Collected',
+                _formatDashboardMoney(sym, kpi?.totalCollected ?? 0.0),
                 const Color(0xFF059669),
                 const Color(0xFFECFDF5),
+                subtitle: '$paidCount ${paidCount == 1 ? 'paid bill' : 'paid bills'}',
               );
               final s4 = _buildMiniBillingCell(
-                'Pending (${kpi?.pendingInvoiceCount ?? 0})',
-                '₹${(kpi?.pendingReceivables ?? 0.0).toStringAsFixed(0)}',
-                (kpi?.pendingReceivables ?? 0.0) > 0
+                'Pending Due',
+                _formatDashboardMoney(sym, pendingAmt),
+                pendingAmt > 0
                     ? const Color(0xFFDC2626)
                     : const Color(0xFF64748B),
-                (kpi?.pendingReceivables ?? 0.0) > 0
+                pendingAmt > 0
                     ? const Color(0xFFFEF2F2)
                     : const Color(0xFFF8FAFC),
+                subtitle: pendingAmt > 0
+                    ? '$pendCount awaiting pay'
+                    : 'All settled',
               );
 
               if (constraints.maxWidth >= 680) {
@@ -1126,14 +1171,6 @@ class _CompanyAdminDashboardScreenState
                 children: [
                   Row(
                     children: [
-                      Expanded(child: s1),
-                      const SizedBox(width: 8),
-                      Expanded(child: s2),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
                       Expanded(child: s3),
                       const SizedBox(width: 8),
                       Expanded(child: s4),
@@ -1143,13 +1180,78 @@ class _CompanyAdminDashboardScreenState
               );
             },
           ),
+          if (kpi?.hasFxConversion == true) ...[
+            const SizedBox(height: 8),
+            Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFFBEB),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.3)),
+              ),
+              child: Theme(
+                data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                child: ExpansionTile(
+                  tilePadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+                  childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+                  dense: true,
+                  visualDensity: VisualDensity.compact,
+                  leading: const Icon(Icons.currency_exchange_rounded, size: 15, color: Color(0xFFB45309)),
+                  title: Text(
+                    'FX Conversion Breakdown (${kpi!.targetCurrency})',
+                    style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF92400E)),
+                  ),
+                  children: [
+                    if (kpi.quotationsFxText.isNotEmpty)
+                      _buildFxBreakdownRow('Quotations', kpi.quotationsFxText),
+                    if (kpi.invoicedFxText.isNotEmpty)
+                      _buildFxBreakdownRow('Invoiced', kpi.invoicedFxText),
+                    if (kpi.collectedFxText.isNotEmpty)
+                      _buildFxBreakdownRow('Collected', kpi.collectedFxText),
+                    if (kpi.pendingFxText.isNotEmpty)
+                      _buildFxBreakdownRow('Pending', kpi.pendingFxText),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
 
+  Widget _buildFxBreakdownRow(String label, String text) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 82,
+            child: Text(
+              '$label:',
+              style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w700, color: const Color(0xFF78350F)),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              text,
+              style: GoogleFonts.robotoMono(fontSize: 10.5, fontWeight: FontWeight.w600, color: const Color(0xFFB45309)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatDashboardMoney(String sym, double val) {
+    final sep = sym.length > 1 ? ' ' : '';
+    final isWhole = (val - val.roundToDouble()).abs() < 0.01;
+    final formatted = NumberFormat(isWhole ? '#,##0' : '#,##0.00').format(val);
+    return '$sym$sep$formatted';
+  }
+
   Widget _buildMiniBillingCell(
-      String label, String value, Color color, Color bg) {
+      String label, String value, Color color, Color bg, {String? subtitle}) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
@@ -1164,7 +1266,7 @@ class _CompanyAdminDashboardScreenState
             label,
             style: GoogleFonts.inter(
                 fontSize: 10.5,
-                fontWeight: FontWeight.w600,
+                fontWeight: FontWeight.w700,
                 color: const Color(0xFF475569)),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
@@ -1177,6 +1279,18 @@ class _CompanyAdminDashboardScreenState
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
+          if (subtitle != null && subtitle.isNotEmpty) ...[
+            const SizedBox(height: 2),
+            Text(
+              subtitle,
+              style: GoogleFonts.inter(
+                  fontSize: 9.5,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFF64748B)),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
         ],
       ),
     );
@@ -1314,43 +1428,95 @@ class _CompanyAdminDashboardScreenState
           ),
           const SizedBox(height: 12),
 
-          // Filter Chips
+          // Filter Chips + Search (scales cleanly for 1,000+ employees)
           Wrap(
-            spacing: 6,
-            runSpacing: 6,
+            spacing: 8,
+            runSpacing: 8,
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              _buildAttFilterChip('ALL', 'All (${records.length})'),
-              _buildAttFilterChip('PRESENT', 'Present ($presentCount)'),
-              _buildAttFilterChip('LATE', 'Late ($lateCount)'),
-              _buildAttFilterChip('ABSENT', 'Absent ($absentCount)'),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  _buildAttFilterChip('ALL', 'All (${records.length})'),
+                  _buildAttFilterChip('PRESENT', 'Present ($presentCount)'),
+                  _buildAttFilterChip('LATE', 'Late ($lateCount)'),
+                  _buildAttFilterChip('ABSENT', 'Absent ($absentCount)'),
+                ],
+              ),
+              SizedBox(
+                width: 220,
+                height: 32,
+                child: TextField(
+                  onChanged: (v) => setState(() => _attendanceSearchQuery = v.trim().toLowerCase()),
+                  style: GoogleFonts.inter(fontSize: 12),
+                  decoration: InputDecoration(
+                    hintText: 'Search employee...',
+                    hintStyle: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF94A3B8)),
+                    prefixIcon: const Icon(Icons.search_rounded, size: 16, color: Color(0xFF64748B)),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+                    filled: true,
+                    fillColor: Colors.white,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                    ),
+                  ),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 10),
 
-          if (attProv.isLoading && records.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 20),
-              child: Center(child: CircularProgressIndicator()),
-            )
-          else if (filtered.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 18),
-              child: Center(
-                child: Text(
-                  'No attendance records for this filter today.',
-                  style: GoogleFonts.inter(
-                      color: const Color(0xFF64748B), fontSize: 12),
+          Builder(
+            builder: (_) {
+              final visibleRecords = _attendanceSearchQuery.isEmpty
+                  ? filtered
+                  : filtered.where((r) {
+                      return r.userName.toLowerCase().contains(_attendanceSearchQuery) ||
+                          r.userEmail.toLowerCase().contains(_attendanceSearchQuery) ||
+                          r.matchedBranchName.toLowerCase().contains(_attendanceSearchQuery);
+                    }).toList();
+
+              if (attProv.isLoading && records.isEmpty) {
+                return const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 20),
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              }
+              if (visibleRecords.isEmpty) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 18),
+                  child: Center(
+                    child: Text(
+                      'No attendance records for this filter today.',
+                      style: GoogleFonts.inter(
+                          color: const Color(0xFF64748B), fontSize: 12),
+                    ),
+                  ),
+                );
+              }
+              return ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 420),
+                child: GridView.builder(
+                  shrinkWrap: true,
+                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                    maxCrossAxisExtent: 280,
+                    mainAxisExtent: 86,
+                    crossAxisSpacing: 8,
+                    mainAxisSpacing: 8,
+                  ),
+                  itemCount: visibleRecords.length,
+                  itemBuilder: (ctx, i) => _buildAttendanceTile(visibleRecords[i]),
                 ),
-              ),
-            )
-          else
-            ListView.separated(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: filtered.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 6),
-              itemBuilder: (ctx, i) => _buildAttendanceTile(filtered[i]),
-            ),
+              );
+            },
+          ),
         ],
       ),
     );
@@ -1402,93 +1568,212 @@ class _CompanyAdminDashboardScreenState
     final checkInStr = rec.checkInTime != null
         ? DateFormat('hh:mm a').format(rec.checkInTime!.toLocal())
         : 'Not checked in';
-    final checkOutStr = rec.checkOutTime != null
-        ? DateFormat('hh:mm a').format(rec.checkOutTime!.toLocal())
-        : '—';
 
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(11),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-      ),
-      child: Theme(
-        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-        child: ExpansionTile(
-          tilePadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
-          childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(11)),
-          collapsedShape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(11)),
-          leading: CircleAvatar(
-            radius: 15,
-            backgroundColor: statusColor,
-            child: Text(
-              rec.userName.isNotEmpty ? rec.userName[0].toUpperCase() : 'E',
-              style: GoogleFonts.inter(
-                  fontWeight: FontWeight.w800,
-                  color: Colors.white,
-                  fontSize: 12),
-            ),
+    return InkWell(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const AttendanceScreen(initialTabIndex: 1),
           ),
-          title: Row(
-            children: [
-              Flexible(
-                child: Text(
-                  rec.userName.isNotEmpty ? rec.userName : 'Employee',
-                  style: GoogleFonts.inter(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w700,
-                      color: const Color(0xFF0F172A)),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-                decoration: BoxDecoration(
-                  color: statusBg,
-                  borderRadius: BorderRadius.circular(5),
-                ),
-                child: Text(
-                  st.replaceAll('_', ' '),
-                  style: GoogleFonts.inter(
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.w800,
-                      color: statusColor),
-                ),
-              ),
-            ],
-          ),
-          subtitle: Text(
-            'In: $checkInStr${rec.matchedBranchName.isNotEmpty ? " · ${rec.matchedBranchName}" : ""}',
-            style: GoogleFonts.inter(
-                fontSize: 11, color: const Color(0xFF64748B)),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
+        );
+      },
+      borderRadius: BorderRadius.circular(11),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF8FAFC),
+          borderRadius: BorderRadius.circular(11),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+        ),
+        child: Row(
           children: [
-            const Divider(color: Color(0xFFE2E8F0), height: 10),
-            Wrap(
-              spacing: 12,
-              runSpacing: 6,
-              children: [
-                if (rec.userEmail.isNotEmpty)
-                  Text('Email: ${rec.userEmail}',
+            CircleAvatar(
+              radius: 16,
+              backgroundColor: statusColor,
+              child: Text(
+                rec.userName.isNotEmpty ? rec.userName[0].toUpperCase() : 'E',
+                style: GoogleFonts.inter(
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                    fontSize: 12),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          rec.userName.isNotEmpty ? rec.userName : 'Employee',
+                          style: GoogleFonts.inter(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w700,
+                              color: const Color(0xFF0F172A)),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 5, vertical: 1.5),
+                        decoration: BoxDecoration(
+                          color: statusBg,
+                          borderRadius: BorderRadius.circular(5),
+                        ),
+                        child: Text(
+                          st.replaceAll('_', ' '),
+                          style: GoogleFonts.inter(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w800,
+                              color: statusColor),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    'In: $checkInStr · ${rec.workingHours.toStringAsFixed(1)}h',
+                    style: GoogleFonts.inter(
+                        fontSize: 11, color: const Color(0xFF64748B)),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (rec.matchedBranchName.isNotEmpty)
+                    Text(
+                      rec.matchedBranchName,
                       style: GoogleFonts.inter(
-                          fontSize: 11, color: const Color(0xFF475569))),
-                Text('Check-out: $checkOutStr',
-                    style: GoogleFonts.inter(
-                        fontSize: 11, color: const Color(0xFF475569))),
-                Text('Hours: ${rec.workingHours.toStringAsFixed(1)}h',
-                    style: GoogleFonts.inter(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: const Color(0xFF047857))),
+                          fontSize: 10, color: const Color(0xFF94A3B8)),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBranchFilterBar(BuildContext context) {
+    final branches = context.watch<LeadProvider>().branches;
+    if (branches.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            ChoiceChip(
+              label: const Text('All Branches', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700)),
+              selected: _selectedBranchId == 'ALL',
+              selectedColor: const Color(0xFF047857).withValues(alpha: 0.18),
+              onSelected: (_) {
+                setState(() => _selectedBranchId = 'ALL');
+                _refreshAll();
+              },
+            ),
+            ...branches.map((br) => Padding(
+                  padding: const EdgeInsets.only(left: 8),
+                  child: ChoiceChip(
+                    label: Text(br.name, style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600)),
+                    selected: _selectedBranchId == br.id,
+                    selectedColor: const Color(0xFF047857).withValues(alpha: 0.18),
+                    onSelected: (_) {
+                      setState(() => _selectedBranchId = br.id);
+                      _refreshAll();
+                    },
+                  ),
+                )),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBranchSalesSection(BuildContext context) {
+    final dash = context.watch<DashboardProvider>();
+    final branches = dash.branchSales;
+    if (branches.isEmpty) return const SizedBox.shrink();
+
+    final sym = context.read<AuthProvider>().currentUser?.companyCurrencySymbol ?? '₹';
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: GlassCard(
+        padding: const EdgeInsets.all(16),
+        borderRadius: BorderRadius.circular(16),
+        borderColor: const Color(0xFFE2E8F0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.storefront_rounded, size: 18, color: Color(0xFF047857)),
+                const SizedBox(width: 8),
+                Text(
+                  'Branch-Wise Sales & Performance',
+                  style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+                ),
               ],
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: branches.map((b) {
+                return Container(
+                  width: 260,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: _selectedBranchId == b.branchId
+                          ? const Color(0xFF047857)
+                          : const Color(0xFFE2E8F0),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              b.branchName,
+                              style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Text(
+                            '$sym${b.totalSales.toStringAsFixed(0)}',
+                            style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w800, color: const Color(0xFF047857)),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Collected: $sym${b.collectedAmount.toStringAsFixed(0)} · Due: $sym${b.pendingBalance.toStringAsFixed(0)}',
+                        style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF475569)),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Quotes: ${b.quotationsCount} · Invoices: ${b.invoicesCount} · Leads: ${b.leadsCount} · Calls: ${b.callsToday}',
+                        style: GoogleFonts.inter(fontSize: 10.5, color: const Color(0xFF64748B)),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
             ),
           ],
         ),

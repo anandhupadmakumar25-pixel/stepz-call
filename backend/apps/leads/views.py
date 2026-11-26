@@ -659,7 +659,14 @@ class CallingTaskListCreateView(views.APIView):
                 lead.assigned_at = now
                 lead.status = 'ASSIGNED'
                 lead.is_assigned_ever = True
-                lead.save(update_fields=['task', 'assigned_to', 'assigned_at', 'status', 'is_assigned_ever'])
+                update_cols = ['task', 'assigned_to', 'assigned_at', 'status', 'is_assigned_ever']
+                if branch:
+                    lead.branch = branch
+                    update_cols.append('branch')
+                elif not lead.branch_id and assigned_user.branch_id:
+                    lead.branch_id = assigned_user.branch_id
+                    update_cols.append('branch')
+                lead.save(update_fields=update_cols)
 
                 # Permanent Registry Invariant
                 if not PermanentPhoneNumberRegistry.objects.filter(company=company, normalized_phone=lead.normalized_phone).exists():

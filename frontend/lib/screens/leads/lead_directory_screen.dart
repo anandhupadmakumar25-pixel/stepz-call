@@ -661,13 +661,13 @@ class _LeadDirectoryScreenState extends State<LeadDirectoryScreen> {
                           ConstrainedBox(
                             constraints: const BoxConstraints(maxWidth: 140),
                             child: Text(
-                              lead.branchName ?? 'Unassigned Branch',
+                              lead.branchName ?? (lead.assignedToName != null ? 'Main Branch' : '—'),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: GoogleFonts.inter(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
-                                color: const Color(0xFF64748B),
+                                color: lead.branchName != null ? const Color(0xFF334155) : const Color(0xFF94A3B8),
                               ),
                             ),
                           ),

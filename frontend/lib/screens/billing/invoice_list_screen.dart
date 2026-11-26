@@ -6,8 +6,10 @@ import '../../core/widgets/glass/glass_card.dart';
 import '../../core/widgets/glass/gradient_button.dart';
 import '../../core/services/pdf_invoice_service.dart';
 import '../../core/responsive/responsive_layout.dart';
+import '../../core/widgets/action_loader.dart';
 import '../../core/widgets/date_range_filter_bar.dart';
 import '../../models/invoice_model.dart';
+import '../../models/plan_model.dart';
 import '../../models/quotation_model.dart';
 import '../../providers/billing_provider.dart';
 import '../../providers/auth_provider.dart';
@@ -39,15 +41,19 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
     final authUser = context.read<AuthProvider>().currentUser;
     final comp = context.read<CompanyProvider>().activeCompanyDetail;
     final String name = comp?.name.isNotEmpty == true ? comp!.name : ((authUser?.companyName?.isNotEmpty == true) ? authUser!.companyName! : 'Stepz Telecaller CRM');
-    PdfInvoiceService.printInvoice(
-      invoice,
-      companyName: name,
-      companyPhone: comp?.contactPhone.isNotEmpty == true ? comp!.contactPhone : authUser?.companyPhone,
-      companyEmail: comp?.contactEmail.isNotEmpty == true ? comp!.contactEmail : authUser?.companyEmail,
-      companyAddress: comp?.address.isNotEmpty == true ? comp!.address : authUser?.companyAddress,
-      companyGstin: comp?.gstin.isNotEmpty == true ? comp!.gstin : authUser?.companyGstin,
-      companyWebsite: comp?.website.isNotEmpty == true ? comp!.website : authUser?.companyWebsite,
-      companyLogo: comp?.logo.isNotEmpty == true ? comp!.logo : authUser?.companyLogo,
+    ActionLoader.run(
+      context,
+      message: 'Generating Invoice PDF...',
+      task: () => PdfInvoiceService.printInvoice(
+        invoice,
+        companyName: name,
+        companyPhone: comp?.contactPhone.isNotEmpty == true ? comp!.contactPhone : authUser?.companyPhone,
+        companyEmail: comp?.contactEmail.isNotEmpty == true ? comp!.contactEmail : authUser?.companyEmail,
+        companyAddress: comp?.address.isNotEmpty == true ? comp!.address : authUser?.companyAddress,
+        companyGstin: comp?.gstin.isNotEmpty == true ? comp!.gstin : authUser?.companyGstin,
+        companyWebsite: comp?.website.isNotEmpty == true ? comp!.website : authUser?.companyWebsite,
+        companyLogo: comp?.logo.isNotEmpty == true ? comp!.logo : authUser?.companyLogo,
+      ),
     );
   }
 
@@ -55,15 +61,19 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
     final authUser = context.read<AuthProvider>().currentUser;
     final comp = context.read<CompanyProvider>().activeCompanyDetail;
     final String name = comp?.name.isNotEmpty == true ? comp!.name : ((authUser?.companyName?.isNotEmpty == true) ? authUser!.companyName! : 'Stepz Telecaller CRM');
-    PdfInvoiceService.printQuotation(
-      quotation,
-      companyName: name,
-      companyPhone: comp?.contactPhone.isNotEmpty == true ? comp!.contactPhone : authUser?.companyPhone,
-      companyEmail: comp?.contactEmail.isNotEmpty == true ? comp!.contactEmail : authUser?.companyEmail,
-      companyAddress: comp?.address.isNotEmpty == true ? comp!.address : authUser?.companyAddress,
-      companyGstin: comp?.gstin.isNotEmpty == true ? comp!.gstin : authUser?.companyGstin,
-      companyWebsite: comp?.website.isNotEmpty == true ? comp!.website : authUser?.companyWebsite,
-      companyLogo: comp?.logo.isNotEmpty == true ? comp!.logo : authUser?.companyLogo,
+    ActionLoader.run(
+      context,
+      message: 'Generating Quotation PDF...',
+      task: () => PdfInvoiceService.printQuotation(
+        quotation,
+        companyName: name,
+        companyPhone: comp?.contactPhone.isNotEmpty == true ? comp!.contactPhone : authUser?.companyPhone,
+        companyEmail: comp?.contactEmail.isNotEmpty == true ? comp!.contactEmail : authUser?.companyEmail,
+        companyAddress: comp?.address.isNotEmpty == true ? comp!.address : authUser?.companyAddress,
+        companyGstin: comp?.gstin.isNotEmpty == true ? comp!.gstin : authUser?.companyGstin,
+        companyWebsite: comp?.website.isNotEmpty == true ? comp!.website : authUser?.companyWebsite,
+        companyLogo: comp?.logo.isNotEmpty == true ? comp!.logo : authUser?.companyLogo,
+      ),
     );
   }
 
@@ -373,12 +383,14 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                       final convertedQuotes = quotes.where((q) => q.status == 'CONVERTED' || q.status == 'ACCEPTED').length;
                       final draftQuotes = quotes.where((q) => q.status == 'DRAFT').length;
                       final totalQuoteVal = quotes.fold<double>(0.0, (sum, q) => sum + q.grandTotal);
+                      final authSym = context.watch<AuthProvider>().currentUser?.companyCurrencySymbol ?? '₹';
+                      final sym = (kpi?.targetCurrencySymbol.isNotEmpty == true) ? kpi!.targetCurrencySymbol : authSym;
 
                       final cards = _selectedViewTab == 1
                           ? [
                               _buildKpiCard(
                                 title: isTelecaller ? 'My Quotes Value' : 'Total Quotes Value',
-                                value: 'Rs. ${totalQuoteVal.toStringAsFixed(2)}',
+                                value: '$sym ${(kpi?.quotationsFxText.isNotEmpty == true ? (kpi?.totalQuotationValue ?? totalQuoteVal) : totalQuoteVal).toStringAsFixed(2)}',
                                 subtitle: '${quotes.length} quotations',
                                 icon: Icons.request_quote_rounded,
                                 accentColor: const Color(0xFF059669),
@@ -412,7 +424,7 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                           : [
                               _buildKpiCard(
                                 title: isTelecaller ? 'My Invoiced' : 'Total Invoiced',
-                                value: 'Rs. ${(kpi?.totalBilled ?? 0.0).toStringAsFixed(2)}',
+                                value: '$sym ${(kpi?.totalBilled ?? 0.0).toStringAsFixed(2)}',
                                 subtitle: '${kpi?.invoiceCount ?? 0} invoices',
                                 icon: Icons.receipt_rounded,
                                 accentColor: const Color(0xFF2563EB),
@@ -420,7 +432,7 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                               ),
                               _buildKpiCard(
                                 title: isTelecaller ? 'My Collected' : 'Total Collected',
-                                value: 'Rs. ${(kpi?.totalCollected ?? 0.0).toStringAsFixed(2)}',
+                                value: '$sym ${(kpi?.totalCollected ?? 0.0).toStringAsFixed(2)}',
                                 subtitle: '${kpi?.paidInvoiceCount ?? 0} settled',
                                 icon: Icons.check_circle_outline_rounded,
                                 accentColor: const Color(0xFF10B981),
@@ -428,7 +440,7 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                               ),
                               _buildKpiCard(
                                 title: isTelecaller ? 'Pending Due' : 'Pending Receivables',
-                                value: 'Rs. ${(kpi?.pendingReceivables ?? 0.0).toStringAsFixed(2)}',
+                                value: '$sym ${(kpi?.pendingReceivables ?? 0.0).toStringAsFixed(2)}',
                                 subtitle: '${kpi?.pendingInvoiceCount ?? 0} pending',
                                 icon: Icons.pending_actions_rounded,
                                 accentColor: const Color(0xFFDC2626),
@@ -436,7 +448,7 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                               ),
                               _buildKpiCard(
                                 title: isTelecaller ? 'Active Quotes' : 'Active Quotations',
-                                value: 'Rs. ${(kpi?.totalQuotationValue ?? 0.0).toStringAsFixed(2)}',
+                                value: '$sym ${(kpi?.totalQuotationValue ?? 0.0).toStringAsFixed(2)}',
                                 subtitle: '${kpi?.quotationCount ?? 0} quotes sent',
                                 icon: Icons.request_quote_rounded,
                                 accentColor: const Color(0xFF8B5CF6),
@@ -478,6 +490,39 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                       );
                     },
                   ),
+                  if (kpi?.hasFxConversion == true) ...[
+                    const SizedBox(height: 10),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFFBEB),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.35)),
+                      ),
+                      child: Theme(
+                        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                        child: ExpansionTile(
+                          tilePadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
+                          childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+                          dense: true,
+                          leading: const Icon(Icons.currency_exchange_rounded, size: 17, color: Color(0xFFB45309)),
+                          title: Text(
+                            'FX Conversion Breakdown (${kpi!.targetCurrency})',
+                            style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFF92400E)),
+                          ),
+                          children: [
+                            if (kpi.quotationsFxText.isNotEmpty)
+                              _buildFxBreakdownRow('Quotations', kpi.quotationsFxText),
+                            if (kpi.invoicedFxText.isNotEmpty)
+                              _buildFxBreakdownRow('Invoiced', kpi.invoicedFxText),
+                            if (kpi.collectedFxText.isNotEmpty)
+                              _buildFxBreakdownRow('Collected', kpi.collectedFxText),
+                            if (kpi.pendingFxText.isNotEmpty)
+                              _buildFxBreakdownRow('Pending', kpi.pendingFxText),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 14),
 
                   // Search & Filter Tabs (single row on desktop, stacked on mobile)
@@ -737,6 +782,30 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
     );
   }
 
+  Widget _buildFxBreakdownRow(String label, String text) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 88,
+            child: Text(
+              '$label:',
+              style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF78350F)),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              text,
+              style: GoogleFonts.robotoMono(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFFB45309)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildKpiCard({
     required String title,
     required String value,
@@ -917,11 +986,11 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                       style: GoogleFonts.inter(fontSize: 7.5, fontWeight: FontWeight.w800, color: const Color(0xFF047857)),
                     ),
                   ),
-                  Text('Rs. ${invoice.grandTotal.toStringAsFixed(2)}', style: GoogleFonts.robotoMono(fontSize: isMobile ? 14 : 16, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A))),
+                  Text('${PlanModel.getSymbolForCurrency(invoice.currency)} ${invoice.grandTotal.toStringAsFixed(2)}', style: GoogleFonts.robotoMono(fontSize: isMobile ? 14 : 16, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A))),
                   const SizedBox(height: 2),
                   if (invoice.balanceDue > 0)
                     Text(
-                      'Due: Rs. ${invoice.balanceDue.toStringAsFixed(2)}',
+                      'Due: ${PlanModel.getSymbolForCurrency(invoice.currency)} ${invoice.balanceDue.toStringAsFixed(2)}',
                       style: GoogleFonts.robotoMono(fontSize: isMobile ? 11 : 12, fontWeight: FontWeight.w700, color: const Color(0xFFDC2626)),
                     )
                   else
@@ -955,7 +1024,14 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                             ),
                             icon: const Icon(Icons.chat_rounded, size: 14),
                             label: Text('WhatsApp', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700)),
-                            onPressed: () => PdfInvoiceService.shareInvoiceToWhatsApp(invoice),
+                            onPressed: () => ActionLoader.run(
+                              context,
+                              message: 'Opening WhatsApp...',
+                              task: () => PdfInvoiceService.shareInvoiceToWhatsApp(
+                                invoice,
+                                defaultCountryCode: context.read<AuthProvider>().currentUser?.companyCountryCode ?? '+91',
+                              ),
+                            ),
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -1032,7 +1108,14 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                       ),
                       icon: const Icon(Icons.chat_rounded, size: 15),
                       label: Text('WhatsApp Receipt', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700)),
-                      onPressed: () => PdfInvoiceService.shareInvoiceToWhatsApp(invoice),
+                      onPressed: () => ActionLoader.run(
+                        context,
+                        message: 'Opening WhatsApp...',
+                        task: () => PdfInvoiceService.shareInvoiceToWhatsApp(
+                          invoice,
+                          defaultCountryCode: context.read<AuthProvider>().currentUser?.companyCountryCode ?? '+91',
+                        ),
+                      ),
                     ),
                     Wrap(
                       spacing: 8,
@@ -1199,7 +1282,7 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                       style: GoogleFonts.inter(fontSize: 7.5, fontWeight: FontWeight.w800, color: const Color(0xFFB45309)),
                     ),
                   ),
-                  Text('${quote.currency.isNotEmpty ? quote.currency : "₹"} ${quote.grandTotal.toStringAsFixed(2)}', style: GoogleFonts.robotoMono(fontSize: isMobile ? 14 : 16, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A))),
+                  Text('${PlanModel.getSymbolForCurrency(quote.currency)} ${quote.grandTotal.toStringAsFixed(2)}', style: GoogleFonts.robotoMono(fontSize: isMobile ? 14 : 16, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A))),
                   const SizedBox(height: 2),
                   Text(
                     isConverted ? 'Locked to Fixed Bill' : 'Quotation',
@@ -1235,7 +1318,14 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                             ),
                             icon: const Icon(Icons.chat_rounded, size: 14),
                             label: Text('WhatsApp', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700)),
-                            onPressed: () => PdfInvoiceService.shareQuotationToWhatsApp(quote),
+                            onPressed: () => ActionLoader.run(
+                              context,
+                              message: 'Opening WhatsApp...',
+                              task: () => PdfInvoiceService.shareQuotationToWhatsApp(
+                                quote,
+                                defaultCountryCode: context.read<AuthProvider>().currentUser?.companyCountryCode ?? '+91',
+                              ),
+                            ),
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -1330,7 +1420,14 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                       ),
                       icon: const Icon(Icons.chat_rounded, size: 15),
                       label: Text('WhatsApp Quote', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700)),
-                      onPressed: () => PdfInvoiceService.shareQuotationToWhatsApp(quote),
+                      onPressed: () => ActionLoader.run(
+                        context,
+                        message: 'Opening WhatsApp...',
+                        task: () => PdfInvoiceService.shareQuotationToWhatsApp(
+                          quote,
+                          defaultCountryCode: context.read<AuthProvider>().currentUser?.companyCountryCode ?? '+91',
+                        ),
+                      ),
                     ),
                     Wrap(
                       spacing: 8,

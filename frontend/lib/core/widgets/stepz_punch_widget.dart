@@ -74,7 +74,7 @@ class _StepzPunchWidgetState extends State<StepzPunchWidget> {
       _gpsError = null;
     });
 
-    final result = await LocationService.getCurrentLocation();
+    final result = await LocationService.getAccurateLocation();
     if (!mounted) return;
 
     if (result.success && result.position != null) {
@@ -87,7 +87,7 @@ class _StepzPunchWidgetState extends State<StepzPunchWidget> {
 
       if (branches.isNotEmpty) {
         for (final b in branches) {
-          if (b.latitude != null && b.longitude != null) {
+          if (b.geofenceEnabled && b.latitude != null && b.longitude != null) {
             final dist = LocationService.getDistanceBetween(
               pos.latitude,
               pos.longitude,
@@ -102,8 +102,16 @@ class _StepzPunchWidgetState extends State<StepzPunchWidget> {
         }
         if (closest != null && minDistance != null) {
           final radius = closest.radiusMeters > 0 ? closest.radiusMeters : 100;
-          inFence = minDistance <= radius;
+          final accuracyBuffer = (pos.accuracy > 0 && pos.accuracy <= 50.0)
+              ? pos.accuracy.clamp(0.0, 15.0)
+              : 0.0;
+          inFence = minDistance <= (radius + accuracyBuffer);
+        } else {
+          // No geofence-enabled branch with coordinates configured
+          inFence = true;
         }
+      } else {
+        inFence = true;
       }
 
       setState(() {
@@ -122,15 +130,24 @@ class _StepzPunchWidgetState extends State<StepzPunchWidget> {
   }
 
   Future<void> _handlePunchIn(bool isFieldStaff) async {
-    if (_currentPosition == null) {
-      await _detectLocation();
-    }
+    // Always acquire a fresh high-precision GPS fix before check-in
+    await _detectLocation();
     if (!mounted) return;
 
     if (_currentPosition == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(_gpsError ?? 'Live GPS location is required to punch in. Please enable GPS.'),
+          backgroundColor: AppColors.neonCoral,
+        ),
+      );
+      return;
+    }
+
+    if (_currentPosition!.isMocked) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Mock / spoofed GPS detected. Please disable fake GPS apps to check in.'),
           backgroundColor: AppColors.neonCoral,
         ),
       );
@@ -209,6 +226,8 @@ class _StepzPunchWidgetState extends State<StepzPunchWidget> {
       latitude: _currentPosition!.latitude,
       longitude: _currentPosition!.longitude,
       address: addressLabel,
+      accuracy: _currentPosition!.accuracy,
+      isMocked: _currentPosition!.isMocked,
     );
 
     if (ok && mounted) {
@@ -540,9 +559,9 @@ class _StepzPunchWidgetState extends State<StepzPunchWidget> {
                         ),
                         Text(
                           _closestBranch != null && _distanceToClosestBranchMeters != null
-                              ? '${_distanceToClosestBranchMeters!.toStringAsFixed(0)}m from "${_closestBranch!.name}" (Max ${_closestBranch!.radiusMeters}m radius)'
+                              ? '${_distanceToClosestBranchMeters!.toStringAsFixed(0)}m from "${_closestBranch!.name}" (Max ${_closestBranch!.radiusMeters}m${_currentPosition != null ? " · GPS ±${_currentPosition!.accuracy.toStringAsFixed(0)}m" : ""})'
                               : (_currentPosition != null
-                                  ? 'GPS: ${_currentPosition!.latitude.toStringAsFixed(4)}, ${_currentPosition!.longitude.toStringAsFixed(4)}'
+                                  ? 'GPS: ${_currentPosition!.latitude.toStringAsFixed(4)}, ${_currentPosition!.longitude.toStringAsFixed(4)} (±${_currentPosition!.accuracy.toStringAsFixed(0)}m)'
                                   : 'No office coordinates configured yet'),
                           style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
                         ),

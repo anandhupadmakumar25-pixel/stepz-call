@@ -67,9 +67,11 @@ class _DocumentTemplatesTabState extends State<DocumentTemplatesTab> {
                 icon: const Icon(Icons.design_services_rounded, size: 17),
                 label: Text('Design New Template', style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 13)),
                 onPressed: () {
-                  showDialog(
-                    context: context,
-                    builder: (_) => TemplateDesignerDialog(initialDocType: _selectedType),
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => TemplateDesignerDialog(initialDocType: _selectedType),
+                    ),
                   );
                 },
               ),
@@ -150,8 +152,40 @@ class _DocumentTemplatesTabState extends State<DocumentTemplatesTab> {
                             ],
                           ),
                           const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 4,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF1F5F9),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  tpl.branchName.isNotEmpty ? tpl.branchName : 'All Branches',
+                                  style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, color: const Color(0xFF334155)),
+                                ),
+                              ),
+                              if (tpl.layout.useCanvasMode)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFECFDF5),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    'Custom Layout (${tpl.layout.canvasElements.length} layers)',
+                                    style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, color: const Color(0xFF047857)),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
                           Text(
-                            '$visibleCount active blocks · ${tpl.layout.customColumns.length} custom cols · Logo ${tpl.layout.logoPosition}',
+                            tpl.layout.useCanvasMode
+                                ? 'Custom freeform A4 design'
+                                : '$visibleCount active blocks · ${tpl.layout.customColumns.length} custom cols · Logo ${tpl.layout.logoPosition}',
                             style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF475569)),
                           ),
                           if (tpl.layout.stamp.enabled)
@@ -187,9 +221,11 @@ class _DocumentTemplatesTabState extends State<DocumentTemplatesTab> {
                                   tooltip: 'Edit Design',
                                   icon: Icon(Icons.edit_rounded, size: 18, color: themeColor),
                                   onPressed: () {
-                                    showDialog(
-                                      context: context,
-                                      builder: (_) => TemplateDesignerDialog(templateToEdit: tpl),
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => TemplateDesignerDialog(templateToEdit: tpl),
+                                      ),
                                     );
                                   },
                                 ),

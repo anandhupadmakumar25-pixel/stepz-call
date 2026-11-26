@@ -19,6 +19,7 @@ from apps.accounts.models import (
     PayrollRun,
     Payslip,
 )
+from apps.companies.models import CompanyCustomRule
 from apps.accounts.serializers_hr import (
     CompanyHolidaySerializer,
     LeaveTypeSerializer,
@@ -149,6 +150,8 @@ class LeaveRequestListCreateView(views.APIView):
             qs = qs.filter(user=request.user)
         elif request.query_params.get('mine') == 'true':
             qs = qs.filter(user=request.user)
+        elif request.query_params.get('user_id'):
+            qs = qs.filter(user_id=request.query_params.get('user_id'))
 
         stat = request.query_params.get('status')
         if stat and stat != 'ALL':
@@ -169,19 +172,29 @@ class LeaveRequestListCreateView(views.APIView):
         if lt.company_id != company.id:
             return Response({"error": "Invalid leave type"}, status=status.HTTP_400_BAD_REQUEST)
 
+        target_user = request.user
+        req_user_id = request.data.get('user_id')
+        if req_user_id and str(req_user_id) != str(request.user.id):
+            if not (request.user.is_company_admin or request.user.has_permission('leave.approve')):
+                return Response({"error": "Permission denied to apply leave for another employee."}, status=status.HTTP_403_FORBIDDEN)
+            found = User.objects.filter(id=req_user_id, company=company).first()
+            if not found:
+                return Response({"error": "Employee not found in your company."}, status=status.HTTP_404_NOT_FOUND)
+            target_user = found
+
         days_count = Decimal('0.5') if is_half else Decimal(str((end - start).days + 1))
 
         # Check leave balance if paid
         if lt.is_paid:
-            _ensure_leave_balances_for_user(request.user, start.year)
-            bal = LeaveBalance.objects.filter(user=request.user, leave_type=lt, year=start.year).first()
+            _ensure_leave_balances_for_user(target_user, start.year)
+            bal = LeaveBalance.objects.filter(user=target_user, leave_type=lt, year=start.year).first()
             if bal and bal.remaining < float(days_count):
                 return Response(
                     {"error": f"Insufficient {lt.name} balance. Remaining: {bal.remaining} days."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-        req = serializer.save(company=company, user=request.user, days_count=days_count)
+        req = serializer.save(company=company, user=target_user, days_count=days_count)
         return Response(LeaveRequestSerializer(req).data, status=status.HTTP_201_CREATED)
 
 
@@ -393,12 +406,20 @@ class PayrollRunListGenerateView(views.APIView):
             tot_ded = Decimal('0.00')
             tot_net = Decimal('0.00')
 
+            active_rules = list(CompanyCustomRule.objects.filter(company=company, is_active=True))
+
             for st in structures:
                 att_qs = AttendanceRecord.objects.filter(company=company, user=st.user, date__year=year, date__month=month)
-                present_days = Decimal(str(att_qs.filter(status__in=['PRESENT', 'LATE', 'OUT_OF_FENCE']).count()))
-                half_days = Decimal(str(att_qs.filter(status='HALF_DAY').count())) * Decimal('0.5')
-                present_days += half_days
-                late_days = att_qs.filter(status='LATE').count()
+                # Count distinct calendar dates so multi-session check-ins never double-count days.
+                present_dates = set(
+                    att_qs.filter(status__in=['PRESENT', 'LATE', 'OUT_OF_FENCE']).values_list('date', flat=True)
+                )
+                half_dates = set(
+                    att_qs.filter(status='HALF_DAY').values_list('date', flat=True)
+                ) - present_dates
+                present_days = Decimal(str(len(present_dates))) + (Decimal(str(len(half_dates))) * Decimal('0.5'))
+                late_days = att_qs.filter(status='LATE').values('date').distinct().count()
+                out_of_fence_days = att_qs.filter(check_in_in_geofence=False).values('date').distinct().count()
 
                 # Paid & LOP leaves in this month
                 paid_leaves = Decimal('0.0')
@@ -414,10 +435,53 @@ class PayrollRunListGenerateView(views.APIView):
                         lop_days += Decimal(str(lr.days_count))
 
                 gross = Decimal(str(round(st.gross_salary, 2)))
+                basic = Decimal(str(round(float(st.basic_salary), 2)))
                 per_day = gross / Decimal(str(working_days)) if working_days > 0 else Decimal('0.00')
                 lop_ded = round(per_day * lop_days, 2)
                 stat_ded = Decimal(str(round(st.total_fixed_deductions, 2)))
-                net_pay = max(Decimal('0.00'), round(gross - lop_ded - stat_ded, 2))
+
+                # Evaluate active company attendance/discipline rules
+                late_ded = Decimal('0.00')
+                other_ded = Decimal('0.00')
+                bonus_amt = Decimal('0.00')
+                for rule in active_rules:
+                    metric = (rule.trigger_metric or '').upper()
+                    thresh = float(rule.threshold_value or 0)
+                    triggered = False
+                    if metric == 'LATE_COUNT':
+                        triggered = late_days >= thresh
+                    elif metric == 'GEOFENCE_OUT_COUNT':
+                        triggered = out_of_fence_days >= thresh
+                    elif metric == 'ABSENT_COUNT':
+                        triggered = float(lop_days) >= thresh
+                    if not triggered:
+                        continue
+
+                    act_type = (rule.action_type or '').upper()
+                    act_val = Decimal(str(rule.action_value or 0))
+                    if act_type == 'LOP_DAYS':
+                        amt = round(per_day * act_val, 2)
+                        if metric == 'LATE_COUNT':
+                            late_ded += amt
+                        else:
+                            other_ded += amt
+                    elif act_type == 'FLAT_AMOUNT':
+                        if metric == 'LATE_COUNT':
+                            late_ded += round(act_val, 2)
+                        else:
+                            other_ded += round(act_val, 2)
+                    elif act_type == 'PERCENTAGE':
+                        amt = round((basic * act_val) / Decimal('100'), 2)
+                        if metric == 'LATE_COUNT':
+                            late_ded += amt
+                        else:
+                            other_ded += amt
+                    elif act_type == 'BONUS_AMOUNT':
+                        bonus_amt += round(act_val, 2)
+
+                gross_earnings = round(gross + bonus_amt, 2)
+                total_emp_ded = round(lop_ded + late_ded + stat_ded + other_ded, 2)
+                net_pay = max(Decimal('0.00'), round(gross_earnings - total_emp_ded, 2))
 
                 Payslip.objects.create(
                     company=company,
@@ -434,14 +498,17 @@ class PayrollRunListGenerateView(views.APIView):
                     basic_salary=st.basic_salary,
                     hra=st.hra,
                     allowances=st.allowances,
-                    gross_earnings=gross,
+                    bonus=bonus_amt,
+                    gross_earnings=gross_earnings,
                     lop_deduction=lop_ded,
+                    late_deduction=late_ded,
                     statutory_deductions=stat_ded,
+                    other_deductions=other_ded,
                     net_pay=net_pay,
                     status='DRAFT',
                 )
-                tot_gross += gross
-                tot_ded += (lop_ded + stat_ded)
+                tot_gross += gross_earnings
+                tot_ded += total_emp_ded
                 tot_net += net_pay
 
             run.total_gross = tot_gross

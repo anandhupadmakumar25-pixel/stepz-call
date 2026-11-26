@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/glass/glass_card.dart';
 import '../../core/widgets/glass/gradient_button.dart';
-import '../../core/widgets/glass/glass_text_field.dart';
 import '../../core/widgets/glass/animated_status_badge.dart';
 import '../../core/widgets/app_back_button.dart';
 import '../../core/responsive/responsive_layout.dart';
@@ -14,10 +13,10 @@ import '../../providers/lead_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/department_provider.dart';
 import '../../providers/role_provider.dart';
-import '../../models/department_model.dart';
 import 'package:intl/intl.dart';
 import 'employee_activity_detail_dialog.dart';
 import 'delegation_management_dialog.dart';
+import 'add_employee_screen.dart';
 
 class EmployeeManagementScreen extends StatefulWidget {
   const EmployeeManagementScreen({super.key});
@@ -56,484 +55,13 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
   }
 
   void _showEmployeeActivityDialog(Map<String, dynamic> emp) {
-    showDialog(
-      context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.65),
-      builder: (_) => EmployeeActivityDetailDialog(employee: emp),
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => EmployeeActivityDetailDialog(employee: emp, asPage: true),
+      ),
     );
   }
-
-  void _showEditEmployeeDialog(Map<String, dynamic> emp) {
-    final leadProvider = context.read<LeadProvider>();
-    final deptProvider = context.read<DepartmentProvider>();
-    final roleProvider = context.read<RoleProvider>();
-    final firstNameController = TextEditingController(text: emp['first_name'] ?? '');
-    final lastNameController = TextEditingController(text: emp['last_name'] ?? '');
-    final phoneController = TextEditingController(text: emp['phone'] ?? '');
-    final targetController = TextEditingController(text: (emp['daily_call_target'] ?? 50).toString());
-
-    final profile = emp['employee_profile'] as Map<String, dynamic>? ?? {};
-    final shiftStartController = TextEditingController(text: profile['shift_start_time'] ?? '09:00:00');
-    final shiftEndController = TextEditingController(text: profile['shift_end_time'] ?? '18:00:00');
-    final graceController = TextEditingController(text: (profile['grace_period_minutes'] ?? 15).toString());
-
-    String role = emp['role'] ?? 'EMPLOYEE';
-    String? selectedBranchId = emp['branch_id']?.toString() ?? emp['branch']?.toString();
-    String? selectedDepartmentId = emp['department_id']?.toString() ?? profile['department']?.toString();
-
-    final rawBranchIds = profile['allowed_branch_ids'] as List<dynamic>?;
-    List<String> selectedAllowedBranches = rawBranchIds != null
-        ? rawBranchIds.map((e) => e.toString()).toList()
-        : [];
-
-    final rawRoleIds = emp['custom_role_ids'] as List<dynamic>?;
-    List<String> selectedRoleIds = rawRoleIds != null
-        ? rawRoleIds.map((e) => e.toString()).toList()
-        : [];
-
-    String status = profile['status'] ?? 'ACTIVE';
-
-    showDialog(
-      context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.7),
-      builder: (ctx) {
-        final isMobile = ResponsiveLayout.isMobile(ctx);
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            DepartmentModel? chosenDept;
-            if (selectedDepartmentId != null) {
-              final matches = deptProvider.departments.where((d) => d.id == selectedDepartmentId);
-              if (matches.isNotEmpty) chosenDept = matches.first;
-            }
-
-            return Dialog(
-              backgroundColor: Colors.transparent,
-              insetPadding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 20, vertical: isMobile ? 16 : 24),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 560),
-                child: GlassCard(
-                  blur: 24,
-                  opacity: 0.96,
-                  borderRadius: BorderRadius.circular(20),
-                  borderColor: AppColors.glassBorderHighlight,
-                  padding: EdgeInsets.all(isMobile ? 18 : 26),
-                  child: SingleChildScrollView(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(10),
-                              decoration: BoxDecoration(
-                                gradient: AppColors.primaryGradient,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: const Icon(Icons.manage_accounts_rounded, color: Colors.white, size: 20),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                'Edit Employee Profile & Branch Access',
-                                style: GoogleFonts.inter(fontSize: isMobile ? 15 : 16, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
-                              ),
-                            ),
-                            DialogCloseButton(onPressed: () => Navigator.of(ctx).pop()),
-                          ],
-                        ),
-                        const SizedBox(height: 18),
-                        Row(
-                          children: [
-                            Expanded(child: GlassTextField(label: 'First Name', hintText: 'Jane', controller: firstNameController)),
-                            const SizedBox(width: 10),
-                            Expanded(child: GlassTextField(label: 'Last Name', hintText: 'Doe', controller: lastNameController)),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        GlassTextField(label: 'Phone Number', hintText: '+91 9876543210', controller: phoneController),
-                        const SizedBox(height: 14),
-
-                        // Department Selector
-                        Text('Department & Attendance Track Mode', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF64748B))),
-                        const SizedBox(height: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: const Color(0xFFE2E8F0)),
-                          ),
-                          child: DropdownButtonHideUnderline(
-                            child: DropdownButton<String?>(
-                              isExpanded: true,
-                              value: selectedDepartmentId,
-                              dropdownColor: Colors.white,
-                              borderRadius: BorderRadius.circular(12),
-                              style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF0F172A)),
-                              icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF64748B)),
-                              items: [
-                                const DropdownMenuItem(value: null, child: Text('No Department (Default)', overflow: TextOverflow.ellipsis)),
-                                ...deptProvider.departments.map((d) => DropdownMenuItem(
-                                  value: d.id,
-                                  child: Text('${d.name} (${d.isGeofenceMode ? 'Office Fence' : 'Field Staff'})', overflow: TextOverflow.ellipsis),
-                                )),
-                              ],
-                              onChanged: (v) {
-                                setDialogState(() {
-                                  selectedDepartmentId = v;
-                                  if (v != null) {
-                                    final d = deptProvider.departments.firstWhere((item) => item.id == v);
-                                    for (final bid in d.allowedBranches) {
-                                      if (!selectedAllowedBranches.contains(bid)) selectedAllowedBranches.add(bid);
-                                    }
-                                  }
-                                });
-                              },
-                            ),
-                          ),
-                        ),
-
-                        if (chosenDept != null) ...[
-                          const SizedBox(height: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: (chosenDept.isGeofenceMode ? AppColors.neonViolet : AppColors.neonCyan).withValues(alpha: 0.08),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(chosenDept.isGeofenceMode ? Icons.pin_drop_rounded : Icons.route_rounded, size: 14, color: chosenDept.isGeofenceMode ? AppColors.neonViolet : AppColors.neonCyan),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                  child: Text(
-                                    chosenDept.isGeofenceMode
-                                        ? 'Tracking: Fixed Office Geo-fence (Enforced branch perimeter)'
-                                        : 'Tracking: Field Staff (Dynamic GPS check-in + client visit tracking)',
-                                    style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w500, color: chosenDept.isGeofenceMode ? AppColors.neonViolet : AppColors.neonCyan),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-
-                        const SizedBox(height: 14),
-
-                        // Primary Branch
-                        Text('Primary Branch', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF64748B))),
-                        const SizedBox(height: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: const Color(0xFFE2E8F0)),
-                          ),
-                          child: DropdownButtonHideUnderline(
-                            child: DropdownButton<String?>(
-                              isExpanded: true,
-                              value: selectedBranchId,
-                              dropdownColor: Colors.white,
-                              borderRadius: BorderRadius.circular(12),
-                              style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF0F172A)),
-                              icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF64748B)),
-                              items: [
-                                const DropdownMenuItem(value: null, child: Text('No Branch (Headquarters)', overflow: TextOverflow.ellipsis)),
-                                ...leadProvider.branches.map((b) => DropdownMenuItem(value: b.id, child: Text(b.name, overflow: TextOverflow.ellipsis))),
-                              ],
-                              onChanged: (v) => setDialogState(() => selectedBranchId = v),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 14),
-
-                        // Allowed Branches Multi-Select
-                        Text(
-                          'Allowed Check-in Branches (${selectedAllowedBranches.length}/${leadProvider.branches.length})',
-                          style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF64748B)),
-                        ),
-                        const SizedBox(height: 6),
-                        Wrap(
-                          spacing: 6,
-                          runSpacing: 6,
-                          children: leadProvider.branches.map((b) {
-                            final isSelected = selectedAllowedBranches.contains(b.id);
-                            return FilterChip(
-                              selected: isSelected,
-                              label: Text(
-                                b.name,
-                                style: GoogleFonts.inter(
-                                  fontSize: 11,
-                                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                                  color: isSelected ? const Color(0xFF78350F) : const Color(0xFF1E293B),
-                                ),
-                              ),
-                              selectedColor: AppColors.neonViolet.withValues(alpha: 0.15),
-                              checkmarkColor: AppColors.neonViolet,
-                              backgroundColor: Colors.white,
-                              side: BorderSide(color: isSelected ? AppColors.neonViolet : const Color(0xFFE2E8F0)),
-                              onSelected: (val) {
-                                setDialogState(() {
-                                  if (val) {
-                                    selectedAllowedBranches.add(b.id);
-                                  } else {
-                                    selectedAllowedBranches.remove(b.id);
-                                  }
-                                });
-                              },
-                            );
-                          }).toList(),
-                        ),
-                        const SizedBox(height: 14),
-
-                        // Custom Dynamic Roles & Functional Permissions
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'Functional Roles & Access (RBAC)',
-                              style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF64748B)),
-                            ),
-                            Builder(
-                              builder: (_) {
-                                final activePerms = <String>{};
-                                for (final rid in selectedRoleIds) {
-                                  final matching = roleProvider.roles.where((r) => r.id == rid);
-                                  if (matching.isNotEmpty) {
-                                    activePerms.addAll(matching.first.permissions);
-                                  }
-                                }
-                                return Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.neonCyan.withValues(alpha: 0.12),
-                                    borderRadius: BorderRadius.circular(6),
-                                    border: Border.all(color: AppColors.neonCyan.withValues(alpha: 0.3)),
-                                  ),
-                                  child: Text(
-                                    '${activePerms.length} Active Permissions',
-                                    style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.neonCyan),
-                                  ),
-                                );
-                              },
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        if (roleProvider.roles.isEmpty)
-                          Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: const Color(0xFFE2E8F0)),
-                            ),
-                            child: Text(
-                              'No custom roles created yet. Default permissions will apply.',
-                              style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
-                            ),
-                          )
-                        else
-                          Wrap(
-                            spacing: 6,
-                            runSpacing: 6,
-                            children: roleProvider.roles.map((r) {
-                              final isSelected = selectedRoleIds.contains(r.id);
-                              return FilterChip(
-                                selected: isSelected,
-                                avatar: Icon(Icons.security_rounded, size: 14, color: isSelected ? AppColors.emeraldDark : const Color(0xFF64748B)),
-                                label: Text(
-                                  '${r.name} (${r.permissions.length} perms)',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 12,
-                                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                                    color: isSelected ? const Color(0xFF065F46) : const Color(0xFF1E293B),
-                                  ),
-                                ),
-                                selectedColor: AppColors.neonCyan.withValues(alpha: 0.15),
-                                checkmarkColor: AppColors.neonCyan,
-                                backgroundColor: Colors.white,
-                                side: BorderSide(color: isSelected ? AppColors.neonCyan : const Color(0xFFE2E8F0)),
-                                onSelected: (val) {
-                                  setDialogState(() {
-                                    if (val) {
-                                      selectedRoleIds.add(r.id);
-                                    } else {
-                                      selectedRoleIds.remove(r.id);
-                                    }
-                                  });
-                                },
-                              );
-                            }).toList(),
-                          ),
-                        const SizedBox(height: 14),
-
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text('Role Level', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF64748B))),
-                                  const SizedBox(height: 6),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(color: const Color(0xFFE2E8F0)),
-                                    ),
-                                    child: DropdownButtonHideUnderline(
-                                      child: DropdownButton<String>(
-                                        isExpanded: true,
-                                        value: role,
-                                        dropdownColor: Colors.white,
-                                        borderRadius: BorderRadius.circular(12),
-                                        style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF0F172A)),
-                                        icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF64748B)),
-                                        items: const [
-                                          DropdownMenuItem(value: 'EMPLOYEE', child: Text('Telecaller / Field Rep')),
-                                          DropdownMenuItem(value: 'MANAGER', child: Text('Team Manager')),
-                                        ],
-                                        onChanged: (v) => setDialogState(() => role = v!),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: GlassTextField(
-                                label: 'Daily Call Target',
-                                hintText: '50',
-                                controller: targetController,
-                                keyboardType: TextInputType.number,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-
-                        // Shift Timings Row
-                        Row(
-                          children: [
-                            Expanded(
-                              child: GlassTextField(
-                                label: 'Shift Start',
-                                hintText: '09:00:00',
-                                controller: shiftStartController,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: GlassTextField(
-                                label: 'Shift End',
-                                hintText: '18:00:00',
-                                controller: shiftEndController,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: GlassTextField(
-                                label: 'Grace (mins)',
-                                hintText: '15',
-                                controller: graceController,
-                                keyboardType: TextInputType.number,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-
-                        // Status Dropdown
-                        Text('Employee Status', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF64748B))),
-                        const SizedBox(height: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: const Color(0xFFE2E8F0)),
-                          ),
-                          child: DropdownButtonHideUnderline(
-                            child: DropdownButton<String>(
-                              isExpanded: true,
-                              value: status,
-                              dropdownColor: Colors.white,
-                              borderRadius: BorderRadius.circular(12),
-                              style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF0F172A)),
-                              icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF64748B)),
-                              items: const [
-                                DropdownMenuItem(value: 'ACTIVE', child: Text('Active')),
-                                DropdownMenuItem(value: 'ON_LEAVE', child: Text('On Leave')),
-                                DropdownMenuItem(value: 'INACTIVE', child: Text('Inactive')),
-                              ],
-                              onChanged: (v) => setDialogState(() => status = v!),
-                            ),
-                          ),
-                        ),
-
-                        Container(
-                          margin: const EdgeInsets.only(top: 20),
-                          padding: const EdgeInsets.only(top: 14),
-                          decoration: const BoxDecoration(
-                            border: Border(top: BorderSide(color: Color(0x33D4AF37), width: 1)),
-                          ),
-                          child: Wrap(
-                            alignment: WrapAlignment.end,
-                            spacing: 10,
-                            runSpacing: 8,
-                            children: [
-                              GlassSecondaryButton(text: 'Cancel', onPressed: () => Navigator.of(ctx).pop()),
-                              GradientPrimaryButton(
-                                text: 'Save Updates',
-                                icon: Icons.check_rounded,
-                                onPressed: () async {
-                                  final empP = context.read<EmployeeProvider>();
-                                  final nav = Navigator.of(ctx);
-                                  final scaf = ScaffoldMessenger.of(context);
-                                  final ok = await empP.updateEmployee(emp['id'], {
-                                    'first_name': firstNameController.text.trim(),
-                                    'last_name': lastNameController.text.trim(),
-                                    'phone': phoneController.text.trim(),
-                                    'role': role,
-                                    'branch_id': selectedBranchId,
-                                    'department_id': selectedDepartmentId,
-                                    'allowed_branches': selectedAllowedBranches,
-                                    'custom_role_ids': selectedRoleIds,
-                                    'daily_call_target': int.tryParse(targetController.text) ?? 50,
-                                    'shift_start_time': shiftStartController.text.trim(),
-                                    'shift_end_time': shiftEndController.text.trim(),
-                                    'grace_period_minutes': int.tryParse(graceController.text) ?? 15,
-                                    'status': status,
-                                  });
-                                  if (ok) {
-                                    nav.pop();
-                                    scaf.showSnackBar(
-                                      const SnackBar(content: Text('Employee profile updated!'), backgroundColor: AppColors.success),
-                                    );
-                                    _loadData();
-                                  }
-                                },
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final empProvider = context.watch<EmployeeProvider>();
@@ -727,7 +255,8 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                               final name = '${emp['first_name'] ?? ''} ${emp['last_name'] ?? ''}'.trim();
                               final email = emp['email'] ?? '';
                               final branchName = emp['branch_name'] as String?;
-                              final target = emp['daily_call_target'] ?? 50;
+                              final profile = emp['employee_profile'] as Map<String, dynamic>? ?? {};
+                              final target = profile['daily_call_target'] ?? emp['daily_call_target'] ?? 50;
 
                               return GlassCard(
                                 blur: 18,
@@ -966,7 +495,17 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                                         IconButton(
                                           icon: const Icon(Icons.edit_outlined, color: AppColors.neonCyan, size: 18),
                                           tooltip: 'Edit Staff Profile',
-                                          onPressed: () => _showEditEmployeeDialog(emp),
+                                          onPressed: () async {
+                                            final updated = await Navigator.push<bool>(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (_) => AddEmployeeScreen(employee: emp),
+                                              ),
+                                            );
+                                            if (updated == true && mounted) {
+                                              _loadData();
+                                            }
+                                          },
                                         ),
                                         if (emp['id']?.toString() != context.read<AuthProvider>().currentUser?.id)
                                           IconButton(

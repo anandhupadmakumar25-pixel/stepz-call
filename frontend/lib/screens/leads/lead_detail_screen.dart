@@ -5,6 +5,7 @@ import '../../core/responsive/responsive_layout.dart';
 import '../../core/services/pdf_invoice_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_back_button.dart';
+import '../../core/widgets/action_loader.dart';
 import '../../core/widgets/date_range_filter_bar.dart';
 import '../../core/widgets/glass/animated_status_badge.dart';
 import '../../core/widgets/glass/app_background.dart';
@@ -15,7 +16,9 @@ import '../../models/call_model.dart';
 import '../../models/callback_model.dart';
 import '../../models/invoice_model.dart';
 import '../../models/lead_model.dart';
+import '../../models/plan_model.dart';
 import '../../models/quotation_model.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/billing_provider.dart';
 import '../../providers/call_provider.dart';
 import '../../providers/callback_provider.dart';
@@ -565,10 +568,11 @@ class _LeadDetailScreenState extends State<LeadDetailScreen> {
       color: const Color(0xFF2563EB),
       bg: const Color(0xFFEFF6FF),
     );
+    final sym = context.watch<AuthProvider>().currentUser?.companyCurrencySymbol ?? '₹';
     final k2 = _buildKpiTile(
       icon: Icons.request_quote_rounded,
       label: 'Quotations ($quotesCount)',
-      value: '₹${totalQuoted.toStringAsFixed(0)}',
+      value: '$sym${totalQuoted.toStringAsFixed(0)}',
       subtitle: 'Estimated total',
       color: const Color(0xFF7C3AED),
       bg: const Color(0xFFF5F3FF),
@@ -576,9 +580,9 @@ class _LeadDetailScreenState extends State<LeadDetailScreen> {
     final k3 = _buildKpiTile(
       icon: Icons.receipt_long_rounded,
       label: 'Bills / Invoices ($invoicesCount)',
-      value: '₹${totalBilled.toStringAsFixed(0)}',
+      value: '$sym${totalBilled.toStringAsFixed(0)}',
       subtitle: totalDue > 0
-          ? 'Due ₹${totalDue.toStringAsFixed(0)}'
+          ? 'Due $sym${totalDue.toStringAsFixed(0)}'
           : 'All cleared',
       color: totalDue > 0 ? const Color(0xFFD97706) : const Color(0xFF059669),
       bg: totalDue > 0 ? const Color(0xFFFFFBEB) : const Color(0xFFECFDF5),
@@ -814,7 +818,7 @@ class _LeadDetailScreenState extends State<LeadDetailScreen> {
             ],
           ),
           subtitle: Text(
-            'Total: ₹${q.grandTotal.toStringAsFixed(2)} · Date: ${q.date}',
+            'Total: ${PlanModel.getSymbolForCurrency(q.currency)}${q.grandTotal.toStringAsFixed(2)} · Date: ${q.date}',
             style: GoogleFonts.inter(
                 fontSize: 11, color: const Color(0xFF64748B)),
             maxLines: 1,
@@ -834,7 +838,14 @@ class _LeadDetailScreenState extends State<LeadDetailScreen> {
                     color: const Color(0xFF15803D),
                     bgColor: const Color(0xFFDCFCE7),
                     borderColor: const Color(0xFF86EFAC),
-                    onPressed: () => PdfInvoiceService.shareQuotationToWhatsApp(q),
+                    onPressed: () => ActionLoader.run(
+                      context,
+                      message: 'Opening WhatsApp...',
+                      task: () => PdfInvoiceService.shareQuotationToWhatsApp(
+                        q,
+                        defaultCountryCode: context.read<AuthProvider>().currentUser?.companyCountryCode ?? '+91',
+                      ),
+                    ),
                   ),
                   _buildUniformActionBtn(
                     icon: Icons.print_outlined,
@@ -842,7 +853,11 @@ class _LeadDetailScreenState extends State<LeadDetailScreen> {
                     color: const Color(0xFF334155),
                     bgColor: Colors.white,
                     borderColor: const Color(0xFFCBD5E1),
-                    onPressed: () => PdfInvoiceService.printQuotation(q),
+                    onPressed: () => ActionLoader.run(
+                      context,
+                      message: 'Generating Quotation PDF...',
+                      task: () => PdfInvoiceService.printQuotation(q),
+                    ),
                   ),
                   _buildUniformActionBtn(
                     icon: Icons.visibility_outlined,
@@ -920,7 +935,7 @@ class _LeadDetailScreenState extends State<LeadDetailScreen> {
             ],
           ),
           subtitle: Text(
-            'Total: ₹${inv.grandTotal.toStringAsFixed(2)} · Due: ₹${inv.balanceDue.toStringAsFixed(2)} · ${inv.date}',
+            'Total: ${PlanModel.getSymbolForCurrency(inv.currency)}${inv.grandTotal.toStringAsFixed(2)} · Due: ${PlanModel.getSymbolForCurrency(inv.currency)}${inv.balanceDue.toStringAsFixed(2)} · ${inv.date}',
             style: GoogleFonts.inter(
                 fontSize: 11, color: const Color(0xFF64748B)),
             maxLines: 1,
@@ -940,8 +955,14 @@ class _LeadDetailScreenState extends State<LeadDetailScreen> {
                     color: const Color(0xFF15803D),
                     bgColor: const Color(0xFFDCFCE7),
                     borderColor: const Color(0xFF86EFAC),
-                    onPressed: () =>
-                        PdfInvoiceService.shareInvoiceToWhatsApp(inv),
+                    onPressed: () => ActionLoader.run(
+                      context,
+                      message: 'Opening WhatsApp...',
+                      task: () => PdfInvoiceService.shareInvoiceToWhatsApp(
+                        inv,
+                        defaultCountryCode: context.read<AuthProvider>().currentUser?.companyCountryCode ?? '+91',
+                      ),
+                    ),
                   ),
                   _buildUniformActionBtn(
                     icon: Icons.print_outlined,
@@ -949,7 +970,11 @@ class _LeadDetailScreenState extends State<LeadDetailScreen> {
                     color: const Color(0xFF334155),
                     bgColor: Colors.white,
                     borderColor: const Color(0xFFCBD5E1),
-                    onPressed: () => PdfInvoiceService.printInvoice(inv),
+                    onPressed: () => ActionLoader.run(
+                      context,
+                      message: 'Generating Invoice PDF...',
+                      task: () => PdfInvoiceService.printInvoice(inv),
+                    ),
                   ),
                   if (!isPaid)
                     SizedBox(

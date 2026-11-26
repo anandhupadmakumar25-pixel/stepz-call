@@ -21,13 +21,20 @@ class PlanManagementScreen extends StatefulWidget {
 class _PlanManagementScreenState extends State<PlanManagementScreen> {
   final Map<String, String> _availableMenus = {
     'branches': 'Branches & Multi-Office',
-    'employees': 'Telecaller Team & Staff',
+    'employees': 'Employee & Role Management',
     'attendance': 'Stepz Attendance & Geofencing',
+    'leave': 'Leave & Holiday Management',
+    'payroll': 'HR Payroll & Payslips',
+    'delegation': 'Role & Section Delegation',
     'leads': 'Lead Workspace & Import',
     'tasks': 'Calling Tasks & Allocation',
     'recordings': 'Audio Call Recordings',
     'callbacks': 'Priority Callbacks & Reminders',
     'call_history': 'Call Logs & History',
+    'quotations': 'Quotations & Estimates',
+    'billing': 'Bills, Invoices & Receipts',
+    'templates': 'Visual PDF Template Studio',
+    'reports': 'Reports Center & Export',
     'analytics': 'Analytics & Performance Reports',
   };
 
@@ -39,16 +46,32 @@ class _PlanManagementScreenState extends State<PlanManagementScreen> {
     });
   }
 
-  void _showCreatePlanDialog() {
+  void _showCreatePlanDialog() => _showPlanFormDialog();
+
+  void _showPlanFormDialog({PlanModel? existingPlan}) {
+    final isEdit = existingPlan != null;
     final compProv = context.read<CompanyProvider>();
-    final nameCtrl = TextEditingController();
-    String selectedCurrency = 'INR';
-    final priceMonthlyCtrl = TextEditingController(text: '999.00');
-    final priceYearlyCtrl = TextEditingController(text: '11988.00');
-    final maxUsersCtrl = TextEditingController(text: '10');
-    final maxLeadsCtrl = TextEditingController(text: '15000');
-    final descCtrl = TextEditingController();
-    final Set<String> selectedMenus = {'leads', 'tasks', 'callbacks', 'call_history'};
+    final nameCtrl = TextEditingController(text: existingPlan?.name ?? '');
+    const validCurrencies = {'INR', 'USD', 'EUR', 'GBP', 'AED', 'QAR'};
+    String selectedCurrency = (existingPlan != null && validCurrencies.contains(existingPlan.currency.toUpperCase()))
+        ? existingPlan.currency.toUpperCase()
+        : 'INR';
+    final priceMonthlyCtrl = TextEditingController(
+      text: existingPlan != null ? existingPlan.priceMonthly.toStringAsFixed(2) : '999.00',
+    );
+    final priceYearlyCtrl = TextEditingController(
+      text: existingPlan != null ? existingPlan.priceYearly.toStringAsFixed(2) : '11988.00',
+    );
+    final maxUsersCtrl = TextEditingController(
+      text: existingPlan != null ? existingPlan.maxUsers.toString() : '10',
+    );
+    final maxLeadsCtrl = TextEditingController(
+      text: existingPlan != null ? existingPlan.maxLeads.toString() : '15000',
+    );
+    final descCtrl = TextEditingController(text: existingPlan?.description ?? '');
+    final Set<String> selectedMenus = existingPlan != null
+        ? Set<String>.from(existingPlan.allowedMenus)
+        : {'leads', 'tasks', 'callbacks', 'call_history'};
     bool isSyncingPrices = false;
     final formKey = GlobalKey<FormState>();
     String? localError;
@@ -97,7 +120,7 @@ class _PlanManagementScreenState extends State<PlanManagementScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'Create Subscription Plan',
+                                  isEdit ? 'Edit Subscription Plan' : 'Create Subscription Plan',
                                   style: GoogleFonts.inter(fontSize: isMobile ? 15 : 17, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
                                 ),
                                 Text(
@@ -354,7 +377,7 @@ class _PlanManagementScreenState extends State<PlanManagementScreen> {
                           children: [
                             GlassSecondaryButton(text: 'Cancel', onPressed: () => Navigator.pop(ctx)),
                             GradientPrimaryButton(
-                              text: 'Create Plan',
+                              text: isEdit ? 'Save Changes' : 'Create Plan',
                               icon: Icons.check_circle_rounded,
                               onPressed: () async {
                                 if (!formKey.currentState!.validate()) {
@@ -363,29 +386,12 @@ class _PlanManagementScreenState extends State<PlanManagementScreen> {
                                 }
 
                                 final name = nameCtrl.text.trim();
-                                final existingCodes = compProv.plans.map((p) => p.code.toLowerCase()).toSet();
-                                final baseSlug = name
-                                    .toLowerCase()
-                                    .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
-                                    .replaceAll(RegExp(r'^_+|_+$'), '');
-                                String code = baseSlug.isEmpty
-                                    ? 'plan_${DateTime.now().millisecondsSinceEpoch}'
-                                    : baseSlug;
-                                if (code.length > 44) code = code.substring(0, 44);
-                                if (existingCodes.contains(code)) {
-                                  int suffix = 2;
-                                  while (existingCodes.contains('${code}_$suffix')) {
-                                    suffix++;
-                                  }
-                                  code = '${code}_$suffix';
-                                }
-
                                 setDlgState(() => localError = null);
                                 final messenger = ScaffoldMessenger.of(context);
                                 final nav = Navigator.of(ctx);
-                                final success = await context.read<CompanyProvider>().createPlan({
+
+                                final payload = <String, dynamic>{
                                   'name': name,
-                                  'code': code,
                                   'currency': selectedCurrency,
                                   'price_monthly': double.tryParse(priceMonthlyCtrl.text) ?? 0.0,
                                   'price_yearly': double.tryParse(priceYearlyCtrl.text) ?? 0.0,
@@ -393,15 +399,44 @@ class _PlanManagementScreenState extends State<PlanManagementScreen> {
                                   'max_leads': int.tryParse(maxLeadsCtrl.text) ?? 5000,
                                   'allowed_menus': selectedMenus.toList(),
                                   'description': descCtrl.text.trim(),
-                                });
+                                };
+
+                                if (!isEdit) {
+                                  final existingCodes = compProv.plans.map((p) => p.code.toLowerCase()).toSet();
+                                  final baseSlug = name
+                                      .toLowerCase()
+                                      .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
+                                      .replaceAll(RegExp(r'^_+|_+$'), '');
+                                  String code = baseSlug.isEmpty
+                                      ? 'plan_${DateTime.now().millisecondsSinceEpoch}'
+                                      : baseSlug;
+                                  if (code.length > 44) code = code.substring(0, 44);
+                                  if (existingCodes.contains(code)) {
+                                    int suffix = 2;
+                                    while (existingCodes.contains('${code}_$suffix')) {
+                                      suffix++;
+                                    }
+                                    code = '${code}_$suffix';
+                                  }
+                                  payload['code'] = code;
+                                }
+
+                                final provider = context.read<CompanyProvider>();
+                                final success = isEdit
+                                    ? await provider.updatePlan(existingPlan.id, payload)
+                                    : await provider.createPlan(payload);
                                 if (success && mounted) {
                                   nav.pop();
                                   messenger.showSnackBar(
-                                    SnackBar(content: Text('Plan "$name" created successfully!'), backgroundColor: AppColors.success),
+                                    SnackBar(
+                                      content: Text(isEdit ? 'Plan "$name" updated successfully!' : 'Plan "$name" created successfully!'),
+                                      backgroundColor: AppColors.success,
+                                    ),
                                   );
                                 } else if (mounted) {
                                   setDlgState(() {
-                                    localError = context.read<CompanyProvider>().errorMessage ?? 'Failed to create plan. Please try again.';
+                                    localError = context.read<CompanyProvider>().errorMessage ??
+                                        (isEdit ? 'Failed to update plan. Please try again.' : 'Failed to create plan. Please try again.');
                                   });
                                 }
                               },
@@ -663,6 +698,21 @@ class _PlanManagementScreenState extends State<PlanManagementScreen> {
             ),
             const SizedBox(height: 6),
             Align(alignment: Alignment.centerLeft, child: modulesWrap),
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerRight,
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF1D4ED8),
+                  side: const BorderSide(color: Color(0xFF93C5FD)),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                icon: const Icon(Icons.edit_outlined, size: 15),
+                label: Text('Edit Plan', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700)),
+                onPressed: () => _showPlanFormDialog(existingPlan: p),
+              ),
+            ),
           ],
         ),
       ),

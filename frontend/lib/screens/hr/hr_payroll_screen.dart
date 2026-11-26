@@ -4,6 +4,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
+import '../../core/widgets/action_loader.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/employee_provider.dart';
 import '../../providers/hr_payroll_provider.dart';
@@ -127,6 +128,7 @@ class _HrPayrollScreenState extends State<HrPayrollScreen> with SingleTickerProv
                           _pdfRow('Basic Salary', '$curr ${slip['basic_salary']}'),
                           _pdfRow('HRA', '$curr ${slip['hra']}'),
                           _pdfRow('Allowances', '$curr ${slip['allowances']}'),
+                          _pdfRow('Bonus / Incentive', '$curr ${slip['bonus'] ?? '0.00'}'),
                           pw.Divider(),
                           _pdfRow('Gross Earnings', '$curr ${slip['gross_earnings']}', bold: true),
                         ],
@@ -145,6 +147,7 @@ class _HrPayrollScreenState extends State<HrPayrollScreen> with SingleTickerProv
                           pw.Divider(),
                           _pdfRow('LOP Deduction', '$curr ${slip['lop_deduction']}'),
                           _pdfRow('Late Deduction', '$curr ${slip['late_deduction']}'),
+                          _pdfRow('Other / Rule Deductions', '$curr ${slip['other_deductions'] ?? '0.00'}'),
                           _pdfRow('Statutory (PF/ESI/Tax)', '$curr ${slip['statutory_deductions']}'),
                           pw.Divider(),
                           _pdfRow('Status', '${slip['status']}', bold: true),
@@ -398,14 +401,8 @@ class _HrPayrollScreenState extends State<HrPayrollScreen> with SingleTickerProv
                 ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF059669), foregroundColor: Colors.white),
                   icon: const Icon(Icons.play_arrow_rounded, size: 17),
-                  label: const Text('Generate Current Month Payroll'),
-                  onPressed: () async {
-                    final now = DateTime.now();
-                    final ok = await hr.generatePayrollRun(now.month, now.year);
-                    if (!ok && mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(hr.errorMessage ?? 'Failed to generate payroll'), backgroundColor: const Color(0xFFDC2626)));
-                    }
-                  },
+                  label: const Text('Generate Monthly Payroll'),
+                  onPressed: () => _openGeneratePayrollDialog(hr),
                 ),
             ],
           ),
@@ -461,10 +458,14 @@ class _HrPayrollScreenState extends State<HrPayrollScreen> with SingleTickerProv
             ...hr.activeRunPayslips.map((slip) => Card(
                   child: ListTile(
                     title: Text('${slip['user_name']} — Net: ${slip['currency']} ${slip['net_pay']}', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700)),
-                    subtitle: Text('Present: ${slip['present_days']} | Paid Leave: ${slip['paid_leave_days']} | LOP: ${slip['lop_days']}', style: GoogleFonts.inter(fontSize: 11)),
+                    subtitle: Text('Present: ${slip['present_days']}/${slip['working_days']} · Paid Leave: ${slip['paid_leave_days']} · LOP: ${slip['lop_days']} · Late: ${slip['late_days'] ?? 0}', style: GoogleFonts.inter(fontSize: 11)),
                     trailing: IconButton(
                       icon: const Icon(Icons.picture_as_pdf_rounded, color: Color(0xFF1E3A8A)),
-                      onPressed: () => _downloadPayslipPdf(slip),
+                      onPressed: () => ActionLoader.run(
+                        context,
+                        message: 'Generating Payslip PDF...',
+                        task: () => _downloadPayslipPdf(slip),
+                      ),
                     ),
                   ),
                 )),
@@ -491,7 +492,11 @@ class _HrPayrollScreenState extends State<HrPayrollScreen> with SingleTickerProv
             trailing: ElevatedButton.icon(
               icon: const Icon(Icons.download_rounded, size: 16),
               label: const Text('PDF'),
-              onPressed: () => _downloadPayslipPdf(slip),
+              onPressed: () => ActionLoader.run(
+                context,
+                message: 'Generating Payslip PDF...',
+                task: () => _downloadPayslipPdf(slip),
+              ),
             ),
           ),
         );
@@ -654,6 +659,74 @@ class _HrPayrollScreenState extends State<HrPayrollScreen> with SingleTickerProv
     );
   }
 
+  void _openGeneratePayrollDialog(HrPayrollProvider hr) {
+    final now = DateTime.now();
+    int selectedMonth = now.month;
+    int selectedYear = now.year;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (c, setDlg) => AlertDialog(
+          title: const Text('Generate Monthly Payroll'),
+          content: Row(
+            children: [
+              Expanded(
+                child: DropdownButtonFormField<int>(
+                  initialValue: selectedMonth,
+                  decoration: const InputDecoration(labelText: 'Month'),
+                  items: List.generate(
+                    12,
+                    (i) => DropdownMenuItem<int>(value: i + 1, child: Text('Month ${i + 1}')),
+                  ),
+                  onChanged: (v) {
+                    if (v != null) setDlg(() => selectedMonth = v);
+                  },
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: DropdownButtonFormField<int>(
+                  initialValue: selectedYear,
+                  decoration: const InputDecoration(labelText: 'Year'),
+                  items: [now.year - 1, now.year, now.year + 1]
+                      .map((y) => DropdownMenuItem<int>(value: y, child: Text('$y')))
+                      .toList(),
+                  onChanged: (v) {
+                    if (v != null) setDlg(() => selectedYear = v);
+                  },
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF059669), foregroundColor: Colors.white),
+              onPressed: () async {
+                Navigator.pop(ctx);
+                final ok = await ActionLoader.run(
+                  context,
+                  message: 'Calculating Payroll...',
+                  task: () => hr.generatePayrollRun(selectedMonth, selectedYear),
+                );
+                if (ok != true && mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(hr.errorMessage ?? 'Failed to generate payroll'),
+                      backgroundColor: const Color(0xFFDC2626),
+                    ),
+                  );
+                }
+              },
+              child: const Text('Generate'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _openSalaryStructureDialog(HrPayrollProvider hr) {
     final emps = context.read<EmployeeProvider>().employees;
     if (emps.isEmpty) return;
@@ -690,8 +763,10 @@ class _HrPayrollScreenState extends State<HrPayrollScreen> with SingleTickerProv
             TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
             ElevatedButton(
               onPressed: () async {
+                final curr = context.read<AuthProvider>().currentUser?.companyCurrency ?? 'INR';
                 final ok = await hr.saveSalaryStructure({
                   'user': empId,
+                  'currency': curr,
                   'basic_salary': double.tryParse(basicCtrl.text) ?? 0,
                   'hra': double.tryParse(hraCtrl.text) ?? 0,
                   'allowances': double.tryParse(allowCtrl.text) ?? 0,

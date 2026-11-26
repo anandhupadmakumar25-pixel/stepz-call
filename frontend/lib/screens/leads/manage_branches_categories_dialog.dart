@@ -3,9 +3,11 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/responsive/responsive_layout.dart';
+import '../../core/utils/region_detector.dart';
 import '../../core/widgets/glass/glass_card.dart';
 import '../../core/widgets/glass/gradient_button.dart';
 import '../../core/widgets/glass/animated_status_badge.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/lead_provider.dart';
 
 class ManageBranchesCategoriesDialog extends StatefulWidget {
@@ -72,7 +74,7 @@ class _ManageBranchesCategoriesDialogState extends State<ManageBranchesCategorie
                   const SizedBox(height: 12),
                   _buildGlassDialogInput(controller: codeController, label: 'Branch Code', hint: 'e.g. BR-X'),
                   const SizedBox(height: 12),
-                  _buildGlassDialogInput(controller: addressController, label: 'Location / City', hint: 'e.g. 101 Marine Drive, Mumbai'),
+                  _buildGlassDialogInput(controller: addressController, label: 'Location / City', hint: RegionDetector.sampleAddress(context.read<AuthProvider>().currentUser?.companyCountryIso)),
                   Container(
                     margin: const EdgeInsets.only(top: 22),
                     padding: const EdgeInsets.only(top: 16),

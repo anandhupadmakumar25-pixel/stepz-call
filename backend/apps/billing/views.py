@@ -4,6 +4,8 @@ from django.db import transaction
 from django.db.models import Sum, Count, Q
 from rest_framework import views, status, generics
 from rest_framework.response import Response
+from apps.accounts.region_utils import resolve_request_country
+from apps.billing.fx_utils import get_fx_rates, build_fx_metric
 from apps.billing.models import Quotation, Invoice, ReceiptVoucher, Product, DocumentTemplate
 from apps.billing.serializers import (
     QuotationSerializer,
@@ -252,18 +254,22 @@ class QuotationListCreateView(views.APIView):
                         if it.get('row_type') == 'SECTION_TITLE':
                             continue
                         p_name = (it.get('description') or it.get('name') or '').strip()
+                        p_code = (it.get('item_code') or it.get('code') or '').strip()
                         rate = it.get('unit_price') or it.get('rate')
                         tax = it.get('tax_percent') or 18.0
                         if p_name and rate is not None:
                             try:
+                                defaults = {
+                                    'unit_price': rate,
+                                    'tax_percent': tax,
+                                    'is_active': True,
+                                }
+                                if p_code:
+                                    defaults['item_code'] = p_code
                                 Product.objects.update_or_create(
                                     company=company,
                                     name=p_name,
-                                    defaults={
-                                        'unit_price': rate,
-                                        'tax_percent': tax,
-                                        'is_active': True,
-                                    }
+                                    defaults=defaults,
                                 )
                             except Exception:
                                 pass
@@ -377,6 +383,7 @@ class QuotationConvertToInvoiceView(views.APIView):
             company=company,
             quotation=quote,
             lead=quote.lead,
+            branch=quote.branch,
             invoice_number=invoice_num,
             customer_name=quote.customer_name,
             customer_phone=quote.customer_phone,
@@ -493,18 +500,22 @@ class InvoiceListCreateView(views.APIView):
                         if it.get('row_type') == 'SECTION_TITLE':
                             continue
                         p_name = (it.get('description') or it.get('name') or '').strip()
+                        p_code = (it.get('item_code') or it.get('code') or '').strip()
                         rate = it.get('unit_price') or it.get('rate')
                         tax = it.get('tax_percent') or 18.0
                         if p_name and rate is not None:
                             try:
+                                defaults = {
+                                    'unit_price': rate,
+                                    'tax_percent': tax,
+                                    'is_active': True,
+                                }
+                                if p_code:
+                                    defaults['item_code'] = p_code
                                 Product.objects.update_or_create(
                                     company=company,
                                     name=p_name,
-                                    defaults={
-                                        'unit_price': rate,
-                                        'tax_percent': tax,
-                                        'is_active': True,
-                                    }
+                                    defaults=defaults,
                                 )
                             except Exception:
                                 pass
@@ -859,32 +870,60 @@ class BillingOverviewKPIView(views.APIView):
             q_qs = Quotation.objects.filter(company=company)
             inv_qs = Invoice.objects.filter(company=company)
 
-        q_agg = q_qs.aggregate(
-            count=Count('id'),
-            total_val=Sum('grand_total')
-        )
-        inv_agg = inv_qs.aggregate(
-            count=Count('id'),
-            total_billed=Sum('grand_total'),
-            total_paid=Sum('amount_paid')
-        )
+        _, _, target_currency, target_symbol = resolve_request_country(request, company=company)
+        rates = get_fx_rates()
 
-        total_billed = float(inv_agg['total_billed'] or 0.0)
-        total_paid = float(inv_agg['total_paid'] or 0.0)
-        pending_receivables = max(0.0, total_billed - total_paid)
+        q_count = q_qs.count()
+        q_by_curr = {}
+        for row in q_qs.values('currency').annotate(total_val=Sum('grand_total')):
+            curr = (row['currency'] or target_currency).strip().upper()
+            q_by_curr[curr] = q_by_curr.get(curr, 0.0) + float(row['total_val'] or 0.0)
+
+        inv_count = inv_qs.count()
+        billed_by_curr = {}
+        paid_by_curr = {}
+        pending_by_curr = {}
+        for row in inv_qs.values('currency').annotate(
+            total_billed=Sum('grand_total'),
+            total_paid=Sum('amount_paid'),
+        ):
+            curr = (row['currency'] or target_currency).strip().upper()
+            b = float(row['total_billed'] or 0.0)
+            p = float(row['total_paid'] or 0.0)
+            billed_by_curr[curr] = billed_by_curr.get(curr, 0.0) + b
+            paid_by_curr[curr] = paid_by_curr.get(curr, 0.0) + p
+            pending_by_curr[curr] = pending_by_curr.get(curr, 0.0) + max(0.0, b - p)
+
+        total_quote_val, q_fx, q_text, q_items = build_fx_metric(q_by_curr, target_currency, target_symbol, rates)
+        total_billed, inv_fx, inv_text, inv_items = build_fx_metric(billed_by_curr, target_currency, target_symbol, rates)
+        total_paid, paid_fx, paid_text, paid_items = build_fx_metric(paid_by_curr, target_currency, target_symbol, rates)
+        pending_receivables, pend_fx, pend_text, pend_items = build_fx_metric(pending_by_curr, target_currency, target_symbol, rates)
 
         paid_inv_count = inv_qs.filter(payment_status='PAID').count()
         pending_inv_count = inv_qs.filter(payment_status__in=['PENDING', 'PARTIAL']).count()
 
         return Response({
-            "quotation_count": q_agg['count'] or 0,
-            "total_quotation_value": float(q_agg['total_val'] or 0.0),
-            "invoice_count": inv_agg['count'] or 0,
+            "quotation_count": q_count,
+            "total_quotation_value": total_quote_val,
+            "invoice_count": inv_count,
             "total_billed": total_billed,
             "total_collected": total_paid,
             "pending_receivables": pending_receivables,
             "paid_invoice_count": paid_inv_count,
             "pending_invoice_count": pending_inv_count,
+            "target_currency": target_currency,
+            "target_currency_symbol": target_symbol,
+            "has_fx_conversion": q_fx or inv_fx or paid_fx or pend_fx,
+            "fx_breakdown": {
+                "quotations_text": q_text,
+                "invoiced_text": inv_text,
+                "collected_text": paid_text,
+                "pending_text": pend_text,
+                "quotations": q_items,
+                "invoiced": inv_items,
+                "collected": paid_items,
+                "pending": pend_items,
+            },
         })
 
 
@@ -907,6 +946,9 @@ class DocumentTemplateListCreateView(views.APIView):
         doc_type = request.query_params.get('doc_type')
         if doc_type:
             qs = qs.filter(doc_type=doc_type.upper())
+        branch_id = request.query_params.get('branch_id')
+        if branch_id:
+            qs = qs.filter(Q(branch_id=branch_id) | Q(branch__isnull=True))
         return Response(DocumentTemplateSerializer(qs, many=True).data)
 
     def post(self, request):
@@ -918,8 +960,11 @@ class DocumentTemplateListCreateView(views.APIView):
         with transaction.atomic():
             is_default = serializer.validated_data.get('is_default', False)
             doc_type = serializer.validated_data['doc_type']
+            branch = serializer.validated_data.get('branch')
             if is_default:
-                DocumentTemplate.objects.filter(company=company, doc_type=doc_type, is_default=True).update(is_default=False)
+                DocumentTemplate.objects.filter(
+                    company=company, doc_type=doc_type, branch=branch, is_default=True
+                ).update(is_default=False)
             tpl = serializer.save(company=company, created_by=request.user)
         return Response(DocumentTemplateSerializer(tpl).data, status=status.HTTP_201_CREATED)
 
@@ -953,7 +998,10 @@ class DocumentTemplateDetailView(views.APIView):
         with transaction.atomic():
             if serializer.validated_data.get('is_default') is True:
                 doc_type = serializer.validated_data.get('doc_type', tpl.doc_type)
-                DocumentTemplate.objects.filter(company=request.user.company, doc_type=doc_type, is_default=True).exclude(id=tpl.id).update(is_default=False)
+                branch = serializer.validated_data.get('branch', tpl.branch)
+                DocumentTemplate.objects.filter(
+                    company=request.user.company, doc_type=doc_type, branch=branch, is_default=True
+                ).exclude(id=tpl.id).update(is_default=False)
             tpl = serializer.save()
         return Response(DocumentTemplateSerializer(tpl).data)
 
@@ -976,7 +1024,9 @@ class DocumentTemplateSetDefaultView(views.APIView):
         if not tpl:
             return Response({"error": "Template not found."}, status=status.HTTP_404_NOT_FOUND)
         with transaction.atomic():
-            DocumentTemplate.objects.filter(company=request.user.company, doc_type=tpl.doc_type, is_default=True).update(is_default=False)
+            DocumentTemplate.objects.filter(
+                company=request.user.company, doc_type=tpl.doc_type, branch=tpl.branch, is_default=True
+            ).update(is_default=False)
             tpl.is_default = True
             tpl.save(update_fields=['is_default', 'updated_at'])
         return Response(DocumentTemplateSerializer(tpl).data)

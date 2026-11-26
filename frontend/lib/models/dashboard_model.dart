@@ -129,3 +129,47 @@ class EmployeePerformanceItem {
     );
   }
 }
+
+class BranchSalesItem {
+  final String branchId;
+  final String branchName;
+  final String branchCode;
+  final int quotationsCount;
+  final double quotationsValue;
+  final int invoicesCount;
+  final double totalSales;
+  final double collectedAmount;
+  final double pendingBalance;
+  final int leadsCount;
+  final int callsToday;
+
+  BranchSalesItem({
+    required this.branchId,
+    required this.branchName,
+    this.branchCode = '',
+    this.quotationsCount = 0,
+    this.quotationsValue = 0.0,
+    this.invoicesCount = 0,
+    this.totalSales = 0.0,
+    this.collectedAmount = 0.0,
+    this.pendingBalance = 0.0,
+    this.leadsCount = 0,
+    this.callsToday = 0,
+  });
+
+  factory BranchSalesItem.fromJson(Map<String, dynamic> json) {
+    return BranchSalesItem(
+      branchId: json['branch_id']?.toString() ?? '',
+      branchName: json['branch_name']?.toString() ?? 'Branch',
+      branchCode: json['branch_code']?.toString() ?? '',
+      quotationsCount: json['quotations_count'] ?? 0,
+      quotationsValue: (json['quotations_value'] as num?)?.toDouble() ?? 0.0,
+      invoicesCount: json['invoices_count'] ?? 0,
+      totalSales: (json['total_sales'] as num?)?.toDouble() ?? 0.0,
+      collectedAmount: (json['collected_amount'] as num?)?.toDouble() ?? 0.0,
+      pendingBalance: (json['pending_balance'] as num?)?.toDouble() ?? 0.0,
+      leadsCount: json['leads_count'] ?? 0,
+      callsToday: json['calls_today'] ?? 0,
+    );
+  }
+}

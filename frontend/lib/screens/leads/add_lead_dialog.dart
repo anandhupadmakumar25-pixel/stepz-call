@@ -3,8 +3,10 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/responsive/responsive_layout.dart';
+import '../../core/utils/region_detector.dart';
 import '../../core/widgets/glass/glass_card.dart';
 import '../../core/widgets/glass/gradient_button.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/lead_provider.dart';
 
 class AddLeadDialog extends StatefulWidget {
@@ -87,6 +89,8 @@ class _AddLeadDialogState extends State<AddLeadDialog> {
     required String hint,
     IconData? prefixIcon,
     TextInputType? keyboardType,
+    TextInputAction? textInputAction,
+    ValueChanged<String>? onFieldSubmitted,
     String? Function(String?)? validator,
     bool autofocus = false,
   }) {
@@ -101,6 +105,8 @@ class _AddLeadDialogState extends State<AddLeadDialog> {
         TextFormField(
           controller: controller,
           keyboardType: keyboardType,
+          textInputAction: textInputAction ?? TextInputAction.done,
+          onFieldSubmitted: onFieldSubmitted ?? (_) { if (!_isSubmitting) _submit(); },
           autofocus: autofocus,
           style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF0F172A)),
           validator: validator,
@@ -246,7 +252,7 @@ class _AddLeadDialogState extends State<AddLeadDialog> {
                   _buildGlassInput(
                     controller: _phoneController,
                     label: 'Phone Number *',
-                    hint: 'e.g. 9876543210 or +919876543210',
+                    hint: 'e.g. ${RegionDetector.samplePhone(context.read<AuthProvider>().currentUser?.companyCountryIso)} or ${context.read<AuthProvider>().currentUser?.companyCountryCode ?? '+91'}${RegionDetector.samplePhone(context.read<AuthProvider>().currentUser?.companyCountryIso)}',
                     prefixIcon: Icons.phone_outlined,
                     keyboardType: TextInputType.phone,
                     autofocus: true,
@@ -314,7 +320,7 @@ class _AddLeadDialogState extends State<AddLeadDialog> {
                     _buildGlassInput(
                       controller: _cityController,
                       label: 'City (Optional)',
-                      hint: 'Mumbai, Bangalore...',
+                      hint: '${RegionDetector.sampleCity(context.read<AuthProvider>().currentUser?.companyCountryIso)}, ${RegionDetector.sampleSecondaryCity(context.read<AuthProvider>().currentUser?.companyCountryIso)}...',
                       prefixIcon: Icons.location_on_outlined,
                     ),
                   ] else
@@ -334,7 +340,7 @@ class _AddLeadDialogState extends State<AddLeadDialog> {
                           child: _buildGlassInput(
                             controller: _cityController,
                             label: 'City (Optional)',
-                            hint: 'Mumbai, Bangalore...',
+                            hint: '${RegionDetector.sampleCity(context.read<AuthProvider>().currentUser?.companyCountryIso)}, ${RegionDetector.sampleSecondaryCity(context.read<AuthProvider>().currentUser?.companyCountryIso)}...',
                             prefixIcon: Icons.location_on_outlined,
                           ),
                         ),

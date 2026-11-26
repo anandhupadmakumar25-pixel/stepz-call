@@ -228,6 +228,36 @@ class CompanyProvider extends ChangeNotifier {
     }
   }
 
+  Future<bool> updatePlan(String planId, Map<String, dynamic> data) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final res = await ApiClient.patch('/companies/plans/$planId/', data);
+      final updated = PlanModel.fromJson(res);
+      final idx = _plans.indexWhere((p) => p.id == planId);
+      if (idx != -1) {
+        _plans[idx] = updated;
+      } else {
+        _plans.add(updated);
+      }
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } on ApiException catch (e) {
+      _errorMessage = e.message;
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    } catch (e) {
+      _errorMessage = e.toString();
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
   Future<void> fetchBillingOverview() async {
     try {
       final res = await ApiClient.get('/companies/billing/overview/');
@@ -527,24 +557,56 @@ class CompanyProvider extends ChangeNotifier {
     return false;
   }
 
+  Future<Map<String, dynamic>?> collectCompanyPayment(
+    String companyId,
+    Map<String, dynamic> payload,
+  ) async {
+    _errorMessage = null;
+    try {
+      final res = await ApiClient.post('/companies/$companyId/collect-payment/', payload);
+      if (res is Map<String, dynamic>) {
+        await Future.wait([fetchBillingOverview(), fetchCompanies()]);
+        return res;
+      }
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
+    }
+    return null;
+  }
+
   Future<bool> renewCompanyPlan(
     String companyId, {
     String billingCycle = 'MONTHLY',
     int extensionDays = 30,
     String? planId,
     String? newExpiresAt,
+    String paymentStatus = 'DUE',
+    double? amountPaid,
+    String? paymentMode,
+    String? transactionRef,
   }) async {
     try {
       final payload = <String, dynamic>{
         'billing_cycle': billingCycle,
         'extension_days': extensionDays,
         'reactivate': true,
+        'payment_status': paymentStatus,
       };
       if (planId != null && planId.isNotEmpty) {
         payload['plan_id'] = planId;
       }
       if (newExpiresAt != null && newExpiresAt.isNotEmpty) {
         payload['new_expires_at'] = newExpiresAt;
+      }
+      if (amountPaid != null) {
+        payload['amount_paid'] = amountPaid;
+      }
+      if (paymentMode != null && paymentMode.isNotEmpty) {
+        payload['payment_mode'] = paymentMode;
+      }
+      if (transactionRef != null && transactionRef.isNotEmpty) {
+        payload['transaction_ref'] = transactionRef;
       }
 
       final res = await ApiClient.post('/companies/$companyId/renew-plan/', payload);
@@ -558,6 +620,7 @@ class CompanyProvider extends ChangeNotifier {
           _activeCompanyDetail = updated;
         }
         notifyListeners();
+        fetchBillingOverview();
         return true;
       }
     } catch (e) {

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../core/widgets/glass/glass_card.dart';
 import '../../core/widgets/glass/gradient_button.dart';
 import '../../models/invoice_model.dart';
+import '../../models/plan_model.dart';
 import '../../models/document_template_model.dart';
 import '../../providers/billing_provider.dart';
 import 'receipt_voucher_dialog.dart';
@@ -127,7 +128,7 @@ class _RecordPaymentDialogState extends State<RecordPaymentDialog> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Payment of ${widget.invoice.currency.isNotEmpty ? widget.invoice.currency : "₹"} ${amount.toStringAsFixed(2)} recorded! Official Receipt Voucher generated.',
+              'Payment of ${PlanModel.getSymbolForCurrency(widget.invoice.currency)} ${amount.toStringAsFixed(2)} recorded! Official Receipt Voucher generated.',
             ),
             backgroundColor: const Color(0xFF10B981),
             action: SnackBarAction(
@@ -275,7 +276,7 @@ class _RecordPaymentDialogState extends State<RecordPaymentDialog> {
                             ),
                           ),
                           Text(
-                            '${inv.currency.isNotEmpty ? inv.currency : "₹"} ${inv.grandTotal.toStringAsFixed(2)}',
+                            '${PlanModel.getSymbolForCurrency(inv.currency)} ${inv.grandTotal.toStringAsFixed(2)}',
                             style: GoogleFonts.robotoMono(
                               fontSize: 13,
                               fontWeight: FontWeight.w700,
@@ -293,7 +294,7 @@ class _RecordPaymentDialogState extends State<RecordPaymentDialog> {
                             ),
                           ),
                           Text(
-                            '${inv.currency.isNotEmpty ? inv.currency : "₹"} ${inv.amountPaid.toStringAsFixed(2)}',
+                            '${PlanModel.getSymbolForCurrency(inv.currency)} ${inv.amountPaid.toStringAsFixed(2)}',
                             style: GoogleFonts.robotoMono(
                               fontSize: 13,
                               fontWeight: FontWeight.w700,
@@ -312,7 +313,7 @@ class _RecordPaymentDialogState extends State<RecordPaymentDialog> {
                             ),
                           ),
                           Text(
-                            '${inv.currency.isNotEmpty ? inv.currency : "₹"} ${inv.balanceDue.toStringAsFixed(2)}',
+                            '${PlanModel.getSymbolForCurrency(inv.currency)} ${inv.balanceDue.toStringAsFixed(2)}',
                             style: GoogleFonts.robotoMono(
                               fontSize: 14,
                               fontWeight: FontWeight.w800,
@@ -328,7 +329,7 @@ class _RecordPaymentDialogState extends State<RecordPaymentDialog> {
 
                 // Amount Input
                 Text(
-                  'Amount Received (${inv.currency.isNotEmpty ? inv.currency : "₹"}) *',
+                  'Amount Received (${PlanModel.getSymbolForCurrency(inv.currency)}) *',
                   style: GoogleFonts.inter(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
@@ -338,6 +339,10 @@ class _RecordPaymentDialogState extends State<RecordPaymentDialog> {
                 const SizedBox(height: 6),
                 TextFormField(
                   controller: _amountController,
+                  textInputAction: TextInputAction.done,
+                  onFieldSubmitted: (_) {
+                    if (!_isSaving) _handleRecordPayment();
+                  },
                   keyboardType: const TextInputType.numberWithOptions(
                     decimal: true,
                   ),
@@ -355,7 +360,7 @@ class _RecordPaymentDialogState extends State<RecordPaymentDialog> {
                     prefixIcon: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
                       child: Text(
-                        inv.currency.isNotEmpty ? inv.currency : '₹',
+                        PlanModel.getSymbolForCurrency(inv.currency),
                         style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
                       ),
                     ),

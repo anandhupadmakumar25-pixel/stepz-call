@@ -8,8 +8,214 @@ import '../../models/quotation_model.dart';
 import '../../models/invoice_model.dart';
 import '../../models/receipt_voucher_model.dart';
 import '../../models/document_template_model.dart';
+import '../../models/plan_model.dart';
 
 class PdfInvoiceService {
+  static pw.Page _buildCanvaPdfPage({
+    required List<CanvasElement> elements,
+    required Map<String, String> tags,
+    required List<dynamic> items,
+    required pw.MemoryImage? branchLogo,
+  }) {
+    String resolveTags(String raw) {
+      var out = raw;
+      tags.forEach((k, v) {
+        out = out.replaceAll('{{$k}}', v);
+      });
+      return out;
+    }
+
+    String cellFor(dynamic item, String col, int rowIdx) {
+      final Map<String, dynamic> m;
+      if (item is Map) {
+        m = Map<String, dynamic>.from(item);
+      } else if (item is QuotationItemModel) {
+        m = {
+          'qty': item.quantity,
+          'quantity': item.quantity,
+          'description': item.isSectionTitle ? item.title : item.description,
+          'name': item.isSectionTitle ? item.title : item.description,
+          'item_code': item.itemCode,
+          'code': item.itemCode,
+          'unit_price': item.unitPrice,
+          'rate': item.unitPrice,
+          'cst': item.cst,
+          'cost_price': item.costPrice,
+          'gross_margin': item.grossMargin,
+          'tax_percent': item.taxPercent,
+          'total': item.total,
+          'amount': item.total,
+          ...item.customFields,
+        };
+      } else {
+        m = <String, dynamic>{};
+      }
+      final c = col.toLowerCase().trim();
+      if (c == 'sl. no' || c == 'sl no' || c == 'sr no' || c == 's.no' || c == '#') {
+        return '${rowIdx + 1}';
+      }
+      if (c.contains('qty')) {
+        final q = num.tryParse((m['qty'] ?? m['quantity'] ?? 1).toString()) ?? 1;
+        return q == q.roundToDouble() ? q.toInt().toString() : q.toString();
+      }
+      if (c.contains('item name') || c.contains('description')) {
+        return (m['description'] ?? m['name'] ?? '').toString();
+      }
+      if (c.contains('code') && !c.contains('hs')) {
+        return (m['item_code'] ?? m['code'] ?? '').toString();
+      }
+      if (c.contains('category')) return (m['category'] ?? m['Category'] ?? '').toString();
+      if (c.contains('hs')) return (m['hs_code'] ?? m['HS code'] ?? m['HS Code'] ?? '').toString();
+      if (c == 'pkg') return (m['pkg'] ?? m['Pkg'] ?? '').toString();
+      if (c.contains('origin')) return (m['origin'] ?? m['Origin'] ?? '').toString();
+      if (c.contains('unit price') || c.contains('rate')) {
+        final v = num.tryParse((m['unit_price'] ?? m['rate'] ?? 0).toString()) ?? 0;
+        return v.toStringAsFixed(2);
+      }
+      if (c.contains('ex. tax') || c.contains('subtotal')) {
+        final q = num.tryParse((m['qty'] ?? m['quantity'] ?? 1).toString()) ?? 1;
+        final r = num.tryParse((m['unit_price'] ?? m['rate'] ?? 0).toString()) ?? 0;
+        return (q * r).toStringAsFixed(2);
+      }
+      if (c.contains('vat%') || c.contains('tax%')) {
+        final t = num.tryParse((m['tax_percent'] ?? 0).toString()) ?? 0;
+        return t.toStringAsFixed(0);
+      }
+      if (c == 'vat' || c == 'tax') {
+        final q = num.tryParse((m['qty'] ?? m['quantity'] ?? 1).toString()) ?? 1;
+        final r = num.tryParse((m['unit_price'] ?? m['rate'] ?? 0).toString()) ?? 0;
+        final t = num.tryParse((m['tax_percent'] ?? 0).toString()) ?? 0;
+        return ((q * r) * (t / 100)).toStringAsFixed(2);
+      }
+      if (c == 'cst' || c == 'cost' || c == 'cost price') {
+        final v = num.tryParse((m['cst'] ?? m['cost_price'] ?? 0).toString()) ?? 0;
+        return v.toStringAsFixed(2);
+      }
+      if (c.contains('margin')) {
+        final v = num.tryParse((m['gross_margin'] ?? 0).toString()) ?? 0;
+        return v.toStringAsFixed(2);
+      }
+      if (c.contains('total') || c.contains('amount')) {
+        final q = num.tryParse((m['qty'] ?? m['quantity'] ?? 1).toString()) ?? 1;
+        final r = num.tryParse((m['unit_price'] ?? m['rate'] ?? 0).toString()) ?? 0;
+        final t = num.tryParse((m['tax_percent'] ?? 0).toString()) ?? 0;
+        final stored = num.tryParse((m['total'] ?? m['amount'] ?? 0).toString()) ?? 0;
+        final val = stored > 0 ? stored : (q * r * (1 + t / 100));
+        return val.toStringAsFixed(2);
+      }
+      return (m[col] ?? m.entries.where((e) => e.key.toLowerCase().trim() == c).firstOrNull?.value ?? '').toString();
+    }
+
+    final tableEl = elements.where((e) => e.type == 'table').firstOrNull;
+    final double actualTableH = 22.0 + (items.isEmpty ? 1 : items.length) * 20.0 + 20.0;
+    final double deltaY = tableEl != null ? (actualTableH - tableEl.h) : 0.0;
+
+    return pw.Page(
+      pageFormat: PdfPageFormat.a4,
+      margin: pw.EdgeInsets.zero,
+      build: (ctx) {
+        return pw.Stack(
+          children: elements.map((el) {
+            final isBelowTable = tableEl != null && el.id != tableEl.id && el.y >= (tableEl.y + tableEl.h - 12);
+            final double effY = isBelowTable ? (el.y + deltaY).clamp(0.0, 810.0) : el.y;
+            final fg = _pdfColorFromHex(el.colorHex, PdfColors.blueGrey900);
+            final hasBg = el.bgColorHex.isNotEmpty;
+            final bg = hasBg ? _pdfColorFromHex(el.bgColorHex, PdfColors.white) : null;
+            final hasBorder = el.borderWidth > 0 && el.borderColorHex.isNotEmpty;
+            final borderColor = _pdfColorFromHex(el.borderColorHex, PdfColors.grey700);
+
+            pw.Widget child;
+            if (el.type == 'line') {
+              child = pw.Container(
+                width: el.w,
+                height: el.borderWidth > 0 ? el.borderWidth : 1.0,
+                color: fg,
+              );
+            } else if (el.type == 'box') {
+              child = pw.Container(
+                width: el.w,
+                height: el.h,
+                decoration: pw.BoxDecoration(
+                  color: bg,
+                  border: hasBorder ? pw.Border.all(color: borderColor, width: el.borderWidth) : null,
+                ),
+              );
+            } else if (el.type == 'image') {
+              final img = el.imageSource == '{{branch_logo}}'
+                  ? branchLogo
+                  : (_decodeLogo(el.imageSource) ?? branchLogo);
+              child = img != null ? pw.Image(img, fit: pw.BoxFit.contain) : pw.SizedBox();
+            } else if (el.type == 'table') {
+              final cols = el.tableColumns.isEmpty ? ['Qty', 'Item Name', 'Unit price', 'Total'] : el.tableColumns;
+              final headerBg = el.bgColorHex.isNotEmpty
+                  ? _pdfColorFromHex(el.bgColorHex, PdfColors.grey300)
+                  : PdfColors.grey300;
+              child = pw.Table(
+                border: pw.TableBorder.all(color: borderColor, width: 0.6),
+                children: [
+                  pw.TableRow(
+                    decoration: pw.BoxDecoration(color: headerBg),
+                    children: cols
+                        .map((c) => pw.Padding(
+                              padding: const pw.EdgeInsets.all(4),
+                              child: pw.Text(
+                                c,
+                                style: pw.TextStyle(fontSize: el.fontSize, fontWeight: pw.FontWeight.bold, color: fg),
+                                textAlign: pw.TextAlign.center,
+                              ),
+                            ))
+                        .toList(),
+                  ),
+                  ...items.asMap().entries.map((entry) => pw.TableRow(
+                        children: cols
+                            .map((c) => pw.Padding(
+                                  padding: const pw.EdgeInsets.all(4),
+                                  child: pw.Text(
+                                    cellFor(entry.value, c, entry.key),
+                                    style: pw.TextStyle(fontSize: el.fontSize),
+                                  ),
+                                ))
+                            .toList(),
+                      )),
+                ],
+              );
+            } else {
+              final align = el.align == 'center'
+                  ? pw.TextAlign.center
+                  : (el.align == 'right' ? pw.TextAlign.right : pw.TextAlign.left);
+              child = pw.Container(
+                width: el.w,
+                height: el.h,
+                decoration: pw.BoxDecoration(
+                  color: bg,
+                  border: hasBorder ? pw.Border.all(color: borderColor, width: el.borderWidth) : null,
+                ),
+                child: pw.Text(
+                  resolveTags(el.text),
+                  textAlign: align,
+                  style: pw.TextStyle(
+                    fontSize: el.fontSize,
+                    fontWeight: el.bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+                    fontStyle: el.italic ? pw.FontStyle.italic : pw.FontStyle.normal,
+                    color: fg,
+                  ),
+                ),
+              );
+            }
+
+            return pw.Positioned(
+              left: el.x,
+              top: effY,
+              child: el.type == 'table'
+                  ? pw.SizedBox(width: el.w, child: child)
+                  : pw.SizedBox(width: el.w, height: el.h, child: child),
+            );
+          }).toList(),
+        );
+      },
+    );
+  }
+
   static PdfColor _pdfColorFromHex(String? hex, PdfColor fallback) {
     if (hex == null || hex.isEmpty) return fallback;
     try {
@@ -55,6 +261,46 @@ class PdfInvoiceService {
     final tplAccent = _pdfColorFromHex(tpl.accentColorHex, PdfColors.green800);
     final borderRadius = tpl.borderStyle == 'rounded' ? 10.0 : 4.0;
     final hasPageBorder = hasCustomTpl && tpl.borderStyle != 'none';
+
+    if (tpl.useCanvasMode && tpl.canvasElements.isNotEmpty) {
+      final tags = <String, String>{
+        'doc_number': quotation.quotationNumber,
+        'date': quotation.date,
+        'client_po': quotation.clientCode,
+        'incoterms': quotation.incoterms,
+        'currency': curr,
+        'delivery_address': quotation.location,
+        'company_trn': companyGstin ?? '',
+        'customer_name': quotation.customerName,
+        'customer_address': quotation.customerAddress,
+        'contact_person': quotation.contactPerson,
+        'customer_phone': quotation.customerPhone,
+        'customer_trn': quotation.crNumber,
+        'subtotal': quotation.subtotal.toStringAsFixed(2),
+        'tax_amount': quotation.taxAmount.toStringAsFixed(2),
+        'extra_charge': '0.00',
+        'grand_total': quotation.grandTotal.toStringAsFixed(2),
+        'amount_in_words': '',
+        'vat_in_words': '',
+        'bank_details': tpl.bankDetailsText,
+        'terms': quotation.termsAndConditions.isNotEmpty
+            ? quotation.termsAndConditions
+            : tpl.termsAndConditions,
+        'branch_name': companyName,
+        'branch_address': companyAddress ?? '',
+        'branch_email': companyEmail ?? '',
+        'branch_phone': companyPhone ?? '',
+        'sales_rep_name': quotation.salesRepName.isNotEmpty ? quotation.salesRepName : quotation.createdByName,
+        'sales_rep_phone': quotation.createdByPhone.isNotEmpty ? quotation.createdByPhone : (companyPhone ?? ''),
+      };
+      pdf.addPage(_buildCanvaPdfPage(
+        elements: tpl.canvasElements,
+        tags: tags,
+        items: quotation.items,
+        branchLogo: logoImage,
+      ));
+      return pdf.save();
+    }
 
     pdf.addPage(
       pw.Page(
@@ -103,7 +349,10 @@ class PdfInvoiceService {
                               ),
                               if (companyGstin != null && companyGstin.isNotEmpty) ...[
                                 pw.SizedBox(height: 2),
-                                pw.Text('GSTIN: $companyGstin', style: pw.TextStyle(fontSize: 9.5, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo800)),
+                                pw.Text(
+                                  '${curr == 'INR' ? 'GSTIN' : 'TRN / Tax ID'}: $companyGstin',
+                                  style: pw.TextStyle(fontSize: 9.5, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo800),
+                                ),
                               ],
                               if (companyAddress != null && companyAddress.isNotEmpty) ...[
                                 pw.SizedBox(height: 2),
@@ -210,7 +459,9 @@ class PdfInvoiceService {
                   0: const pw.FixedColumnWidth(22),
                   1: const pw.FlexColumnWidth(3.0),
                 };
+                final hasItemCode = quotation.items.any((i) => i.itemCode.trim().isNotEmpty);
                 int cIdx = 2;
+                if (hasItemCode) colWidths[cIdx++] = const pw.FixedColumnWidth(58); // Item Code
                 for (int i = 0; i < customCols.length; i++) {
                   colWidths[cIdx++] = const pw.FlexColumnWidth(1.3);
                 }
@@ -239,6 +490,8 @@ class PdfInvoiceService {
                       children: [
                         pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('#', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5, color: includeCst ? PdfColors.black : PdfColors.white))),
                         pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Item Description', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5, color: includeCst ? PdfColors.black : PdfColors.white))),
+                        if (hasItemCode)
+                          pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Item Code', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5, color: includeCst ? PdfColors.black : PdfColors.white))),
                         for (final col in customCols)
                           pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(col, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5, color: includeCst ? PdfColors.black : PdfColors.white))),
                         if (showQty)
@@ -297,6 +550,8 @@ class PdfInvoiceService {
                         children: [
                           pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('$idx', style: const pw.TextStyle(fontSize: 8))),
                           pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(item.description, style: const pw.TextStyle(fontSize: 8.5))),
+                          if (hasItemCode)
+                            pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(item.itemCode.isNotEmpty ? item.itemCode : '-', style: const pw.TextStyle(fontSize: 8))),
                           for (final col in customCols)
                             pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(item.customFields[col] ?? '-', style: const pw.TextStyle(fontSize: 8))),
                           if (showQty)
@@ -443,6 +698,46 @@ class PdfInvoiceService {
     final tplColor = _pdfColorFromHex(tpl.primaryColorHex, PdfColors.indigo800);
     final borderRadius = tpl.borderStyle == 'rounded' ? 10.0 : 4.0;
 
+    if (tpl.useCanvasMode && tpl.canvasElements.isNotEmpty) {
+      final tags = <String, String>{
+        'doc_number': invoice.invoiceNumber,
+        'date': invoice.date,
+        'client_po': invoice.clientCode,
+        'incoterms': invoice.incoterms,
+        'currency': curr,
+        'delivery_address': invoice.location,
+        'company_trn': companyGstin ?? '',
+        'customer_name': invoice.customerName,
+        'customer_address': invoice.customerAddress,
+        'contact_person': invoice.contactPerson,
+        'customer_phone': invoice.customerPhone,
+        'customer_trn': invoice.crNumber,
+        'subtotal': invoice.subtotal.toStringAsFixed(2),
+        'tax_amount': invoice.taxAmount.toStringAsFixed(2),
+        'extra_charge': '0.00',
+        'grand_total': invoice.grandTotal.toStringAsFixed(2),
+        'amount_in_words': invoice.amountInWordsEn,
+        'vat_in_words': '',
+        'bank_details': tpl.bankDetailsText,
+        'terms': invoice.termsAndConditions.isNotEmpty
+            ? invoice.termsAndConditions
+            : tpl.termsAndConditions,
+        'branch_name': companyName,
+        'branch_address': companyAddress ?? '',
+        'branch_email': companyEmail ?? '',
+        'branch_phone': companyPhone ?? '',
+        'sales_rep_name': invoice.salesRepName.isNotEmpty ? invoice.salesRepName : invoice.createdByName,
+        'sales_rep_phone': invoice.createdByPhone.isNotEmpty ? invoice.createdByPhone : (companyPhone ?? ''),
+      };
+      pdf.addPage(_buildCanvaPdfPage(
+        elements: tpl.canvasElements,
+        tags: tags,
+        items: invoice.items,
+        branchLogo: logoImage,
+      ));
+      return pdf.save();
+    }
+
     pdf.addPage(
       pw.Page(
         pageFormat: PdfPageFormat.a4,
@@ -498,7 +793,10 @@ class PdfInvoiceService {
                               ),
                               if (companyGstin != null && companyGstin.isNotEmpty) ...[
                                 pw.SizedBox(height: 2),
-                                pw.Text('GSTIN: $companyGstin', style: pw.TextStyle(fontSize: 9.5, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo800)),
+                                pw.Text(
+                                  '${curr == 'INR' ? 'GSTIN' : 'TRN / Tax ID'}: $companyGstin',
+                                  style: pw.TextStyle(fontSize: 9.5, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo800),
+                                ),
                               ],
                               if (companyAddress != null && companyAddress.isNotEmpty) ...[
                                 pw.SizedBox(height: 2),
@@ -622,7 +920,9 @@ class PdfInvoiceService {
                   0: const pw.FixedColumnWidth(24),
                   1: const pw.FlexColumnWidth(3.0),
                 };
+                final hasItemCode = invoice.items.any((i) => i.itemCode.trim().isNotEmpty);
                 int cIdx = 2;
+                if (hasItemCode) colWidths[cIdx++] = const pw.FixedColumnWidth(58); // Item Code
                 for (int i = 0; i < customCols.length; i++) {
                   colWidths[cIdx++] = const pw.FlexColumnWidth(1.4);
                 }
@@ -643,6 +943,8 @@ class PdfInvoiceService {
                       children: [
                         pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('#', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9, color: invoice.templateSnapshot.isNotEmpty ? PdfColors.white : PdfColors.black))),
                         pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Item Description', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9, color: invoice.templateSnapshot.isNotEmpty ? PdfColors.white : PdfColors.black))),
+                        if (hasItemCode)
+                          pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Item Code', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9, color: invoice.templateSnapshot.isNotEmpty ? PdfColors.white : PdfColors.black))),
                         for (final col in customCols)
                           pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(col, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9, color: invoice.templateSnapshot.isNotEmpty ? PdfColors.white : PdfColors.black))),
                         if (showQty)
@@ -691,6 +993,8 @@ class PdfInvoiceService {
                         children: [
                           pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('$idx', style: const pw.TextStyle(fontSize: 8.5))),
                           pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(item.description, style: const pw.TextStyle(fontSize: 9))),
+                          if (hasItemCode)
+                            pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(item.itemCode.isNotEmpty ? item.itemCode : '-', style: const pw.TextStyle(fontSize: 8.5))),
                           for (final col in customCols)
                             pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(item.customFields[col] ?? '-', style: const pw.TextStyle(fontSize: 8.5))),
                           if (showQty)
@@ -955,11 +1259,19 @@ class PdfInvoiceService {
   }
 
   /// Launch WhatsApp with pre-filled message for Quotation
-  static Future<bool> shareQuotationToWhatsApp(QuotationModel quotation, {String companyName = 'Stepz Telecaller CRM'}) async {
+  static Future<bool> shareQuotationToWhatsApp(
+    QuotationModel quotation, {
+    String companyName = 'Stepz Telecaller CRM',
+    String defaultCountryCode = '+91',
+  }) async {
     final cleanPhone = quotation.customerPhone.replaceAll(RegExp(r'[^0-9]'), '');
-    final phoneToUse = cleanPhone.length == 10 ? '91$cleanPhone' : cleanPhone;
+    final dialPrefix = defaultCountryCode.replaceAll(RegExp(r'[^0-9]'), '');
+    final phoneToUse = cleanPhone.length <= 10 && dialPrefix.isNotEmpty && !cleanPhone.startsWith(dialPrefix)
+        ? '$dialPrefix$cleanPhone'
+        : cleanPhone;
 
-    final itemsSummary = quotation.items.map((i) => '• ${i.description} (x${i.quantity}): ₹${i.total.toStringAsFixed(2)}').join('\n');
+    final currSym = PlanModel.getSymbolForCurrency(quotation.currency);
+    final itemsSummary = quotation.items.map((i) => '• ${i.description} (x${i.quantity}): $currSym ${i.total.toStringAsFixed(2)}').join('\n');
 
     final message = '''Hello ${quotation.customerName},
 
@@ -970,9 +1282,9 @@ We are pleased to share your Sales Quotation *${quotation.quotationNumber}* date
 *Items / Services:*
 $itemsSummary
 
-*Subtotal:* ${quotation.currency.isNotEmpty ? quotation.currency : '₹'} ${quotation.subtotal.toStringAsFixed(2)}
-${quotation.discountAmount > 0 ? '*Discount:* -${quotation.currency.isNotEmpty ? quotation.currency : '₹'} ${quotation.discountAmount.toStringAsFixed(2)}\n' : ''}*Tax / GST:* ${quotation.currency.isNotEmpty ? quotation.currency : '₹'} ${quotation.taxAmount.toStringAsFixed(2)}
-*Total Amount:* ${quotation.currency.isNotEmpty ? quotation.currency : '₹'} ${quotation.grandTotal.toStringAsFixed(2)}
+*Subtotal:* $currSym ${quotation.subtotal.toStringAsFixed(2)}
+${quotation.discountAmount > 0 ? '*Discount:* -$currSym ${quotation.discountAmount.toStringAsFixed(2)}\n' : ''}*Tax / GST:* $currSym ${quotation.taxAmount.toStringAsFixed(2)}
+*Total Amount:* $currSym ${quotation.grandTotal.toStringAsFixed(2)}
 
 ${quotation.validUntil != null ? 'Valid until: ${quotation.validUntil}\n' : ''}Please let us know if you have any questions or would like to proceed.
 
@@ -987,10 +1299,18 @@ Thank you!''';
   }
 
   /// Launch WhatsApp with pre-filled message for Invoice / Bill
-  static Future<bool> shareInvoiceToWhatsApp(InvoiceModel invoice, {String companyName = 'Stepz Telecaller CRM'}) async {
+  static Future<bool> shareInvoiceToWhatsApp(
+    InvoiceModel invoice, {
+    String companyName = 'Stepz Telecaller CRM',
+    String defaultCountryCode = '+91',
+  }) async {
     final cleanPhone = invoice.customerPhone.replaceAll(RegExp(r'[^0-9]'), '');
-    final phoneToUse = cleanPhone.length == 10 ? '91$cleanPhone' : cleanPhone;
+    final dialPrefix = defaultCountryCode.replaceAll(RegExp(r'[^0-9]'), '');
+    final phoneToUse = cleanPhone.length <= 10 && dialPrefix.isNotEmpty && !cleanPhone.startsWith(dialPrefix)
+        ? '$dialPrefix$cleanPhone'
+        : cleanPhone;
 
+    final currSym = PlanModel.getSymbolForCurrency(invoice.currency);
     final isPaid = invoice.paymentStatus == 'PAID';
 
     final message = '''Hello ${invoice.customerName},
@@ -999,9 +1319,9 @@ Thank you for choosing *$companyName*!
 
 Here are the details of your Fixed Price Bill / Tax Invoice *${invoice.invoiceNumber}*:
 
-*Fixed Total Amount:* ₹${invoice.grandTotal.toStringAsFixed(2)} (Fixed Price)
-*Amount Paid:* ₹${invoice.amountPaid.toStringAsFixed(2)}
-*Balance Due:* ₹${invoice.balanceDue.toStringAsFixed(2)}
+*Fixed Total Amount:* $currSym ${invoice.grandTotal.toStringAsFixed(2)} (Fixed Price)
+*Amount Paid:* $currSym ${invoice.amountPaid.toStringAsFixed(2)}
+*Balance Due:* $currSym ${invoice.balanceDue.toStringAsFixed(2)}
 *Status:* ${invoice.paymentStatus} ${isPaid ? '✅' : '⏳'}
 ${invoice.paymentMode.isNotEmpty ? '*Payment Mode:* ${invoice.paymentMode}\n' : ''}${invoice.paymentReference.isNotEmpty ? '*Ref / Txn ID:* ${invoice.paymentReference}\n' : ''}
 ${invoice.balanceDue > 0 ? 'Please complete the remaining balance at your earliest convenience.\n' : 'We have received your payment in full. Thank you!\n'}

@@ -23,6 +23,10 @@ class _RenewPlanDialogState extends State<RenewPlanDialog> {
   String _selectedBillingCycle = 'MONTHLY';
   DateTime? _customExpiryDate;
   String? _selectedPlanId;
+  String _paymentStatus = 'DUE';
+  String _paymentMode = 'BANK_TRANSFER';
+  final TextEditingController _amountCtrl = TextEditingController();
+  final TextEditingController _refCtrl = TextEditingController();
   bool _isSubmitting = false;
   String? _errorMessage;
 
@@ -126,6 +130,10 @@ class _RenewPlanDialogState extends State<RenewPlanDialog> {
       extensionDays: _selectedPresetDays > 0 ? _selectedPresetDays : 30,
       planId: _selectedPlanId,
       newExpiresAt: customIso,
+      paymentStatus: _paymentStatus,
+      amountPaid: _paymentStatus != 'DUE' ? double.tryParse(_amountCtrl.text.trim()) : null,
+      paymentMode: _paymentStatus != 'DUE' ? _paymentMode : null,
+      transactionRef: _paymentStatus != 'DUE' ? _refCtrl.text.trim() : null,
     );
 
     if (!mounted) return;
@@ -458,6 +466,76 @@ class _RenewPlanDialogState extends State<RenewPlanDialog> {
                         ),
                       );
                     }),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      initialValue: _paymentStatus,
+                      decoration: InputDecoration(
+                        labelText: 'Renewal Payment Status',
+                        filled: true,
+                        fillColor: const Color(0xFFF8FAFC),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: 'DUE', child: Text('Mark as Due (Pay Later)')),
+                        DropdownMenuItem(value: 'PAID', child: Text('Paid Now')),
+                        DropdownMenuItem(value: 'PARTIAL', child: Text('Partial Paid')),
+                      ],
+                      onChanged: (v) {
+                        if (v != null) {
+                          setState(() {
+                            _paymentStatus = v;
+                            if (_amountCtrl.text.trim().isEmpty) {
+                              final defAmt = _selectedBillingCycle == 'YEARLY'
+                                  ? widget.company.planPriceYearly
+                                  : widget.company.planPriceMonthly;
+                              if (defAmt > 0) _amountCtrl.text = defAmt.toStringAsFixed(0);
+                            }
+                          });
+                        }
+                      },
+                    ),
+                    if (_paymentStatus != 'DUE') ...[
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _amountCtrl,
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              decoration: InputDecoration(
+                                labelText: 'Amount Paid (${widget.company.planCurrency})',
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: DropdownButtonFormField<String>(
+                              initialValue: _paymentMode,
+                              decoration: InputDecoration(
+                                labelText: 'Payment Mode',
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                              ),
+                              items: const [
+                                DropdownMenuItem(value: 'BANK_TRANSFER', child: Text('Bank Transfer')),
+                                DropdownMenuItem(value: 'UPI', child: Text('UPI')),
+                                DropdownMenuItem(value: 'CASH', child: Text('Cash')),
+                                DropdownMenuItem(value: 'CARD', child: Text('Card')),
+                              ],
+                              onChanged: (v) => setState(() => _paymentMode = v ?? 'BANK_TRANSFER'),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: _refCtrl,
+                        decoration: InputDecoration(
+                          labelText: 'Transaction / Receipt Ref (Optional)',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                    ],
 
                     const SizedBox(height: 14),
 

@@ -8,6 +8,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/billing_provider.dart';
 import '../../providers/company_provider.dart';
 import '../../providers/lead_provider.dart';
+import 'canva_template_editor.dart';
 
 class TemplateDesignerDialog extends StatefulWidget {
   final DocumentTemplateModel? templateToEdit;
@@ -58,6 +59,15 @@ class _TemplateDesignerDialogState extends State<TemplateDesignerDialog> {
     _layout = edit != null
         ? TemplateLayoutConfig.fromJson(edit.layout.toJson(), docType: _docType)
         : TemplateLayoutConfig.defaultFor(_docType);
+    if (edit == null) {
+      _layout.useCanvasMode = true;
+      _layout.canvasElements = TemplateLayoutConfig.buildStandardParfemperorCanvas(_docType);
+    } else if (_layout.useCanvasMode && _layout.canvasElements.isEmpty) {
+      _layout.canvasElements = TemplateLayoutConfig.buildStandardParfemperorCanvas(_docType);
+    }
+    if (edit != null && edit.branchId.isNotEmpty) {
+      _layout.branchId = edit.branchId;
+    }
 
     _nameCtrl = TextEditingController(text: edit?.name ?? '');
     _titleOverrideCtrl = TextEditingController(text: _layout.titleOverride);
@@ -120,6 +130,7 @@ class _TemplateDesignerDialogState extends State<TemplateDesignerDialog> {
         id: widget.templateToEdit!.id,
         name: _nameCtrl.text.trim(),
         layout: _layout,
+        branchId: _layout.branchId,
         isDefault: _isDefault,
       );
     } else {
@@ -127,6 +138,7 @@ class _TemplateDesignerDialogState extends State<TemplateDesignerDialog> {
         name: _nameCtrl.text.trim(),
         docType: _docType,
         layout: _layout,
+        branchId: _layout.branchId,
         isDefault: _isDefault,
       );
     }
@@ -145,26 +157,29 @@ class _TemplateDesignerDialogState extends State<TemplateDesignerDialog> {
     final comp = context.watch<CompanyProvider>().activeCompanyDetail;
     final user = context.watch<AuthProvider>().currentUser;
     final companyName = comp?.name.isNotEmpty == true ? comp!.name : (user?.companyName ?? 'YOUR COMPANY');
-    final currency = comp?.currency ?? user?.companyCurrency ?? 'INR';
+    final currency = (user?.companyCurrency.isNotEmpty == true)
+        ? user!.companyCurrency
+        : (comp?.currency ?? 'INR');
     final primaryColor = _parseHex(_layout.primaryColorHex);
     final accentColor = _parseHex(_layout.accentColorHex, fallback: const Color(0xFF059669));
 
-    return Dialog(
-      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 1220, maxHeight: 840),
+    return Scaffold(
+      backgroundColor: Colors.white,
+      body: SafeArea(
         child: Column(
           children: [
             // Top Studio Header
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-              decoration: const BoxDecoration(
-                color: Color(0xFF0F172A),
-                borderRadius: BorderRadius.only(topLeft: Radius.circular(18), topRight: Radius.circular(18)),
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              color: const Color(0xFF0F172A),
               child: Row(
                 children: [
+                  IconButton(
+                    icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+                    tooltip: 'Back',
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                  const SizedBox(width: 6),
                   const Icon(Icons.design_services_rounded, color: Color(0xFF38BDF8), size: 22),
                   const SizedBox(width: 10),
                   Expanded(
@@ -210,9 +225,110 @@ class _TemplateDesignerDialogState extends State<TemplateDesignerDialog> {
               ),
             ),
 
-            // 3-Panel Studio Body
-            Expanded(
-              child: Row(
+            // Body: Canva Freeform Canvas OR 3-Panel Classic Studio
+            if (_layout.useCanvasMode) ...[
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                decoration: const BoxDecoration(
+                  color: Color(0xFFF1F5F9),
+                  border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
+                ),
+                child: Wrap(
+                  spacing: 12,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    SizedBox(
+                      width: 230,
+                      child: TextField(
+                        controller: _nameCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Template Name *',
+                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                          filled: true,
+                          fillColor: Colors.white,
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                    ),
+                    SizedBox(
+                      width: 185,
+                      child: DropdownButtonFormField<String>(
+                        initialValue: _docType,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Document Type',
+                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                          filled: true,
+                          fillColor: Colors.white,
+                          border: OutlineInputBorder(),
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 'QUOTATION', child: Text('Quotation', overflow: TextOverflow.ellipsis)),
+                          DropdownMenuItem(value: 'INVOICE', child: Text('Invoice / Proforma', overflow: TextOverflow.ellipsis)),
+                          DropdownMenuItem(value: 'RECEIPT', child: Text('Receipt Voucher', overflow: TextOverflow.ellipsis)),
+                        ],
+                        onChanged: widget.templateToEdit != null
+                            ? null
+                            : (v) {
+                                if (v != null) setState(() => _docType = v);
+                              },
+                      ),
+                    ),
+                    Builder(builder: (ctx) {
+                      final branches = ctx.watch<LeadProvider>().branches;
+                      return SizedBox(
+                        width: 220,
+                        child: DropdownButtonFormField<String>(
+                          initialValue: branches.any((b) => b.id == _layout.branchId) ? _layout.branchId : '',
+                          isExpanded: true,
+                          decoration: const InputDecoration(
+                            labelText: 'Branch Assignment',
+                            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                            filled: true,
+                            fillColor: Colors.white,
+                            border: OutlineInputBorder(),
+                          ),
+                          items: [
+                            const DropdownMenuItem(value: '', child: Text('All Branches (Company)', overflow: TextOverflow.ellipsis)),
+                            ...branches.map((b) => DropdownMenuItem(
+                                  value: b.id,
+                                  child: Text(b.name, overflow: TextOverflow.ellipsis),
+                                )),
+                          ],
+                          onChanged: (v) {
+                            setState(() {
+                              _layout.branchId = v ?? '';
+                              final br = branches.where((b) => b.id == _layout.branchId).firstOrNull;
+                              _layout.logoOverride = br?.logo ?? '';
+                            });
+                          },
+                        ),
+                      );
+                    }),
+                    FilterChip(
+                      label: const Text('Default for Branch/Type'),
+                      selected: _isDefault,
+                      onSelected: (v) => setState(() => _isDefault = v),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: CanvaTemplateEditor(
+                    docType: _docType,
+                    elements: _layout.canvasElements,
+                    branchLogoUrl: _layout.logoOverride,
+                    companyLogoUrl: comp?.logo ?? (user?.companyLogo ?? ''),
+                    onChanged: () {},
+                  ),
+                ),
+              ),
+            ] else
+              Expanded(
+                child: Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   // LEFT: Component Toolbox

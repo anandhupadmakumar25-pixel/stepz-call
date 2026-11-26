@@ -6,21 +6,22 @@ from apps.billing.utils.number_to_words import amount_to_words_en, amount_to_wor
 
 class DocumentTemplateSerializer(serializers.ModelSerializer):
     created_by_name = serializers.CharField(source='created_by.full_name', read_only=True, default='')
+    branch_name = serializers.CharField(source='branch.name', read_only=True, default='')
 
     class Meta:
         model = DocumentTemplate
         fields = [
-            'id', 'name', 'doc_type', 'is_default', 'is_active',
+            'id', 'name', 'doc_type', 'branch', 'branch_name', 'is_default', 'is_active',
             'layout_json', 'created_by', 'created_by_name',
             'created_at', 'updated_at',
         ]
-        read_only_fields = ['id', 'created_by', 'created_by_name', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'branch_name', 'created_by', 'created_by_name', 'created_at', 'updated_at']
 
 class ProductSerializer(serializers.ModelSerializer):
     class Meta:
         model = Product
         fields = [
-            'id', 'name', 'description', 'unit_price', 'tax_percent',
+            'id', 'item_code', 'name', 'description', 'unit_price', 'tax_percent',
             'unit', 'is_active', 'created_at'
         ]
         read_only_fields = ['id', 'created_at']
@@ -29,37 +30,41 @@ class ProductSerializer(serializers.ModelSerializer):
 class QuotationSerializer(serializers.ModelSerializer):
     quotation_number = serializers.CharField(required=False, allow_blank=True, default='')
     created_by_name = serializers.CharField(source='created_by.full_name', read_only=True, default='')
+    created_by_phone = serializers.CharField(source='created_by.phone', read_only=True, default='')
     lead_name = serializers.CharField(source='lead.full_name', read_only=True, default='')
+    branch_name = serializers.CharField(source='branch.name', read_only=True, default='')
 
     class Meta:
         model = Quotation
         fields = [
-            'id', 'quotation_number', 'lead', 'lead_name',
+            'id', 'quotation_number', 'lead', 'lead_name', 'branch', 'branch_name',
             'customer_name', 'customer_phone', 'customer_email', 'customer_address',
             'client_code', 'sales_rep_name', 'incoterms', 'location', 'contact_person', 'cr_number',
-            'currency', 'created_by', 'created_by_name', 'date', 'valid_until',
+            'currency', 'created_by', 'created_by_name', 'created_by_phone', 'date', 'valid_until',
             'items', 'custom_columns', 'subtotal', 'tax_amount', 'discount_amount', 'grand_total',
             'total_cost', 'gross_margin', 'hide_cost_in_pdf',
             'notes', 'terms_and_conditions', 'status',
             'template', 'template_snapshot',
             'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'created_by', 'created_by_name', 'date', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'branch_name', 'created_by', 'created_by_name', 'created_by_phone', 'date', 'created_at', 'updated_at']
 
 
 class InvoiceSerializer(serializers.ModelSerializer):
     invoice_number = serializers.CharField(required=False, allow_blank=True, default='')
     created_by_name = serializers.CharField(source='created_by.full_name', read_only=True, default='')
+    created_by_phone = serializers.CharField(source='created_by.phone', read_only=True, default='')
     quotation_number = serializers.CharField(source='quotation.quotation_number', read_only=True, default='')
+    branch_name = serializers.CharField(source='branch.name', read_only=True, default='')
     balance_due = serializers.FloatField(read_only=True)
 
     class Meta:
         model = Invoice
         fields = [
-            'id', 'invoice_number', 'quotation', 'quotation_number', 'lead',
+            'id', 'invoice_number', 'quotation', 'quotation_number', 'lead', 'branch', 'branch_name',
             'customer_name', 'customer_phone', 'customer_email', 'customer_address',
             'client_code', 'sales_rep_name', 'incoterms', 'location', 'contact_person', 'cr_number',
-            'currency', 'created_by', 'created_by_name', 'date', 'due_date',
+            'currency', 'created_by', 'created_by_name', 'created_by_phone', 'date', 'due_date',
             'items', 'custom_columns', 'subtotal', 'tax_amount', 'discount_amount', 'grand_total',
             'total_cost', 'gross_margin', 'hide_cost_in_pdf',
             'amount_in_words_en', 'amount_in_words_ar',
@@ -68,7 +73,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
             'template', 'template_snapshot',
             'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'created_by', 'created_by_name', 'date', 'balance_due', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'branch_name', 'created_by', 'created_by_name', 'created_by_phone', 'date', 'balance_due', 'created_at', 'updated_at']
 
 
 class ReceiptVoucherSerializer(serializers.ModelSerializer):
@@ -76,11 +81,12 @@ class ReceiptVoucherSerializer(serializers.ModelSerializer):
     created_by_name = serializers.CharField(source='created_by.full_name', read_only=True, default='')
     invoice_number = serializers.CharField(source='invoice.invoice_number', read_only=True, default='')
     quotation_number = serializers.CharField(source='quotation.quotation_number', read_only=True, default='')
+    branch_name = serializers.CharField(source='branch.name', read_only=True, default='')
 
     class Meta:
         model = ReceiptVoucher
         fields = [
-            'id', 'voucher_number', 'invoice', 'invoice_number', 'quotation', 'quotation_number',
+            'id', 'voucher_number', 'invoice', 'invoice_number', 'quotation', 'quotation_number', 'branch', 'branch_name',
             'customer_name', 'customer_phone', 'customer_email', 'date',
             'amount', 'currency', 'total_invoice_amount', 'previously_paid', 'balance_due',
             'amount_in_words_en', 'amount_in_words_ar',
@@ -91,7 +97,7 @@ class ReceiptVoucherSerializer(serializers.ModelSerializer):
             'pod_driver_name', 'pod_receiver_name', 'pod_receiver_phone', 'pod_delivery_date', 'pod_commodity',
             'notes', 'template', 'template_snapshot', 'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'created_by', 'created_by_name', 'date', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'branch_name', 'created_by', 'created_by_name', 'date', 'created_at', 'updated_at']
 
 
 class RecordPaymentSerializer(serializers.Serializer):

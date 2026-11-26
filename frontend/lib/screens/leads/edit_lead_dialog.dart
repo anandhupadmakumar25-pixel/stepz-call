@@ -404,6 +404,8 @@ class _EditLeadDialogState extends State<EditLeadDialog> {
           controller: controller,
           maxLines: maxLines,
           keyboardType: keyboardType,
+          textInputAction: maxLines == 1 ? TextInputAction.done : TextInputAction.newline,
+          onFieldSubmitted: maxLines == 1 ? (_) { if (!_isSaving) _handleSave(); } : null,
           validator: validator,
           style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF0F172A)),
           decoration: InputDecoration(

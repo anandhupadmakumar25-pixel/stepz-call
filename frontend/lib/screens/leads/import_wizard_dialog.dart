@@ -5,9 +5,11 @@ import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/responsive/responsive_layout.dart';
+import '../../core/utils/region_detector.dart';
 import '../../core/widgets/glass/glass_card.dart';
 import '../../core/widgets/glass/gradient_button.dart';
 import '../../core/widgets/glass/animated_status_badge.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/lead_provider.dart';
 import '../../models/lead_model.dart';
 
@@ -415,18 +417,7 @@ class _ImportWizardDialogState extends State<ImportWizardDialog> {
           ),
           const SizedBox(height: 14),
 
-          // Default Branch assignment for batch
-          Text(
-            'Batch Auto-Tagging (Optional)',
-            style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
-          ),
-          const SizedBox(height: 8),
-          _buildDropdownTile(
-            title: 'Default Branch',
-            value: _selectedBranchId,
-            items: leadProvider.branches.map((b) => DropdownMenuItem(value: b.id, child: Text(b.name))).toList(),
-            onChanged: (val) => setState(() => _selectedBranchId = val),
-          ),
+          // Branch is automatically assigned when leads are assigned to staff/tasks
         ],
       ),
     );
@@ -455,8 +446,15 @@ class _ImportWizardDialogState extends State<ImportWizardDialog> {
               ),
               OutlinedButton.icon(
                 onPressed: () {
-                  const sampleCsv = 'Name,Phone,Email,City,State\nJohn Doe,+919876543210,john@example.com,Mumbai,Maharashtra\nPriya Sharma,+919123456780,priya@example.com,Bangalore,Karnataka';
-                  Clipboard.setData(const ClipboardData(text: sampleCsv));
+                  final user = context.read<AuthProvider>().currentUser;
+                  final cc = user?.companyCountryCode ?? '+91';
+                  final iso = user?.companyCountryIso;
+                  final p1 = RegionDetector.samplePhone(iso);
+                  final c1 = RegionDetector.sampleCity(iso);
+                  final s1 = RegionDetector.sampleState(iso);
+                  final c2 = RegionDetector.sampleSecondaryCity(iso);
+                  final sampleCsv = 'Name,Phone,Email,City,State\nJohn Doe,$cc$p1,john@example.com,$c1,$s1\nSara Ali,$cc$p1,sara@example.com,$c2,$s1';
+                  Clipboard.setData(ClipboardData(text: sampleCsv));
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Sample CSV template copied to clipboard! Paste it into Excel or Notepad.'), backgroundColor: AppColors.success),
                   );
@@ -521,17 +519,17 @@ class _ImportWizardDialogState extends State<ImportWizardDialog> {
                   rows: [
                     DataRow(cells: [
                       DataCell(Text('John Doe', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600))),
-                      DataCell(Text('+91 9876543210', style: GoogleFonts.robotoMono(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF047857)))),
+                      DataCell(Text('${context.read<AuthProvider>().currentUser?.companyCountryCode ?? '+91'} ${RegionDetector.samplePhone(context.read<AuthProvider>().currentUser?.companyCountryIso)}', style: GoogleFonts.robotoMono(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF047857)))),
                       DataCell(Text('john@example.com', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)))),
-                      DataCell(Text('Mumbai', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)))),
-                      DataCell(Text('Maharashtra', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)))),
+                      DataCell(Text(RegionDetector.sampleCity(context.read<AuthProvider>().currentUser?.companyCountryIso), style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)))),
+                      DataCell(Text(RegionDetector.sampleState(context.read<AuthProvider>().currentUser?.companyCountryIso), style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)))),
                     ]),
                     DataRow(cells: [
-                      DataCell(Text('Priya Sharma', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600))),
-                      DataCell(Text('9123456780', style: GoogleFonts.robotoMono(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF047857)))),
-                      DataCell(Text('priya@gmail.com', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)))),
-                      DataCell(Text('Bangalore', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)))),
-                      DataCell(Text('Karnataka', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)))),
+                      DataCell(Text('Sara Ali', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600))),
+                      DataCell(Text(RegionDetector.samplePhone(context.read<AuthProvider>().currentUser?.companyCountryIso), style: GoogleFonts.robotoMono(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF047857)))),
+                      DataCell(Text('sara@example.com', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)))),
+                      DataCell(Text(RegionDetector.sampleSecondaryCity(context.read<AuthProvider>().currentUser?.companyCountryIso), style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)))),
+                      DataCell(Text(RegionDetector.sampleState(context.read<AuthProvider>().currentUser?.companyCountryIso), style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)))),
                     ]),
                   ],
                 ),
@@ -593,33 +591,6 @@ class _ImportWizardDialogState extends State<ImportWizardDialog> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildDropdownTile({
-    required String title,
-    required String? value,
-    required List<DropdownMenuItem<String>> items,
-    required ValueChanged<String?> onChanged,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          isExpanded: true,
-          hint: Text(title, style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8))),
-          value: value,
-          dropdownColor: Colors.white,
-          style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF0F172A)),
-          items: items,
-          onChanged: onChanged,
-        ),
       ),
     );
   }

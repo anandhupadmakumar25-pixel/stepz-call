@@ -6,6 +6,7 @@ import '../../core/widgets/glass/glass_card.dart';
 import '../../core/widgets/glass/gradient_button.dart';
 import '../../core/widgets/company_logo_view.dart';
 import '../../core/responsive/responsive_layout.dart';
+import '../../core/utils/region_detector.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/company_provider.dart';
 import '../../models/company_model.dart';
@@ -151,7 +152,7 @@ class _CompanyProfileTabState extends State<CompanyProfileTab> {
                           if (comp.gstin.isNotEmpty) ...[
                             const SizedBox(height: 4),
                             Text(
-                              'GSTIN: ${comp.gstin}',
+                              '${RegionDetector.taxIdLabel(comp.defaultCountryIso)}: ${comp.gstin}',
                               style: GoogleFonts.robotoMono(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w700,

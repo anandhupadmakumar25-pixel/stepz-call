@@ -62,12 +62,17 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             .fold<double>(0.0, (sum, c) => sum + c.planPriceMonthly);
     final double arr =
         (billing['annual_recurring_revenue'] as num?)?.toDouble() ?? (mrr * 12.0);
-    final String primaryCurrency = companies.isNotEmpty
-        ? companies.first.planCurrency
-        : (billing['currency']?.toString() ?? 'INR');
-    final String currencySymbol = companies.isNotEmpty
-        ? companies.first.planCurrencySymbol
-        : PlanModel.getSymbolForCurrency(primaryCurrency);
+    final String primaryCurrency = (user?.companyCurrency.isNotEmpty == true)
+        ? user!.companyCurrency
+        : (companies.isNotEmpty
+            ? companies.first.planCurrency
+            : (billing['currency']?.toString() ?? 'INR'));
+    final String rawSym = (user?.companyCurrencySymbol.isNotEmpty == true)
+        ? user!.companyCurrencySymbol
+        : (companies.isNotEmpty
+            ? companies.first.planCurrencySymbol
+            : PlanModel.getSymbolForCurrency(primaryCurrency));
+    final String currencySymbol = rawSym.length > 1 ? '$rawSym ' : rawSym;
 
     final historyMetrics = compProv.historyMetrics;
     final renewalMetrics = compProv.renewalRequestMetrics;
@@ -289,17 +294,17 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     );
     final card3 = _buildKpiTile(
       icon: Icons.payments_outlined,
-      label: 'Monthly Billing (MRR)',
+      label: 'Monthly Revenue (MRR)',
       value: '$currencySymbol${fmt.format(mrr)}',
-      subtitle: 'ARR $currencySymbol${fmt.format(arr)}',
+      subtitle: 'Annual (ARR): $currencySymbol${fmt.format(arr)}',
       color: const Color(0xFF4338CA),
       bg: const Color(0xFFEEF2FF),
     );
     final card4 = _buildKpiTile(
       icon: Icons.account_balance_wallet_outlined,
-      label: 'Total Billed & Renewals',
+      label: 'Collected Renewals',
       value: '$currencySymbol${fmt.format(totalRenewalRevenue)}',
-      subtitle: '$totalRenewals Bills · $pendingRenewals Pending',
+      subtitle: '$totalRenewals Paid · $pendingRenewals Pending',
       color: const Color(0xFFD97706),
       bg: const Color(0xFFFFFBEB),
     );

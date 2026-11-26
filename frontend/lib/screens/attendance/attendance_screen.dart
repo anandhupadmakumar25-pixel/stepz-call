@@ -19,7 +19,9 @@ import '../../core/services/location_service.dart';
 import '../../models/attendance_model.dart';
 
 class AttendanceScreen extends StatefulWidget {
-  const AttendanceScreen({super.key});
+  final int initialTabIndex;
+
+  const AttendanceScreen({super.key, this.initialTabIndex = 0});
 
   @override
   State<AttendanceScreen> createState() => _AttendanceScreenState();
@@ -37,7 +39,11 @@ class _AttendanceScreenState extends State<AttendanceScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(
+      length: 2,
+      vsync: this,
+      initialIndex: widget.initialTabIndex.clamp(0, 1),
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _refreshAll();
     });
@@ -786,120 +792,351 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                         child: Text('No attendance records found for selected filter.', style: GoogleFonts.inter(color: const Color(0xFF64748B))),
                       ),
                     )
-                  : ListView.separated(
-                      itemCount: records.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 10),
-                      itemBuilder: (ctx, i) {
-                        final rec = records[i];
-                        final inTime = rec.checkInTime != null ? DateFormat('hh:mm a').format(rec.checkInTime!.toLocal()) : '--';
-                        final outTime = rec.checkOutTime != null ? DateFormat('hh:mm a').format(rec.checkOutTime!.toLocal()) : '--';
-                        final isFieldStaff = rec.isFieldStaffMode;
+                  : LayoutBuilder(
+                      builder: (ctx, constraints) {
+                        // Group multi-punch sessions by employee so each employee appears once in the grid.
+                        final Map<String, List<AttendanceModel>> byEmployee = {};
+                        for (final r in records) {
+                          final key = r.userId.isNotEmpty ? r.userId : r.userName;
+                          byEmployee.putIfAbsent(key, () => []).add(r);
+                        }
+                        final grouped = byEmployee.values.map((list) {
+                          final sorted = List<AttendanceModel>.from(list);
+                          sorted.sort((a, b) {
+                            final ta = a.checkInTime ?? DateTime(2000);
+                            final tb = b.checkInTime ?? DateTime(2000);
+                            return ta.compareTo(tb);
+                          });
+                          return sorted;
+                        }).toList();
 
-                        Color statusColor = const Color(0xFF10B981);
-                        if (rec.status == 'LATE') statusColor = const Color(0xFFF59E0B);
-                        if (rec.status == 'OUT_OF_FENCE') statusColor = const Color(0xFFEF4444);
-                        if (rec.status == 'ABSENT') statusColor = const Color(0xFF94A3B8);
+                        final int cols = constraints.maxWidth >= 1050
+                            ? 3
+                            : (constraints.maxWidth >= 650 ? 2 : 1);
 
-                        return GlassCard(
-                          blur: 18,
-                          opacity: 0.12,
-                          borderRadius: BorderRadius.circular(16),
-                          borderColor: AppColors.glassBorder,
-                          padding: const EdgeInsets.all(16),
-                          child: Wrap(
-                            spacing: 12,
-                            runSpacing: 10,
-                            alignment: WrapAlignment.spaceBetween,
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            children: [
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Container(
-                                    width: 38,
-                                    height: 38,
-                                    decoration: BoxDecoration(
-                                      color: statusColor.withValues(alpha: 0.15),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: Center(
-                                      child: Icon(
-                                        isFieldStaff ? Icons.directions_car_rounded : Icons.person_rounded,
-                                        color: statusColor,
-                                        size: 18,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(rec.userName, style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A))),
-                                      Text('${rec.departmentName.isNotEmpty ? rec.departmentName : 'General'} • ${rec.matchedBranchName.isNotEmpty ? rec.matchedBranchName : 'HQ'}', style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B))),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                              Wrap(
-                                spacing: 10,
-                                runSpacing: 6,
-                                crossAxisAlignment: WrapCrossAlignment.center,
-                                children: [
-                                  Text('In: $inTime', style: GoogleFonts.robotoMono(fontSize: 11, color: const Color(0xFF334155))),
-                                  Text('Out: $outTime', style: GoogleFonts.robotoMono(fontSize: 11, color: const Color(0xFF334155))),
-                                  if (rec.workingHours > 0)
-                                    Text('${rec.workingHours.toStringAsFixed(1)}h', style: GoogleFonts.robotoMono(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A))),
-                                  AnimatedStatusBadge(label: rec.status, statusColor: statusColor),
-                                  if (!isFieldStaff && rec.checkInTime != null)
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: (rec.checkInInGeofence ? const Color(0xFF10B981) : const Color(0xFFEF4444)).withValues(alpha: 0.12),
-                                        borderRadius: BorderRadius.circular(6),
-                                        border: Border.all(
-                                          color: (rec.checkInInGeofence ? const Color(0xFF10B981) : const Color(0xFFEF4444)).withValues(alpha: 0.3),
-                                        ),
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(
-                                            rec.checkInInGeofence ? Icons.check_circle_rounded : Icons.location_off_rounded,
-                                            size: 11,
-                                            color: rec.checkInInGeofence ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                        return GridView.builder(
+                          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: cols,
+                            crossAxisSpacing: 12,
+                            mainAxisSpacing: 12,
+                            mainAxisExtent: 158,
+                          ),
+                          itemCount: grouped.length,
+                          itemBuilder: (ctx, i) {
+                            final sessions = grouped[i];
+                            final first = sessions.first;
+                            final last = sessions.last;
+                            final firstIn = first.checkInTime != null
+                                ? DateFormat('hh:mm a').format(first.checkInTime!.toLocal())
+                                : '--';
+                            final lastOut = last.checkOutTime != null
+                                ? DateFormat('hh:mm a').format(last.checkOutTime!.toLocal())
+                                : (last.checkInTime != null ? 'Active' : '--');
+                            final totalHours = sessions.fold<double>(0.0, (s, r) => s + r.workingHours);
+                            final isFieldStaff = first.isFieldStaffMode;
+
+                            // Highlight highest-severity status across sessions
+                            String displayStatus = last.status;
+                            if (sessions.any((s) => s.status == 'OUT_OF_FENCE')) {
+                              displayStatus = 'OUT_OF_FENCE';
+                            } else if (sessions.any((s) => s.status == 'LATE')) {
+                              displayStatus = 'LATE';
+                            }
+
+                            Color statusColor = const Color(0xFF10B981);
+                            if (displayStatus == 'LATE') statusColor = const Color(0xFFF59E0B);
+                            if (displayStatus == 'OUT_OF_FENCE') statusColor = const Color(0xFFEF4444);
+                            if (displayStatus == 'ABSENT') statusColor = const Color(0xFF94A3B8);
+
+                            final hasNotes = sessions.any((s) => s.earlyCheckoutReason.isNotEmpty);
+
+                            return InkWell(
+                              borderRadius: BorderRadius.circular(16),
+                              onTap: () => _showEmployeePunchDetailsDialog(sessions),
+                              child: GlassCard(
+                                blur: 18,
+                                opacity: 0.14,
+                                borderRadius: BorderRadius.circular(16),
+                                borderColor: AppColors.glassBorder,
+                                padding: const EdgeInsets.all(14),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Container(
+                                          width: 36,
+                                          height: 36,
+                                          decoration: BoxDecoration(
+                                            color: statusColor.withValues(alpha: 0.15),
+                                            shape: BoxShape.circle,
                                           ),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            rec.checkInInGeofence
-                                                ? 'Inside Office'
-                                                : (rec.checkInDistanceMeters != null
-                                                    ? 'Outside (${rec.checkInDistanceMeters!.toStringAsFixed(0)}m)'
-                                                    : 'Outside (?)'),
-                                            style: GoogleFonts.inter(
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.w700,
-                                              color: rec.checkInInGeofence ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                                          child: Center(
+                                            child: Icon(
+                                              isFieldStaff ? Icons.directions_car_rounded : Icons.person_rounded,
+                                              color: statusColor,
+                                              size: 18,
                                             ),
                                           ),
-                                        ],
-                                      ),
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                first.userName,
+                                                style: GoogleFonts.inter(fontSize: 13.5, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                              Text(
+                                                '${first.departmentName.isNotEmpty ? first.departmentName : 'General'} • ${first.matchedBranchName.isNotEmpty ? first.matchedBranchName : 'HQ'}',
+                                                style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        AnimatedStatusBadge(label: displayStatus, statusColor: statusColor),
+                                      ],
                                     ),
-                                  if (rec.fieldVisits.isNotEmpty)
-                                    TextButton.icon(
-                                      onPressed: () => _showRouteModal(rec),
-                                      icon: const Icon(Icons.route_rounded, size: 14),
-                                      label: Text('Route (${rec.fieldVisits.length})', style: GoogleFonts.inter(fontSize: 11)),
-                                      style: TextButton.styleFrom(foregroundColor: AppColors.neonCyan),
+                                    Row(
+                                      children: [
+                                        Text('In: $firstIn', style: GoogleFonts.robotoMono(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF334155))),
+                                        const SizedBox(width: 10),
+                                        Text('Out: $lastOut', style: GoogleFonts.robotoMono(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF334155))),
+                                        const Spacer(),
+                                        Text('${totalHours.toStringAsFixed(1)}h', style: GoogleFonts.robotoMono(fontSize: 11.5, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A))),
+                                      ],
                                     ),
-                                ],
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Builder(
+                                              builder: (_) {
+                                                final punchCount = sessions.where((s) => s.checkInTime != null).length;
+                                                return Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                                  decoration: BoxDecoration(
+                                                    color: punchCount == 0 ? const Color(0xFFF1F5F9) : const Color(0xFFEFF6FF),
+                                                    borderRadius: BorderRadius.circular(6),
+                                                    border: Border.all(color: punchCount == 0 ? const Color(0xFFCBD5E1) : const Color(0xFFBFDBFE)),
+                                                  ),
+                                                  child: Text(
+                                                    punchCount == 0
+                                                        ? 'Not Checked In'
+                                                        : '$punchCount ${punchCount == 1 ? 'Punch' : 'Punches'}',
+                                                    style: GoogleFonts.inter(
+                                                      fontSize: 10,
+                                                      fontWeight: FontWeight.w700,
+                                                      color: punchCount == 0 ? const Color(0xFF64748B) : const Color(0xFF1D4ED8),
+                                                    ),
+                                                  ),
+                                                );
+                                              },
+                                            ),
+                                            if (hasNotes) ...[
+                                              const SizedBox(width: 6),
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                decoration: BoxDecoration(
+                                                  color: const Color(0xFFFFFBEB),
+                                                  borderRadius: BorderRadius.circular(6),
+                                                  border: Border.all(color: const Color(0xFFFDE68A)),
+                                                ),
+                                                child: Text(
+                                                  'Has Note',
+                                                  style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, color: const Color(0xFFB45309)),
+                                                ),
+                                              ),
+                                            ],
+                                          ],
+                                        ),
+                                        Text(
+                                          'View Details →',
+                                          style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w700, color: const Color(0xFF2563EB)),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
                               ),
-                            ],
-                          ),
+                            );
+                          },
                         );
                       },
                     ),
         ),
       ],
+    );
+  }
+
+  void _showEmployeePunchDetailsDialog(List<AttendanceModel> sessions) {
+    final first = sessions.first;
+    final totalHours = sessions.fold<double>(0.0, (s, r) => s + r.workingHours);
+
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 620, maxHeight: 620),
+          child: GlassCard(
+            blur: 24,
+            opacity: 0.98,
+            borderRadius: BorderRadius.circular(20),
+            borderColor: const Color(0xFFE2E8F0),
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFECFDF5),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.fingerprint_rounded, color: Color(0xFF059669)),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            first.userName,
+                            style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+                          ),
+                          Text(
+                            '${first.departmentName.isNotEmpty ? first.departmentName : 'General'} • ${first.matchedBranchName.isNotEmpty ? first.matchedBranchName : 'HQ'} • ${sessions.length} ${sessions.length == 1 ? 'Punch' : 'Punches'} (${totalHours.toStringAsFixed(1)}h total)',
+                            style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B)),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded),
+                      onPressed: () => Navigator.pop(ctx),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                const Divider(color: Color(0xFFE2E8F0), height: 1),
+                const SizedBox(height: 12),
+                Expanded(
+                  child: ListView.separated(
+                    itemCount: sessions.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 10),
+                    itemBuilder: (_, idx) {
+                      final rec = sessions[idx];
+                      final inTime = rec.checkInTime != null ? DateFormat('hh:mm a').format(rec.checkInTime!.toLocal()) : '--';
+                      final outTime = rec.checkOutTime != null ? DateFormat('hh:mm a').format(rec.checkOutTime!.toLocal()) : 'Active';
+                      final isFieldStaff = rec.isFieldStaffMode;
+
+                      Color statusColor = const Color(0xFF10B981);
+                      if (rec.status == 'LATE') statusColor = const Color(0xFFF59E0B);
+                      if (rec.status == 'OUT_OF_FENCE') statusColor = const Color(0xFFEF4444);
+                      if (rec.status == 'ABSENT') statusColor = const Color(0xFF94A3B8);
+
+                      return Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  'Session #${idx + 1} (${rec.date})',
+                                  style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
+                                ),
+                                AnimatedStatusBadge(label: rec.status, statusColor: statusColor),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 10,
+                              runSpacing: 6,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                Text('In: $inTime', style: GoogleFonts.robotoMono(fontSize: 11.5, fontWeight: FontWeight.w600, color: const Color(0xFF334155))),
+                                Text('Out: $outTime', style: GoogleFonts.robotoMono(fontSize: 11.5, fontWeight: FontWeight.w600, color: const Color(0xFF334155))),
+                                Text('${rec.workingHours.toStringAsFixed(1)}h', style: GoogleFonts.robotoMono(fontSize: 11.5, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A))),
+                                if (!isFieldStaff && rec.checkInTime != null)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: (rec.checkInInGeofence ? const Color(0xFF10B981) : const Color(0xFFEF4444)).withValues(alpha: 0.12),
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(
+                                        color: (rec.checkInInGeofence ? const Color(0xFF10B981) : const Color(0xFFEF4444)).withValues(alpha: 0.3),
+                                      ),
+                                    ),
+                                    child: Text(
+                                      rec.checkInInGeofence
+                                          ? 'Inside Office'
+                                          : (rec.checkInDistanceMeters != null
+                                              ? 'Outside (${rec.checkInDistanceMeters!.toStringAsFixed(0)}m)'
+                                              : 'Outside'),
+                                      style: GoogleFonts.inter(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w700,
+                                        color: rec.checkInInGeofence ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                                      ),
+                                    ),
+                                  ),
+                                if (rec.fieldVisits.isNotEmpty)
+                                  TextButton.icon(
+                                    onPressed: () {
+                                      Navigator.pop(ctx);
+                                      _showRouteModal(rec);
+                                    },
+                                    icon: const Icon(Icons.route_rounded, size: 14),
+                                    label: Text('Route (${rec.fieldVisits.length})', style: GoogleFonts.inter(fontSize: 11)),
+                                    style: TextButton.styleFrom(foregroundColor: AppColors.neonCyan),
+                                  ),
+                              ],
+                            ),
+                            if (rec.earlyCheckoutReason.isNotEmpty) ...[
+                              const SizedBox(height: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFFFBEB),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.4)),
+                                ),
+                                child: Text(
+                                  'Early Out / Note: ${rec.earlyCheckoutReason}',
+                                  style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF92400E)),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 

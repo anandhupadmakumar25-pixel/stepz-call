@@ -78,12 +78,16 @@ class LeadAssignmentService:
                         blocked_count += 1
                         continue
 
-                    # Assign lead
+                    # Assign lead (and inherit employee's branch if lead has no branch yet)
                     lead.assigned_to = target_emp
                     lead.assigned_at = now
                     lead.is_assigned_ever = True
                     lead.status = 'ASSIGNED'
-                    lead.save(update_fields=['assigned_to', 'assigned_at', 'is_assigned_ever', 'status'])
+                    update_cols = ['assigned_to', 'assigned_at', 'is_assigned_ever', 'status']
+                    if not lead.branch_id and target_emp.branch_id:
+                        lead.branch_id = target_emp.branch_id
+                        update_cols.append('branch')
+                    lead.save(update_fields=update_cols)
 
                     # Mark permanently blocked in this company
                     company_permanent_numbers.add(lead.normalized_phone)

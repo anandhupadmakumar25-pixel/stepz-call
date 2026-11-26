@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../core/responsive/responsive_layout.dart';
+import '../../core/utils/region_detector.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_back_button.dart';
 import '../../core/widgets/glass/app_background.dart';
@@ -18,7 +20,9 @@ import '../../providers/role_provider.dart';
 import '../../routes/app_routes.dart';
 
 class AddEmployeeScreen extends StatefulWidget {
-  const AddEmployeeScreen({super.key});
+  final Map<String, dynamic>? employee;
+
+  const AddEmployeeScreen({super.key, this.employee});
 
   @override
   State<AddEmployeeScreen> createState() => _AddEmployeeScreenState();
@@ -31,23 +35,84 @@ class _AddEmployeeScreenState extends State<AddEmployeeScreen> {
   final _phoneCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
   final _targetCtrl = TextEditingController(text: '50');
-  final _shiftStartCtrl = TextEditingController(text: '09:00:00');
-  final _shiftEndCtrl = TextEditingController(text: '18:00:00');
   final _graceCtrl = TextEditingController(text: '15');
+  DateTime _joiningDate = DateTime.now();
+  TimeOfDay _shiftStartTime = const TimeOfDay(hour: 9, minute: 0);
+  TimeOfDay _shiftEndTime = const TimeOfDay(hour: 18, minute: 0);
+
+  String _formatTimeForApi(TimeOfDay t) =>
+      '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}:00';
+
+  String _formatTimeForDisplay(TimeOfDay t) {
+    final now = DateTime.now();
+    final dt = DateTime(now.year, now.month, now.day, t.hour, t.minute);
+    return DateFormat('hh:mm a').format(dt);
+  }
+
+  // Optional Salary & Compensation fields
+  final _basicSalaryCtrl = TextEditingController();
+  final _hraCtrl = TextEditingController();
+  final _allowancesCtrl = TextEditingController();
+  final _pfDeductionCtrl = TextEditingController();
+  final _taxDeductionCtrl = TextEditingController();
+  final _bankNameCtrl = TextEditingController();
+  final _accountNumberCtrl = TextEditingController();
+  final _ifscIbanCtrl = TextEditingController();
 
   String? _selectedDepartmentId;
   String? _selectedBranchId;
   List<String> _selectedAllowedBranches = [];
   final List<String> _selectedRoleIds = [];
+  String _status = 'ACTIVE';
   bool _isSubmitting = false;
   bool _obscurePassword = true;
+
+  bool get _isEditMode => widget.employee != null;
+
+  TimeOfDay _parseTimeOfDay(String? raw, TimeOfDay fallback) {
+    if (raw == null || raw.isEmpty) return fallback;
+    final parts = raw.split(':');
+    if (parts.length >= 2) {
+      final h = int.tryParse(parts[0]);
+      final m = int.tryParse(parts[1]);
+      if (h != null && m != null) return TimeOfDay(hour: h, minute: m);
+    }
+    return fallback;
+  }
 
   @override
   void initState() {
     super.initState();
+    if (_isEditMode) {
+      final emp = widget.employee!;
+      final profile = emp['employee_profile'] as Map<String, dynamic>? ?? {};
+      _firstNameCtrl.text = (emp['first_name'] ?? '').toString();
+      _lastNameCtrl.text = (emp['last_name'] ?? '').toString();
+      _emailCtrl.text = (emp['email'] ?? '').toString();
+      _phoneCtrl.text = (emp['phone'] ?? '').toString();
+      _targetCtrl.text = (profile['daily_call_target'] ?? emp['daily_call_target'] ?? 50).toString();
+      _graceCtrl.text = (profile['grace_period_minutes'] ?? 15).toString();
+      _status = (profile['status'] ?? 'ACTIVE').toString();
+      _selectedBranchId = emp['branch_id']?.toString() ?? emp['branch']?.toString();
+      _selectedDepartmentId = emp['department_id']?.toString() ?? profile['department']?.toString();
+      final rawBranchIds = profile['allowed_branch_ids'] as List<dynamic>?;
+      if (rawBranchIds != null) {
+        _selectedAllowedBranches = rawBranchIds.map((e) => e.toString()).toList();
+      }
+      final rawRoleIds = emp['custom_role_ids'] as List<dynamic>?;
+      if (rawRoleIds != null) {
+        _selectedRoleIds.addAll(rawRoleIds.map((e) => e.toString()));
+      }
+      if (profile['joining_date'] != null) {
+        final parsed = DateTime.tryParse(profile['joining_date'].toString());
+        if (parsed != null) _joiningDate = parsed;
+      }
+      _shiftStartTime = _parseTimeOfDay(profile['shift_start_time']?.toString(), const TimeOfDay(hour: 9, minute: 0));
+      _shiftEndTime = _parseTimeOfDay(profile['shift_end_time']?.toString(), const TimeOfDay(hour: 18, minute: 0));
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final authUser = context.read<AuthProvider>().currentUser;
-      if (authUser?.branchId != null && _selectedBranchId == null) {
+      if (!_isEditMode && authUser?.branchId != null && _selectedBranchId == null) {
         setState(() {
           _selectedBranchId = authUser!.branchId;
           _selectedAllowedBranches = [authUser.branchId!];
@@ -68,9 +133,15 @@ class _AddEmployeeScreenState extends State<AddEmployeeScreen> {
     _phoneCtrl.dispose();
     _passwordCtrl.dispose();
     _targetCtrl.dispose();
-    _shiftStartCtrl.dispose();
-    _shiftEndCtrl.dispose();
     _graceCtrl.dispose();
+    _basicSalaryCtrl.dispose();
+    _hraCtrl.dispose();
+    _allowancesCtrl.dispose();
+    _pfDeductionCtrl.dispose();
+    _taxDeductionCtrl.dispose();
+    _bankNameCtrl.dispose();
+    _accountNumberCtrl.dispose();
+    _ifscIbanCtrl.dispose();
     super.dispose();
   }
 
@@ -106,11 +177,12 @@ class _AddEmployeeScreenState extends State<AddEmployeeScreen> {
 
   Future<void> _submitEmployee() async {
     if (_firstNameCtrl.text.trim().isEmpty ||
-        _emailCtrl.text.trim().isEmpty ||
-        _passwordCtrl.text.isEmpty) {
+        (!_isEditMode && (_emailCtrl.text.trim().isEmpty || _passwordCtrl.text.isEmpty))) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('First name, email, and password are required'),
+        SnackBar(
+          content: Text(_isEditMode
+              ? 'First name is required'
+              : 'First name, email, and password are required'),
           backgroundColor: AppColors.danger,
         ),
       );
@@ -119,29 +191,65 @@ class _AddEmployeeScreenState extends State<AddEmployeeScreen> {
 
     setState(() => _isSubmitting = true);
     final empP = context.read<EmployeeProvider>();
-    final ok = await empP.createEmployee({
-      'email': _emailCtrl.text.trim(),
-      'password': _passwordCtrl.text,
-      'first_name': _firstNameCtrl.text.trim(),
-      'last_name': _lastNameCtrl.text.trim(),
-      'phone': _phoneCtrl.text.trim(),
-      'role': 'EMPLOYEE',
-      'branch': _selectedBranchId,
-      'department_id': _selectedDepartmentId,
-      'allowed_branches': _selectedAllowedBranches,
-      'custom_role_ids': _selectedRoleIds,
-      'daily_call_target': int.tryParse(_targetCtrl.text) ?? 50,
-      'shift_start_time': _shiftStartCtrl.text.trim(),
-      'shift_end_time': _shiftEndCtrl.text.trim(),
-      'grace_period_minutes': int.tryParse(_graceCtrl.text) ?? 15,
-    });
+    final bool ok;
+    if (_isEditMode) {
+      ok = await empP.updateEmployee(widget.employee!['id'], {
+        'first_name': _firstNameCtrl.text.trim(),
+        'last_name': _lastNameCtrl.text.trim(),
+        'phone': _phoneCtrl.text.trim(),
+        'branch_id': _selectedBranchId,
+        'department_id': _selectedDepartmentId,
+        'allowed_branches': _selectedAllowedBranches,
+        'custom_role_ids': _selectedRoleIds,
+        'daily_call_target': int.tryParse(_targetCtrl.text) ?? 50,
+        'joining_date': DateFormat('yyyy-MM-dd').format(_joiningDate),
+        'shift_start_time': _formatTimeForApi(_shiftStartTime),
+        'shift_end_time': _formatTimeForApi(_shiftEndTime),
+        'grace_period_minutes': int.tryParse(_graceCtrl.text) ?? 15,
+        'status': _status,
+      });
+    } else {
+      ok = await empP.createEmployee({
+        'email': _emailCtrl.text.trim(),
+        'password': _passwordCtrl.text,
+        'first_name': _firstNameCtrl.text.trim(),
+        'last_name': _lastNameCtrl.text.trim(),
+        'phone': _phoneCtrl.text.trim(),
+        'role': 'EMPLOYEE',
+        'branch': _selectedBranchId,
+        'department_id': _selectedDepartmentId,
+        'allowed_branches': _selectedAllowedBranches,
+        'custom_role_ids': _selectedRoleIds,
+        'daily_call_target': int.tryParse(_targetCtrl.text) ?? 50,
+        'joining_date': DateFormat('yyyy-MM-dd').format(_joiningDate),
+        'shift_start_time': _formatTimeForApi(_shiftStartTime),
+        'shift_end_time': _formatTimeForApi(_shiftEndTime),
+        'grace_period_minutes': int.tryParse(_graceCtrl.text) ?? 15,
+        if ((double.tryParse(_basicSalaryCtrl.text) ?? 0) > 0 ||
+            (double.tryParse(_hraCtrl.text) ?? 0) > 0 ||
+            (double.tryParse(_allowancesCtrl.text) ?? 0) > 0 ||
+            _bankNameCtrl.text.trim().isNotEmpty) ...{
+          'salary_currency': context.read<AuthProvider>().currentUser?.companyCurrency ?? 'INR',
+          'basic_salary': double.tryParse(_basicSalaryCtrl.text) ?? 0.0,
+          'hra': double.tryParse(_hraCtrl.text) ?? 0.0,
+          'allowances': double.tryParse(_allowancesCtrl.text) ?? 0.0,
+          'pf_deduction': double.tryParse(_pfDeductionCtrl.text) ?? 0.0,
+          'tax_deduction': double.tryParse(_taxDeductionCtrl.text) ?? 0.0,
+          'bank_name': _bankNameCtrl.text.trim(),
+          'account_number': _accountNumberCtrl.text.trim(),
+          'ifsc_iban': _ifscIbanCtrl.text.trim(),
+        },
+      });
+    }
     if (!mounted) return;
     setState(() => _isSubmitting = false);
 
     if (ok) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Employee onboarded successfully!'),
+        SnackBar(
+          content: Text(_isEditMode
+              ? 'Employee profile updated!'
+              : 'Employee onboarded successfully!'),
           backgroundColor: AppColors.success,
         ),
       );
@@ -149,7 +257,8 @@ class _AddEmployeeScreenState extends State<AddEmployeeScreen> {
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(empP.errorMessage ?? 'Failed to create employee'),
+          content: Text(empP.errorMessage ??
+              (_isEditMode ? 'Failed to update employee' : 'Failed to create employee')),
           backgroundColor: AppColors.danger,
         ),
       );
@@ -303,7 +412,7 @@ class _AddEmployeeScreenState extends State<AddEmployeeScreen> {
               children: [
                 GlassTextField(
                   label: 'Branch Name *',
-                  hintText: 'e.g. Kochi Main Branch',
+                  hintText: 'e.g. ${RegionDetector.sampleCity(context.read<AuthProvider>().currentUser?.companyCountryIso)} Main Branch',
                   controller: nameCtrl,
                 ),
                 const SizedBox(height: 10),
@@ -802,6 +911,8 @@ class _AddEmployeeScreenState extends State<AddEmployeeScreen> {
         _buildIdentityCard(),
         const SizedBox(height: 14),
         _buildWorkAndShiftCard(deptProvider, chosenDept),
+        const SizedBox(height: 14),
+        _buildSalaryCard(authUser),
       ],
     );
 
@@ -835,7 +946,7 @@ class _AddEmployeeScreenState extends State<AddEmployeeScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Add Employee',
+                            _isEditMode ? 'Edit Employee' : 'Add Employee',
                             style: GoogleFonts.inter(
                               fontSize: isMobile ? 18 : 22,
                               fontWeight: FontWeight.w800,
@@ -843,7 +954,9 @@ class _AddEmployeeScreenState extends State<AddEmployeeScreen> {
                             ),
                           ),
                           Text(
-                            'Onboard staff, assign branches & functional roles, or request additional features',
+                            _isEditMode
+                                ? 'Update staff profile, shift schedule, branch access & roles'
+                                : 'Onboard staff, assign branches & functional roles, or request additional features',
                             style: GoogleFonts.inter(
                                 fontSize: 11.5, color: const Color(0xFF64748B)),
                             maxLines: 1,
@@ -854,7 +967,9 @@ class _AddEmployeeScreenState extends State<AddEmployeeScreen> {
                     ),
                     if (!isMobile)
                       GradientPrimaryButton(
-                        text: _isSubmitting ? 'Creating...' : 'Create Employee',
+                        text: _isEditMode
+                            ? (_isSubmitting ? 'Saving...' : 'Save Updates')
+                            : (_isSubmitting ? 'Creating...' : 'Create Employee'),
                         icon: Icons.check_rounded,
                         isLoading: _isSubmitting,
                         onPressed: _isSubmitting ? null : _submitEmployee,
@@ -909,8 +1024,9 @@ class _AddEmployeeScreenState extends State<AddEmployeeScreen> {
                       Expanded(
                         flex: 2,
                         child: GradientPrimaryButton(
-                          text:
-                              _isSubmitting ? 'Creating...' : 'Create Employee',
+                          text: _isEditMode
+                              ? (_isSubmitting ? 'Saving...' : 'Save Updates')
+                              : (_isSubmitting ? 'Creating...' : 'Create Employee'),
                           icon: Icons.check_rounded,
                           isLoading: _isSubmitting,
                           onPressed: _isSubmitting ? null : _submitEmployee,
@@ -947,7 +1063,7 @@ class _AddEmployeeScreenState extends State<AddEmployeeScreen> {
               Expanded(
                 child: GlassTextField(
                   label: 'First Name *',
-                  hintText: 'e.g. Arjun',
+                  hintText: 'e.g. John',
                   controller: _firstNameCtrl,
                 ),
               ),
@@ -955,7 +1071,7 @@ class _AddEmployeeScreenState extends State<AddEmployeeScreen> {
               Expanded(
                 child: GlassTextField(
                   label: 'Last Name',
-                  hintText: 'e.g. Nair',
+                  hintText: 'e.g. Doe',
                   controller: _lastNameCtrl,
                 ),
               ),
@@ -967,30 +1083,116 @@ class _AddEmployeeScreenState extends State<AddEmployeeScreen> {
             hintText: 'employee@company.com',
             controller: _emailCtrl,
             keyboardType: TextInputType.emailAddress,
+            enabled: !_isEditMode,
           ),
           const SizedBox(height: 10),
           GlassTextField(
             label: 'Phone Number',
-            hintText: '+91 9876543210',
+            hintText: '${context.read<AuthProvider>().currentUser?.companyCountryCode ?? '+91'} ${RegionDetector.samplePhone(context.read<AuthProvider>().currentUser?.companyCountryIso)}',
             controller: _phoneCtrl,
             keyboardType: TextInputType.phone,
           ),
-          const SizedBox(height: 10),
-          GlassTextField(
-            label: 'Initial Password *',
-            hintText: 'Minimum 6 characters',
-            controller: _passwordCtrl,
-            obscureText: _obscurePassword,
-            suffixIcon: IconButton(
-              icon: Icon(
-                _obscurePassword
-                    ? Icons.visibility_off_rounded
-                    : Icons.visibility_rounded,
-                size: 18,
-                color: const Color(0xFF64748B),
+          if (!_isEditMode) ...[
+            const SizedBox(height: 10),
+            GlassTextField(
+              label: 'Initial Password *',
+              hintText: 'Minimum 6 characters',
+              controller: _passwordCtrl,
+              obscureText: _obscurePassword,
+              suffixIcon: IconButton(
+                icon: Icon(
+                  _obscurePassword
+                      ? Icons.visibility_off_rounded
+                      : Icons.visibility_rounded,
+                  size: 18,
+                  color: const Color(0xFF64748B),
+                ),
+                onPressed: () =>
+                    setState(() => _obscurePassword = !_obscurePassword),
               ),
-              onPressed: () =>
-                  setState(() => _obscurePassword = !_obscurePassword),
+            ),
+          ] else ...[
+            const SizedBox(height: 12),
+            Text(
+              'Employee Status',
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: const Color(0xFF334155),
+              ),
+            ),
+            const SizedBox(height: 6),
+            DropdownButtonFormField<String>(
+              initialValue: _status,
+              decoration: InputDecoration(
+                filled: true,
+                fillColor: const Color(0xFFF8FAFC),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              items: const [
+                DropdownMenuItem(value: 'ACTIVE', child: Text('Active')),
+                DropdownMenuItem(value: 'ON_LEAVE', child: Text('On Leave')),
+                DropdownMenuItem(value: 'INACTIVE', child: Text('Inactive')),
+              ],
+              onChanged: (v) {
+                if (v != null) setState(() => _status = v);
+              },
+            ),
+          ],
+          const SizedBox(height: 12),
+          Text(
+            'Joining Date',
+            style: GoogleFonts.inter(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: const Color(0xFF334155),
+            ),
+          ),
+          const SizedBox(height: 6),
+          InkWell(
+            onTap: () async {
+              final picked = await showDatePicker(
+                context: context,
+                initialDate: _joiningDate,
+                firstDate: DateTime(2000),
+                lastDate: DateTime.now().add(const Duration(days: 365 * 2)),
+              );
+              if (picked != null) {
+                setState(() => _joiningDate = picked);
+              }
+            },
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.calendar_today_rounded, size: 17, color: Color(0xFF047857)),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      DateFormat('dd MMM yyyy').format(_joiningDate),
+                      style: GoogleFonts.inter(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF0F172A),
+                      ),
+                    ),
+                  ),
+                  Text(
+                    'Change',
+                    style: GoogleFonts.inter(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFF2563EB),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
@@ -1097,18 +1299,112 @@ class _AddEmployeeScreenState extends State<AddEmployeeScreen> {
           Row(
             children: [
               Expanded(
-                child: GlassTextField(
-                  label: 'Shift Start',
-                  hintText: '09:00:00',
-                  controller: _shiftStartCtrl,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Shift Start',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF334155),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    InkWell(
+                      onTap: () async {
+                        final picked = await showTimePicker(
+                          context: context,
+                          initialTime: _shiftStartTime,
+                        );
+                        if (picked != null) {
+                          setState(() => _shiftStartTime = picked);
+                        }
+                      },
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.access_time_rounded, size: 16, color: Color(0xFF047857)),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                _formatTimeForDisplay(_shiftStartTime),
+                                style: GoogleFonts.inter(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: const Color(0xFF0F172A),
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: GlassTextField(
-                  label: 'Shift End',
-                  hintText: '18:00:00',
-                  controller: _shiftEndCtrl,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Shift End',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF334155),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    InkWell(
+                      onTap: () async {
+                        final picked = await showTimePicker(
+                          context: context,
+                          initialTime: _shiftEndTime,
+                        );
+                        if (picked != null) {
+                          setState(() => _shiftEndTime = picked);
+                        }
+                      },
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.access_time_rounded, size: 16, color: Color(0xFFDC2626)),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                _formatTimeForDisplay(_shiftEndTime),
+                                style: GoogleFonts.inter(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: const Color(0xFF0F172A),
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(width: 8),
@@ -1118,6 +1414,142 @@ class _AddEmployeeScreenState extends State<AddEmployeeScreen> {
                   hintText: '15',
                   controller: _graceCtrl,
                   keyboardType: TextInputType.number,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSalaryCard(dynamic authUser) {
+    final sym = authUser?.companyCurrencySymbol ?? '₹';
+    final basic = double.tryParse(_basicSalaryCtrl.text) ?? 0.0;
+    final hra = double.tryParse(_hraCtrl.text) ?? 0.0;
+    final allow = double.tryParse(_allowancesCtrl.text) ?? 0.0;
+    final pf = double.tryParse(_pfDeductionCtrl.text) ?? 0.0;
+    final tax = double.tryParse(_taxDeductionCtrl.text) ?? 0.0;
+    final gross = basic + hra + allow;
+    final net = (gross - pf - tax) < 0 ? 0.0 : (gross - pf - tax);
+
+    return GlassCard(
+      padding: const EdgeInsets.all(16),
+      borderRadius: BorderRadius.circular(18),
+      borderColor: const Color(0xFFE2E8F0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.account_balance_wallet_outlined, size: 17, color: Color(0xFF059669)),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Salary & Compensation (Optional)',
+                    style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
+                  ),
+                ],
+              ),
+              if (gross > 0)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFECFDF5),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.35)),
+                  ),
+                  child: Text(
+                    'Net: $sym ${net.toStringAsFixed(0)}/mo',
+                    style: GoogleFonts.robotoMono(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF047857)),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: GlassTextField(
+                  label: 'Basic Salary ($sym)',
+                  hintText: '0.00',
+                  controller: _basicSalaryCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  onChanged: (_) => setState(() {}),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: GlassTextField(
+                  label: 'HRA ($sym)',
+                  hintText: '0.00',
+                  controller: _hraCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  onChanged: (_) => setState(() {}),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: GlassTextField(
+                  label: 'Allowances ($sym)',
+                  hintText: '0.00',
+                  controller: _allowancesCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  onChanged: (_) => setState(() {}),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: GlassTextField(
+                  label: 'PF / Pension ($sym)',
+                  hintText: '0.00',
+                  controller: _pfDeductionCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  onChanged: (_) => setState(() {}),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: GlassTextField(
+                  label: 'Tax Deduction ($sym)',
+                  hintText: '0.00',
+                  controller: _taxDeductionCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  onChanged: (_) => setState(() {}),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: GlassTextField(
+                  label: 'Bank Name',
+                  hintText: 'Optional',
+                  controller: _bankNameCtrl,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: GlassTextField(
+                  label: 'Account Number',
+                  hintText: 'Optional',
+                  controller: _accountNumberCtrl,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: GlassTextField(
+                  label: 'IFSC / IBAN',
+                  hintText: 'Optional',
+                  controller: _ifscIbanCtrl,
                 ),
               ),
             ],

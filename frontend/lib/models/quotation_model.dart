@@ -100,6 +100,7 @@ class QuotationModel {
 
   final String? createdBy;
   final String createdByName;
+  final String createdByPhone;
   final String date;
   final String? validUntil;
   final List<String> customColumns;
@@ -143,6 +144,7 @@ class QuotationModel {
     this.currency = 'INR',
     this.createdBy,
     this.createdByName = '',
+    this.createdByPhone = '',
     required this.date,
     this.validUntil,
     this.customColumns = const [],
@@ -300,6 +302,7 @@ class QuotationModel {
       currency: json['currency']?.toString() ?? 'INR',
       createdBy: json['created_by']?.toString() ?? json['createdBy']?.toString(),
       createdByName: json['created_by_name']?.toString() ?? json['createdByName']?.toString() ?? '',
+      createdByPhone: json['created_by_phone']?.toString() ?? json['createdByPhone']?.toString() ?? '',
       date: json['date']?.toString() ?? '',
       validUntil: json['valid_until']?.toString() ?? json['validUntil']?.toString(),
       customColumns: customCols,

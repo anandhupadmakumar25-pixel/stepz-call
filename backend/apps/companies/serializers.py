@@ -52,6 +52,8 @@ class CompanySerializer(serializers.ModelSerializer):
     days_until_expiry = serializers.IntegerField(read_only=True, allow_null=True)
     currency = serializers.CharField(read_only=True)
     currency_symbol = serializers.CharField(read_only=True)
+    due_amount = serializers.SerializerMethodField()
+    payment_status = serializers.SerializerMethodField()
 
     class Meta:
         model = Company
@@ -59,6 +61,7 @@ class CompanySerializer(serializers.ModelSerializer):
             'id', 'name', 'subdomain', 'contact_email', 'contact_phone',
             'status', 'default_country_code', 'default_country_iso',
             'currency', 'currency_symbol',
+            'due_amount', 'payment_status',
             'logo', 'address', 'gstin', 'website',
             'plan', 'plan_name', 'plan_code', 'plan_currency', 'plan_currency_symbol',
             'plan_price_monthly', 'plan_price_yearly',
@@ -75,6 +78,20 @@ class CompanySerializer(serializers.ModelSerializer):
 
     def get_created_by_name(self, obj):
         return obj.created_by.full_name if obj.created_by else 'Platform Master'
+
+    def get_due_amount(self, obj):
+        from django.db.models import Sum
+        total_due = obj.subscription_history.filter(due_amount__gt=0).aggregate(s=Sum('due_amount'))['s']
+        return float(total_due or 0)
+
+    def get_payment_status(self, obj):
+        from django.db.models import Sum
+        agg = obj.subscription_history.aggregate(paid=Sum('amount_paid'), due=Sum('due_amount'))
+        due = float(agg['due'] or 0)
+        paid = float(agg['paid'] or 0)
+        if due > 0:
+            return 'PARTIAL' if paid > 0 else 'DUE'
+        return 'PAID'
 
     def get_assigned_super_admin_name(self, obj):
         return obj.assigned_super_admin.full_name if obj.assigned_super_admin else 'Platform Master'
@@ -250,19 +267,21 @@ class CompanyRenewalRequestApproveSerializer(serializers.Serializer):
 
 class CompanySubscriptionHistorySerializer(serializers.ModelSerializer):
     company_name = serializers.CharField(source='company.name', read_only=True)
+    company_email = serializers.CharField(source='company.contact_email', read_only=True)
     approved_by_name = serializers.SerializerMethodField()
     billing_cycle_display = serializers.CharField(source='get_billing_cycle_display', read_only=True)
 
     class Meta:
         model = CompanySubscriptionHistory
         fields = [
-            'id', 'company', 'company_name', 'plan_name',
+            'id', 'company', 'company_name', 'company_email', 'plan_name',
             'billing_cycle', 'billing_cycle_display', 'extension_days',
-            'previous_expiry', 'new_expiry', 'amount_paid', 'currency',
-            'approved_by', 'approved_by_name', 'renewal_request',
-            'notes', 'created_at'
+            'previous_expiry', 'new_expiry', 'amount_paid', 'due_amount',
+            'currency', 'payment_status', 'payment_mode', 'transaction_ref',
+            'receipt_number', 'approved_by', 'approved_by_name',
+            'renewal_request', 'notes', 'created_at'
         ]
-        read_only_fields = ['id', 'company_name', 'approved_by_name', 'billing_cycle_display', 'created_at']
+        read_only_fields = ['id', 'company_name', 'company_email', 'receipt_number', 'approved_by_name', 'billing_cycle_display', 'created_at']
 
     def get_approved_by_name(self, obj):
         return obj.approved_by.full_name if obj.approved_by else 'System / Super Admin'

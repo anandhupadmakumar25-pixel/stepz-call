@@ -4,8 +4,11 @@ import 'package:provider/provider.dart';
 import '../../core/widgets/glass/glass_card.dart';
 import '../../core/widgets/glass/gradient_button.dart';
 import '../../core/widgets/company_logo_view.dart';
+import '../../core/widgets/action_loader.dart';
 import '../../core/services/pdf_invoice_service.dart';
+import '../../core/utils/region_detector.dart';
 import '../../models/invoice_model.dart';
+import '../../models/plan_model.dart';
 import '../../models/receipt_voucher_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/company_provider.dart';
@@ -165,7 +168,7 @@ class _InvoiceDetailDialogState extends State<InvoiceDetailDialog> {
                                   ),
                                   if (compGstin.isNotEmpty) ...[
                                     const SizedBox(height: 2),
-                                    Text('GSTIN: $compGstin', style: GoogleFonts.robotoMono(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF0F766E))),
+                                    Text('${RegionDetector.taxIdLabel(context.read<AuthProvider>().currentUser?.companyCountryIso)}: $compGstin', style: GoogleFonts.robotoMono(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF0F766E))),
                                   ],
                                   if (compAddress.isNotEmpty) ...[
                                     const SizedBox(height: 2),
@@ -293,14 +296,14 @@ class _InvoiceDetailDialogState extends State<InvoiceDetailDialog> {
                                           ],
                                           if (inv.showPrice) ...[
                                             const SizedBox(width: 8),
-                                            SizedBox(width: 100, child: Text('Rate (₹)', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF475569)))),
+                                            SizedBox(width: 100, child: Text('Rate (${PlanModel.getSymbolForCurrency(inv.currency)})', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF475569)))),
                                           ],
                                           if (inv.showTax) ...[
                                             const SizedBox(width: 8),
                                             SizedBox(width: 75, child: Text('Tax %', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF475569)))),
                                           ],
                                           const SizedBox(width: 8),
-                                          SizedBox(width: 100, child: Text('Total (₹)', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF475569)))),
+                                          SizedBox(width: 100, child: Text('Total (${PlanModel.getSymbolForCurrency(inv.currency)})', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF475569)))),
                                         ],
                                       ),
                                     ),
@@ -345,14 +348,14 @@ class _InvoiceDetailDialogState extends State<InvoiceDetailDialog> {
                                             ],
                                             if (inv.showPrice) ...[
                                               const SizedBox(width: 8),
-                                              SizedBox(width: 100, child: Text('₹${item.unitPrice.toStringAsFixed(2)}', textAlign: TextAlign.right, style: GoogleFonts.robotoMono(fontSize: 12))),
+                                              SizedBox(width: 100, child: Text('${PlanModel.getSymbolForCurrency(inv.currency)}${item.unitPrice.toStringAsFixed(2)}', textAlign: TextAlign.right, style: GoogleFonts.robotoMono(fontSize: 12))),
                                             ],
                                             if (inv.showTax) ...[
                                               const SizedBox(width: 8),
                                               SizedBox(width: 75, child: Text('${item.taxPercent.toStringAsFixed(0)}%', textAlign: TextAlign.right, style: GoogleFonts.robotoMono(fontSize: 12))),
                                             ],
                                             const SizedBox(width: 8),
-                                            SizedBox(width: 100, child: Text('₹${item.total.toStringAsFixed(2)}', textAlign: TextAlign.right, style: GoogleFonts.robotoMono(fontSize: 12, fontWeight: FontWeight.w700))),
+                                            SizedBox(width: 100, child: Text('${PlanModel.getSymbolForCurrency(inv.currency)}${item.total.toStringAsFixed(2)}', textAlign: TextAlign.right, style: GoogleFonts.robotoMono(fontSize: 12, fontWeight: FontWeight.w700))),
                                           ],
                                         ),
                                       );
@@ -378,15 +381,15 @@ class _InvoiceDetailDialogState extends State<InvoiceDetailDialog> {
                         ),
                         child: Column(
                           children: [
-                            _buildAmountRow('Subtotal', '₹${inv.subtotal.toStringAsFixed(2)}'),
+                            _buildAmountRow('Subtotal', '${PlanModel.getSymbolForCurrency(inv.currency)}${inv.subtotal.toStringAsFixed(2)}'),
                             if (inv.discountAmount > 0)
-                              _buildAmountRow('Discount', '-₹${inv.discountAmount.toStringAsFixed(2)}', isNegative: true),
-                            _buildAmountRow('Tax / GST', '+₹${inv.taxAmount.toStringAsFixed(2)}'),
+                              _buildAmountRow('Discount', '-${PlanModel.getSymbolForCurrency(inv.currency)}${inv.discountAmount.toStringAsFixed(2)}', isNegative: true),
+                            _buildAmountRow(RegionDetector.taxSummaryLabel(context.read<AuthProvider>().currentUser?.companyCountryIso), '+${PlanModel.getSymbolForCurrency(inv.currency)}${inv.taxAmount.toStringAsFixed(2)}'),
                             const Divider(color: Color(0xFFE2E8F0), height: 16),
-                            _buildAmountRow('Grand Total', '₹${inv.grandTotal.toStringAsFixed(2)}', isBold: true, isHighlight: true),
+                            _buildAmountRow('Grand Total', '${PlanModel.getSymbolForCurrency(inv.currency)}${inv.grandTotal.toStringAsFixed(2)}', isBold: true, isHighlight: true),
                             const SizedBox(height: 6),
-                            _buildAmountRow('Amount Paid', '₹${inv.amountPaid.toStringAsFixed(2)}', color: const Color(0xFF059669)),
-                            _buildAmountRow('Balance Due', '₹${inv.balanceDue.toStringAsFixed(2)}', isBold: true, color: inv.balanceDue > 0 ? const Color(0xFFDC2626) : const Color(0xFF059669)),
+                            _buildAmountRow('Amount Paid', '${PlanModel.getSymbolForCurrency(inv.currency)}${inv.amountPaid.toStringAsFixed(2)}', color: const Color(0xFF059669)),
+                            _buildAmountRow('Balance Due', '${PlanModel.getSymbolForCurrency(inv.currency)}${inv.balanceDue.toStringAsFixed(2)}', isBold: true, color: inv.balanceDue > 0 ? const Color(0xFFDC2626) : const Color(0xFF059669)),
                           ],
                         ),
                       ),
@@ -409,7 +412,15 @@ class _InvoiceDetailDialogState extends State<InvoiceDetailDialog> {
                     ),
                     icon: const Icon(Icons.chat_rounded, size: 16),
                     label: const Text('WhatsApp Receipt'),
-                    onPressed: () => PdfInvoiceService.shareInvoiceToWhatsApp(inv, companyName: compName),
+                    onPressed: () => ActionLoader.run(
+                      context,
+                      message: 'Opening WhatsApp...',
+                      task: () => PdfInvoiceService.shareInvoiceToWhatsApp(
+                        inv,
+                        companyName: compName,
+                        defaultCountryCode: context.read<AuthProvider>().currentUser?.companyCountryCode ?? '+91',
+                      ),
+                    ),
                   ),
                   Wrap(
                     spacing: 10,
@@ -417,15 +428,19 @@ class _InvoiceDetailDialogState extends State<InvoiceDetailDialog> {
                       GlassSecondaryButton(
                         text: 'Print / PDF',
                         icon: Icons.print_outlined,
-                        onPressed: () => PdfInvoiceService.printInvoice(
-                          inv,
-                          companyName: compName,
-                          companyPhone: compPhone,
-                          companyEmail: compEmail,
-                          companyAddress: compAddress,
-                          companyGstin: compGstin,
-                          companyWebsite: compWebsite,
-                          companyLogo: compLogo,
+                        onPressed: () => ActionLoader.run(
+                          context,
+                          message: 'Generating Invoice PDF...',
+                          task: () => PdfInvoiceService.printInvoice(
+                            inv,
+                            companyName: compName,
+                            companyPhone: compPhone,
+                            companyEmail: compEmail,
+                            companyAddress: compAddress,
+                            companyGstin: compGstin,
+                            companyWebsite: compWebsite,
+                            companyLogo: compLogo,
+                          ),
                         ),
                       ),
                       if (inv.amountPaid > 0)
@@ -441,7 +456,9 @@ class _InvoiceDetailDialogState extends State<InvoiceDetailDialog> {
                               customerPhone: inv.customerPhone,
                               customerEmail: inv.customerEmail,
                               amount: inv.amountPaid,
-                              currency: inv.currency.isNotEmpty ? inv.currency : 'INR',
+                              currency: inv.currency.isNotEmpty
+                                  ? inv.currency
+                                  : (context.read<AuthProvider>().currentUser?.companyCurrency ?? 'INR'),
                               amountInWordsEn: inv.amountInWordsEn,
                               amountInWordsAr: inv.amountInWordsAr,
                               paymentMethod: inv.paymentMode.isNotEmpty ? inv.paymentMode : 'CASH',

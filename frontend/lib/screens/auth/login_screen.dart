@@ -632,6 +632,8 @@ class _LoginScreenState extends State<LoginScreen> {
                   hint: 'username or user@company.com',
                   icon: Icons.person_outline_rounded,
                   keyboardType: TextInputType.text,
+                  textInputAction: TextInputAction.next,
+                  onFieldSubmitted: (_) => FocusScope.of(context).nextFocus(),
                   validator: (val) {
                     if (val == null || val.trim().isEmpty) {
                       return 'Please enter your username or email address';
@@ -672,6 +674,10 @@ class _LoginScreenState extends State<LoginScreen> {
                   hint: 'Enter your password',
                   icon: Icons.lock_outline_rounded,
                   obscure: _obscurePassword,
+                  textInputAction: TextInputAction.done,
+                  onFieldSubmitted: (_) {
+                    if (!auth.isLoading) _submit();
+                  },
                   validator: (val) {
                     if (val == null || val.isEmpty) {
                       return 'Please enter your password';
@@ -761,12 +767,16 @@ class _LoginScreenState extends State<LoginScreen> {
     bool obscure = false,
     Widget? suffixIcon,
     TextInputType? keyboardType,
+    TextInputAction? textInputAction,
+    ValueChanged<String>? onFieldSubmitted,
     String? Function(String?)? validator,
   }) {
     return TextFormField(
       controller: controller,
       obscureText: obscure,
       keyboardType: keyboardType,
+      textInputAction: textInputAction,
+      onFieldSubmitted: onFieldSubmitted,
       validator: validator,
       style: GoogleFonts.inter(
         fontSize: 13.5,

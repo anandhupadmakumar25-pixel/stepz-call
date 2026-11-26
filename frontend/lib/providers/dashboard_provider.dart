@@ -12,6 +12,7 @@ class DashboardProvider extends ChangeNotifier {
   List<dynamic> _outcomeCounts = [];
   List<dynamic> _activityTimeline = [];
   List<EmployeePerformanceItem> _employeePerformance = [];
+  List<BranchSalesItem> _branchSales = [];
   List<RecentCompanyItem> _recentCompanies = [];
   int _onboardingRate = 75;
 
@@ -34,6 +35,7 @@ class DashboardProvider extends ChangeNotifier {
   List<dynamic> get outcomeCounts => _outcomeCounts;
   List<dynamic> get activityTimeline => _activityTimeline;
   List<EmployeePerformanceItem> get employeePerformance => _employeePerformance;
+  List<BranchSalesItem> get branchSales => _branchSales;
   List<RecentCompanyItem> get recentCompanies => _recentCompanies;
   int get onboardingRate => _onboardingRate;
 
@@ -49,13 +51,16 @@ class DashboardProvider extends ChangeNotifier {
   List<CallAttemptModel> get telecallerRecentCalls => _telecallerRecentCalls;
   List<CallbackModel> get telecallerDueCallbacks => _telecallerDueCallbacks;
 
-  Future<void> fetchAdminDashboard() async {
+  Future<void> fetchAdminDashboard({String? branchId}) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
 
     try {
-      final res = await ApiClient.get('/analytics/admin-dashboard/');
+      final query = (branchId != null && branchId.isNotEmpty && branchId != 'ALL')
+          ? '?branch_id=${Uri.encodeComponent(branchId)}'
+          : '';
+      final res = await ApiClient.get('/analytics/admin-dashboard/$query');
       if (res['kpis'] != null) {
         _adminKpis = DashboardKpis.fromJson(res['kpis']);
       }
@@ -64,6 +69,11 @@ class DashboardProvider extends ChangeNotifier {
       if (res['employee_performance'] != null) {
         _employeePerformance = (res['employee_performance'] as List)
             .map((e) => EmployeePerformanceItem.fromJson(e))
+            .toList();
+      }
+      if (res['branch_sales'] != null) {
+        _branchSales = (res['branch_sales'] as List)
+            .map((b) => BranchSalesItem.fromJson(b))
             .toList();
       }
       if (res['recent_companies'] != null) {

@@ -9,7 +9,12 @@ class CompanySubscriptionHistoryModel {
   final String? previousExpiry;
   final String newExpiry;
   final double amountPaid;
+  final double dueAmount;
   final String currency;
+  final String paymentStatus;
+  final String paymentMode;
+  final String transactionRef;
+  final String receiptNumber;
   final String approvedByName;
   final String? renewalRequestId;
   final String notes;
@@ -26,7 +31,12 @@ class CompanySubscriptionHistoryModel {
     this.previousExpiry,
     required this.newExpiry,
     this.amountPaid = 0.0,
+    this.dueAmount = 0.0,
     this.currency = 'INR',
+    this.paymentStatus = 'PAID',
+    this.paymentMode = 'BANK_TRANSFER',
+    this.transactionRef = '',
+    this.receiptNumber = '',
     this.approvedByName = 'Super Admin',
     this.renewalRequestId,
     this.notes = '',
@@ -45,7 +55,12 @@ class CompanySubscriptionHistoryModel {
       previousExpiry: json['previous_expiry'],
       newExpiry: json['new_expiry'] ?? '',
       amountPaid: double.tryParse(json['amount_paid']?.toString() ?? '0') ?? 0.0,
+      dueAmount: double.tryParse(json['due_amount']?.toString() ?? '0') ?? 0.0,
       currency: json['currency'] ?? 'INR',
+      paymentStatus: json['payment_status'] ?? 'PAID',
+      paymentMode: json['payment_mode'] ?? 'BANK_TRANSFER',
+      transactionRef: json['transaction_ref'] ?? '',
+      receiptNumber: json['receipt_number'] ?? '',
       approvedByName: json['approved_by_name'] ?? 'Super Admin',
       renewalRequestId: json['renewal_request']?.toString(),
       notes: json['notes'] ?? '',

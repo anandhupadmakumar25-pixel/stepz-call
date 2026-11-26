@@ -30,7 +30,7 @@ class PlanModel {
   });
 
   static String getSymbolForCurrency(String curr) {
-    switch (curr.toUpperCase()) {
+    switch (curr.trim().toUpperCase()) {
       case 'INR':
         return '₹';
       case 'USD':
@@ -39,12 +39,15 @@ class PlanModel {
         return '€';
       case 'GBP':
         return '£';
-      case 'AED':
-        return 'د.إ';
       case 'QAR':
-        return 'QR';
+      case 'AED':
+      case 'SAR':
+      case 'OMR':
+      case 'KWD':
+      case 'BHD':
+        return curr.trim().toUpperCase();
       default:
-        return '₹';
+        return curr.trim().isNotEmpty ? curr.trim() : '₹';
     }
   }
 

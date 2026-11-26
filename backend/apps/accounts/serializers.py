@@ -8,6 +8,7 @@ from apps.accounts.models import (
     AttendanceRecord, FieldVisit, CustomRole,
     SectionDelegation, PermissionAuditLog,
 )
+from apps.accounts.region_utils import resolve_request_country
 
 User = get_user_model()
 
@@ -83,6 +84,10 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         plan_name = company.plan.name if (company and company.plan) else 'Default'
         plan_expires_at_iso = company.plan_expires_at.isoformat() if (company and company.plan_expires_at) else None
         days_left = company.days_until_expiry if company else None
+        country_iso, country_code, currency, currency_symbol = resolve_request_country(
+            self.context.get('request'),
+            company=company,
+        )
 
         data['user'] = {
             'id': str(user.id),
@@ -102,10 +107,10 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             'company_gstin': company.gstin if company else None,
             'company_website': company.website if company else None,
             'company_status': company.status if company else 'ACTIVE',
-            'company_country_code': company.default_country_code if company else '+91',
-            'company_country_iso': company.default_country_iso if company else 'IN',
-            'company_currency': company.currency if company else 'INR',
-            'company_currency_symbol': company.currency_symbol if company else '₹',
+            'company_country_code': country_code,
+            'company_country_iso': country_iso,
+            'company_currency': currency,
+            'company_currency_symbol': currency_symbol,
             'plan_billing_cycle': company.plan_billing_cycle if company else 'MONTHLY',
             'plan_expires_at': plan_expires_at_iso,
             'is_plan_expired': company.is_plan_expired if company else False,
@@ -132,10 +137,10 @@ class UserProfileSerializer(serializers.ModelSerializer):
     company_address = serializers.CharField(source='company.address', read_only=True, default='', allow_null=True)
     company_gstin = serializers.CharField(source='company.gstin', read_only=True, default='', allow_null=True)
     company_website = serializers.CharField(source='company.website', read_only=True, default='', allow_null=True)
-    company_country_code = serializers.CharField(source='company.default_country_code', read_only=True, default='+91', allow_null=True)
-    company_country_iso = serializers.CharField(source='company.default_country_iso', read_only=True, default='IN', allow_null=True)
-    company_currency = serializers.CharField(source='company.currency', read_only=True, default='INR')
-    company_currency_symbol = serializers.CharField(source='company.currency_symbol', read_only=True, default='₹')
+    company_country_code = serializers.SerializerMethodField()
+    company_country_iso = serializers.SerializerMethodField()
+    company_currency = serializers.SerializerMethodField()
+    company_currency_symbol = serializers.SerializerMethodField()
     branch_name = serializers.CharField(source='branch.name', read_only=True)
     full_name = serializers.CharField(read_only=True)
     company_allowed_menus = serializers.SerializerMethodField()
@@ -162,6 +167,28 @@ class UserProfileSerializer(serializers.ModelSerializer):
             'is_active', 'created_at'
         ]
         read_only_fields = ['id', 'email', 'role', 'company', 'company_name', 'created_at']
+
+    def _resolved_region(self, obj):
+        cache_attr = '_cached_resolved_region'
+        if not hasattr(obj, cache_attr):
+            setattr(
+                obj,
+                cache_attr,
+                resolve_request_country(self.context.get('request'), company=obj.company),
+            )
+        return getattr(obj, cache_attr)
+
+    def get_company_country_iso(self, obj):
+        return self._resolved_region(obj)[0]
+
+    def get_company_country_code(self, obj):
+        return self._resolved_region(obj)[1]
+
+    def get_company_currency(self, obj):
+        return self._resolved_region(obj)[2]
+
+    def get_company_currency_symbol(self, obj):
+        return self._resolved_region(obj)[3]
 
     def get_active_delegations(self, obj):
         return _serialize_active_delegations(obj)
@@ -255,7 +282,7 @@ class EmployeeProfileSerializer(serializers.ModelSerializer):
             'allowed_branches', 'allowed_branch_ids',
             'team', 'team_name', 'manager', 'manager_name',
             'employee_code', 'daily_call_target', 'is_geofence_required',
-            'shift_start_time', 'shift_end_time', 'grace_period_minutes', 'status'
+            'shift_start_time', 'shift_end_time', 'grace_period_minutes', 'joining_date', 'status'
         ]
 
     def get_allowed_branch_ids(self, obj):
@@ -281,6 +308,7 @@ class EmployeeListSerializer(serializers.ModelSerializer):
     custom_role_ids = serializers.SerializerMethodField()
     custom_role_names = serializers.SerializerMethodField()
     resolved_permissions = serializers.ReadOnlyField()
+    daily_call_target = serializers.IntegerField(source='employee_profile.daily_call_target', read_only=True, default=50)
 
     class Meta:
         model = User
@@ -289,6 +317,7 @@ class EmployeeListSerializer(serializers.ModelSerializer):
             'role', 'branch', 'branch_name', 'branch_code',
             'department_id', 'department_name', 'department_attendance_mode',
             'custom_role_ids', 'custom_role_names', 'resolved_permissions',
+            'daily_call_target',
             'is_active', 'employee_profile',
             'assigned_leads_count', 'calls_today_count', 'today_attendance', 'created_at'
         ]
@@ -343,6 +372,20 @@ class EmployeeCreateSerializer(serializers.Serializer):
     employee_code = serializers.CharField(max_length=64, required=False, allow_blank=True)
     daily_call_target = serializers.IntegerField(default=50, min_value=1)
     is_geofence_required = serializers.BooleanField(required=False, default=True)
+    joining_date = serializers.DateField(required=False, allow_null=True)
+    shift_start_time = serializers.TimeField(required=False, allow_null=True)
+    shift_end_time = serializers.TimeField(required=False, allow_null=True)
+    grace_period_minutes = serializers.IntegerField(required=False, default=15, min_value=0)
+    basic_salary = serializers.DecimalField(max_digits=12, decimal_places=2, required=False, default=0)
+    hra = serializers.DecimalField(max_digits=12, decimal_places=2, required=False, default=0)
+    allowances = serializers.DecimalField(max_digits=12, decimal_places=2, required=False, default=0)
+    pf_deduction = serializers.DecimalField(max_digits=12, decimal_places=2, required=False, default=0)
+    esi_deduction = serializers.DecimalField(max_digits=12, decimal_places=2, required=False, default=0)
+    tax_deduction = serializers.DecimalField(max_digits=12, decimal_places=2, required=False, default=0)
+    salary_currency = serializers.CharField(max_length=10, required=False, allow_blank=True)
+    bank_name = serializers.CharField(max_length=120, required=False, allow_blank=True)
+    account_number = serializers.CharField(max_length=64, required=False, allow_blank=True)
+    ifsc_iban = serializers.CharField(max_length=64, required=False, allow_blank=True)
 
     def validate_email(self, value):
         if User.objects.filter(email=value).exists():

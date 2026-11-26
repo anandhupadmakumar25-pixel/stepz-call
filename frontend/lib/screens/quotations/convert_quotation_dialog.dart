@@ -3,8 +3,11 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../core/widgets/glass/glass_card.dart';
 import '../../core/widgets/glass/gradient_button.dart';
+import '../../core/utils/region_detector.dart';
 import '../../models/product_model.dart';
+import '../../models/plan_model.dart';
 import '../../models/quotation_model.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/billing_provider.dart';
 
 class ConvertQuotationDialog extends StatefulWidget {
@@ -294,7 +297,7 @@ class _ConvertQuotationDialogState extends State<ConvertQuotationDialog> {
                           dense: true,
                           title: Row(
                             children: [
-                              Text('Total (₹)', style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w700)),
+                              Text('Total (${PlanModel.getSymbolForCurrency(widget.quotation.currency)})', style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w700)),
                               const SizedBox(width: 8),
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
@@ -658,7 +661,7 @@ class _ConvertQuotationDialogState extends State<ConvertQuotationDialog> {
                                   ],
                                 ),
                                 Text(
-                                  'Customer: ${q.customerName} (${q.customerPhone}) | Original: Rs. ${q.grandTotal.toStringAsFixed(2)}',
+                                  'Customer: ${q.customerName} (${q.customerPhone}) | Original: ${PlanModel.getSymbolForCurrency(q.currency)} ${q.grandTotal.toStringAsFixed(2)}',
                                   style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
@@ -892,7 +895,7 @@ class _ConvertQuotationDialogState extends State<ConvertQuotationDialog> {
                                             child: Row(
                                               mainAxisAlignment: MainAxisAlignment.end,
                                               children: [
-                                                Text('RATE (₹)', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF475569))),
+                                                Text('RATE (${PlanModel.getSymbolForCurrency(q.currency)})', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF475569))),
                                                 Tooltip(
                                                   message: 'Remove Rate column',
                                                   child: InkWell(
@@ -914,7 +917,7 @@ class _ConvertQuotationDialogState extends State<ConvertQuotationDialog> {
                                             child: Row(
                                               mainAxisAlignment: MainAxisAlignment.center,
                                               children: [
-                                                Text('GST %', textAlign: TextAlign.center, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF475569))),
+                                                Text(RegionDetector.taxColumnLabel(context.read<AuthProvider>().currentUser?.companyCountryIso), textAlign: TextAlign.center, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF475569))),
                                                 Tooltip(
                                                   message: 'Remove GST column',
                                                   child: InkWell(
@@ -935,7 +938,7 @@ class _ConvertQuotationDialogState extends State<ConvertQuotationDialog> {
                                           child: Row(
                                             mainAxisAlignment: MainAxisAlignment.end,
                                             children: [
-                                              Text('TOTAL (₹)', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF475569))),
+                                              Text('TOTAL (${PlanModel.getSymbolForCurrency(q.currency)})', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF475569))),
                                               const Padding(
                                                 padding: EdgeInsets.only(left: 4),
                                                 child: Icon(Icons.lock_outline_rounded, size: 11, color: Color(0xFF94A3B8)),
@@ -1133,7 +1136,7 @@ class _ConvertQuotationDialogState extends State<ConvertQuotationDialog> {
                                                 width: 110,
                                                 child: _showPrice
                                                     ? Text(
-                                                        '₹${item.computeLineTotal(showPrice: _showPrice, showQty: _showQty, showTax: _showTax).toStringAsFixed(2)}',
+                                                        '${PlanModel.getSymbolForCurrency(q.currency)}${item.computeLineTotal(showPrice: _showPrice, showQty: _showQty, showTax: _showTax).toStringAsFixed(2)}',
                                                         textAlign: TextAlign.right,
                                                         style: GoogleFonts.robotoMono(fontSize: 12.5, fontWeight: FontWeight.bold, color: const Color(0xFF0F172A)),
                                                       )
@@ -1184,7 +1187,7 @@ class _ConvertQuotationDialogState extends State<ConvertQuotationDialog> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text('Original Estimated Quote:', style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B))),
-                          Text('₹${q.grandTotal.toStringAsFixed(2)}', style: GoogleFonts.robotoMono(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF64748B))),
+                          Text('${PlanModel.getSymbolForCurrency(q.currency)}${q.grandTotal.toStringAsFixed(2)}', style: GoogleFonts.robotoMono(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF64748B))),
                         ],
                       ),
                       const SizedBox(height: 8),
@@ -1193,7 +1196,7 @@ class _ConvertQuotationDialogState extends State<ConvertQuotationDialog> {
                         children: [
                           Row(
                             children: [
-                              Text('Client Negotiation Discount (₹):', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFFDC2626))),
+                              Text('Client Negotiation Discount (${PlanModel.getSymbolForCurrency(q.currency)}):', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFFDC2626))),
                               const SizedBox(width: 8),
                               SizedBox(
                                 width: 120,
@@ -1205,7 +1208,7 @@ class _ConvertQuotationDialogState extends State<ConvertQuotationDialog> {
                                   style: GoogleFonts.robotoMono(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFFDC2626)),
                                   decoration: InputDecoration(
                                     isDense: true,
-                                    prefixText: '₹ ',
+                                    prefixText: '${PlanModel.getSymbolForCurrency(q.currency)} ',
                                     contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
                                   ),
@@ -1213,7 +1216,7 @@ class _ConvertQuotationDialogState extends State<ConvertQuotationDialog> {
                               ),
                             ],
                           ),
-                          Text('-₹${_specialNegotiationDiscount.toStringAsFixed(2)}', style: GoogleFonts.robotoMono(fontSize: 13, fontWeight: FontWeight.bold, color: const Color(0xFFDC2626))),
+                          Text('-${PlanModel.getSymbolForCurrency(q.currency)}${_specialNegotiationDiscount.toStringAsFixed(2)}', style: GoogleFonts.robotoMono(fontSize: 13, fontWeight: FontWeight.bold, color: const Color(0xFFDC2626))),
                         ],
                       ),
                       const Divider(color: Color(0xFFCBD5E1), height: 16),
@@ -1229,13 +1232,13 @@ class _ConvertQuotationDialogState extends State<ConvertQuotationDialog> {
                               ),
                               if (isPriceLower)
                                 Text(
-                                  '✓ Negotiated ₹${priceDiff.toStringAsFixed(2)} below original estimate',
+                                  '✓ Negotiated ${PlanModel.getSymbolForCurrency(q.currency)}${priceDiff.toStringAsFixed(2)} below original estimate',
                                   style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF059669)),
                                 ),
                             ],
                           ),
                           Text(
-                            '₹${_finalGrandTotal.toStringAsFixed(2)}',
+                            '${PlanModel.getSymbolForCurrency(q.currency)}${_finalGrandTotal.toStringAsFixed(2)}',
                             style: GoogleFonts.robotoMono(fontSize: 18, fontWeight: FontWeight.w900, color: const Color(0xFF047857)),
                           ),
                         ],
@@ -1263,11 +1266,11 @@ class _ConvertQuotationDialogState extends State<ConvertQuotationDialog> {
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       ),
                       icon: const Icon(Icons.history_rounded, size: 16),
-                      label: Text('Convert at Original Estimate (₹${q.grandTotal.toStringAsFixed(2)})', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600)),
+                      label: Text('Convert at Original Estimate (${PlanModel.getSymbolForCurrency(q.currency)}${q.grandTotal.toStringAsFixed(2)})', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600)),
                       onPressed: _isConverting ? null : () => _submitConversion(useOriginalQuote: true),
                     ),
                     GradientPrimaryButton(
-                      text: _isConverting ? 'Generating Bill...' : 'Generate Bill at Agreed Price (₹${_finalGrandTotal.toStringAsFixed(2)})',
+                      text: _isConverting ? 'Generating Bill...' : 'Generate Bill at Agreed Price (${PlanModel.getSymbolForCurrency(q.currency)}${_finalGrandTotal.toStringAsFixed(2)})',
                       icon: Icons.check_circle_rounded,
                       gradient: const LinearGradient(colors: [Color(0xFF059669), Color(0xFF10B981)]),
                       onPressed: _isConverting ? null : () => _submitConversion(useOriginalQuote: false),

@@ -1,4 +1,5 @@
 from django.db import models
+from django.utils import timezone
 from apps.core.models import TimeStampedModel, TenantModel
 
 LEGACY_MENU_KEYS = [
@@ -207,13 +208,42 @@ class Company(TimeStampedModel):
 
     def check_and_update_status(self):
         """
-        Auto-suspend the company if its plan has passed the expiry cutoff date.
+        Auto-suspend the company if its plan has passed the expiry cutoff date,
+        and ensure an open renewal DUE entry exists for the expired cycle.
         """
-        if self.is_plan_expired and self.status != 'SUSPENDED':
+        if not self.is_plan_expired:
+            return False
+
+        changed = False
+        if self.status != 'SUSPENDED':
             self.status = 'SUSPENDED'
             self.save(update_fields=['status'])
-            return True
-        return False
+            changed = True
+
+        if self.plan and not self.subscription_history.filter(due_amount__gt=0).exists():
+            due_amt = (
+                self.plan.price_yearly
+                if self.plan_billing_cycle == 'YEARLY'
+                else self.plan.price_monthly
+            )
+            if float(due_amt or 0) > 0:
+                CompanySubscriptionHistory.objects.create(
+                    company=self,
+                    plan_name=self.plan.name,
+                    billing_cycle=self.plan_billing_cycle
+                    if self.plan_billing_cycle in ['MONTHLY', 'YEARLY', 'DAYS', 'CUSTOM_DATE']
+                    else 'MONTHLY',
+                    extension_days=0,
+                    previous_expiry=self.plan_expires_at,
+                    new_expiry=self.plan_expires_at or timezone.now(),
+                    amount_paid=0.00,
+                    due_amount=due_amt,
+                    currency=self.plan.currency,
+                    payment_status='DUE',
+                    payment_mode='DUE',
+                    notes='Auto-generated renewal due after plan duration expired',
+                )
+        return changed
 
     def get_allowed_menus(self):
         if self.allowed_menus and len(self.allowed_menus) > 0:
@@ -427,7 +457,16 @@ class CompanySubscriptionHistory(TimeStampedModel):
     previous_expiry = models.DateTimeField(null=True, blank=True)
     new_expiry = models.DateTimeField()
     amount_paid = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    due_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
     currency = models.CharField(max_length=10, default='INR')
+    payment_status = models.CharField(
+        max_length=20,
+        choices=[('PAID', 'Paid'), ('PARTIAL', 'Partial'), ('DUE', 'Due / Unpaid')],
+        default='PAID',
+    )
+    payment_mode = models.CharField(max_length=32, default='BANK_TRANSFER')
+    transaction_ref = models.CharField(max_length=120, blank=True)
+    receipt_number = models.CharField(max_length=40, blank=True, db_index=True)
     approved_by = models.ForeignKey(
         'accounts.User',
         on_delete=models.SET_NULL,
@@ -446,6 +485,22 @@ class CompanySubscriptionHistory(TimeStampedModel):
 
     class Meta:
         ordering = ['-created_at']
+
+    def save(self, *args, **kwargs):
+        if not self.receipt_number and self.payment_status in ('PAID', 'PARTIAL') and float(self.amount_paid or 0) > 0:
+            yr = timezone.now().year
+            prefix = f'SUB-{yr}-'
+            last = CompanySubscriptionHistory.objects.filter(
+                receipt_number__startswith=prefix
+            ).order_by('-receipt_number').first()
+            seq = 1
+            if last and last.receipt_number:
+                try:
+                    seq = int(last.receipt_number.split('-')[-1]) + 1
+                except (ValueError, IndexError):
+                    seq = CompanySubscriptionHistory.objects.filter(receipt_number__startswith=prefix).count() + 1
+            self.receipt_number = f'{prefix}{seq:04d}'
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.company.name} renewed ({self.billing_cycle}) until {self.new_expiry.strftime('%Y-%m-%d')}"

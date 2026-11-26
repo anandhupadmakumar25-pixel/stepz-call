@@ -4,8 +4,12 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/action_loader.dart';
 import '../../core/widgets/glass/glass_card.dart';
 import '../../core/widgets/glass/gradient_button.dart';
 import '../../core/widgets/glass/glass_text_field.dart';
@@ -32,13 +36,20 @@ class CompanyDirectoryScreen extends StatefulWidget {
 class _CompanyDirectoryScreenState extends State<CompanyDirectoryScreen> {
   final Map<String, String> _availableMenus = {
     'branches': 'Branches & Multi-Office',
-    'employees': 'Telecaller Team & Staff',
+    'employees': 'Employee & Role Management',
     'attendance': 'Stepz Attendance & Geofencing',
+    'leave': 'Leave & Holiday Management',
+    'payroll': 'HR Payroll & Payslips',
+    'delegation': 'Role & Section Delegation',
     'leads': 'Lead Workspace & Import',
     'tasks': 'Calling Tasks & Allocation',
     'recordings': 'Audio Call Recordings',
     'callbacks': 'Priority Callbacks & Reminders',
     'call_history': 'Call Logs & History',
+    'quotations': 'Quotations & Estimates',
+    'billing': 'Bills, Invoices & Receipts',
+    'templates': 'Visual PDF Template Studio',
+    'reports': 'Reports Center & Export',
     'analytics': 'Analytics & Performance Reports',
   };
 
@@ -372,6 +383,13 @@ Login URL: https://app.stepzcrm.com
     String? localError;
 
     String selectedPlanId = compProv.plans.isNotEmpty ? compProv.plans.first.code : 'starter';
+    String selectedBillingCycle = 'MONTHLY';
+    String initialPaymentStatus = 'DUE';
+    String paymentMode = 'BANK_TRANSFER';
+    final initialAmountController = TextEditingController(
+      text: compProv.plans.isNotEmpty ? compProv.plans.first.priceMonthly.toStringAsFixed(0) : '0',
+    );
+    final txRefController = TextEditingController();
     final Set<String> selectedMenus = {'branches', 'employees', 'leads', 'tasks', 'recordings', 'callbacks', 'call_history', 'analytics'};
     bool isSubmitting = false;
 
@@ -695,6 +713,8 @@ Login URL: https://app.stepzcrm.com
                                 setDlgState(() {
                                   selectedPlanId = val;
                                   final plan = compProv.plans.firstWhere((p) => p.code == val, orElse: () => compProv.plans.first);
+                                  final planPrice = selectedBillingCycle == 'YEARLY' ? plan.priceYearly : plan.priceMonthly;
+                                  initialAmountController.text = planPrice.toStringAsFixed(0);
                                   if (plan.allowedMenus.isNotEmpty) {
                                     selectedMenus.clear();
                                     selectedMenus.addAll(plan.allowedMenus);
@@ -705,6 +725,101 @@ Login URL: https://app.stepzcrm.com
                           ),
                         ),
                       ),
+                      const SizedBox(height: 14),
+
+                      // Billing Cycle & Initial Payment Status (Paid / Due / Partial)
+                      Row(
+                        children: [
+                          Expanded(
+                            child: DropdownButtonFormField<String>(
+                              value: selectedBillingCycle,
+                              decoration: InputDecoration(
+                                labelText: 'Billing Cycle',
+                                filled: true,
+                                fillColor: const Color(0xFFF8FAFC),
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                              items: const [
+                                DropdownMenuItem(value: 'MONTHLY', child: Text('Monthly')),
+                                DropdownMenuItem(value: 'YEARLY', child: Text('Yearly')),
+                              ],
+                              onChanged: (v) {
+                                if (v != null) {
+                                  setDlgState(() {
+                                    selectedBillingCycle = v;
+                                    final plan = compProv.plans.firstWhere((p) => p.code == selectedPlanId, orElse: () => compProv.plans.first);
+                                    final planPrice = v == 'YEARLY' ? plan.priceYearly : plan.priceMonthly;
+                                    initialAmountController.text = planPrice.toStringAsFixed(0);
+                                  });
+                                }
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: DropdownButtonFormField<String>(
+                              value: initialPaymentStatus,
+                              decoration: InputDecoration(
+                                labelText: 'Payment Status',
+                                filled: true,
+                                fillColor: const Color(0xFFF8FAFC),
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                              items: const [
+                                DropdownMenuItem(value: 'PAID', child: Text('Paid Now')),
+                                DropdownMenuItem(value: 'DUE', child: Text('Due / Unpaid')),
+                                DropdownMenuItem(value: 'PARTIAL', child: Text('Partial Paid')),
+                              ],
+                              onChanged: (v) {
+                                if (v != null) {
+                                  setDlgState(() => initialPaymentStatus = v);
+                                }
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (initialPaymentStatus != 'DUE') ...[
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: GlassTextField(
+                                label: initialPaymentStatus == 'PARTIAL' ? 'Amount Received Now' : 'Amount Paid',
+                                hintText: '1000',
+                                controller: initialAmountController,
+                                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: DropdownButtonFormField<String>(
+                                value: paymentMode,
+                                decoration: InputDecoration(
+                                  labelText: 'Payment Mode',
+                                  filled: true,
+                                  fillColor: const Color(0xFFF8FAFC),
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                                ),
+                                items: const [
+                                  DropdownMenuItem(value: 'BANK_TRANSFER', child: Text('Bank Transfer')),
+                                  DropdownMenuItem(value: 'UPI', child: Text('UPI')),
+                                  DropdownMenuItem(value: 'CASH', child: Text('Cash')),
+                                  DropdownMenuItem(value: 'CARD', child: Text('Card')),
+                                  DropdownMenuItem(value: 'STRIPE', child: Text('Stripe')),
+                                ],
+                                onChanged: (v) => setDlgState(() => paymentMode = v ?? 'BANK_TRANSFER'),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        GlassTextField(
+                          label: 'Transaction / Receipt Ref (Optional)',
+                          hintText: 'UTR / Ref ID',
+                          controller: txRefController,
+                        ),
+                      ],
                       const SizedBox(height: 16),
 
                       // Allowed Menus Checkboxes
@@ -830,6 +945,13 @@ Login URL: https://app.stepzcrm.com
                                         if (addressController.text.trim().isNotEmpty) 'address': addressController.text.trim(),
                                         if (websiteController.text.trim().isNotEmpty) 'website': websiteController.text.trim(),
                                         'plan_id': effectivePlanId,
+                                        'plan_billing_cycle': selectedBillingCycle,
+                                        'initial_payment_status': initialPaymentStatus,
+                                        if (initialPaymentStatus != 'DUE') ...{
+                                          'initial_amount_paid': double.tryParse(initialAmountController.text.trim()) ?? 0,
+                                          'payment_mode': paymentMode,
+                                          if (txRefController.text.trim().isNotEmpty) 'transaction_ref': txRefController.text.trim(),
+                                        },
                                         'allowed_menus': selectedMenus.toList(),
                                       });
 
@@ -2627,6 +2749,41 @@ Login URL: https://app.stepzcrm.com
                     borderColor: const Color(0xFFC7D2FE),
                     onPressed: () => _showRenewPlanDialog(comp),
                   ),
+                  if (comp.dueAmount > 0)
+                    _buildTileActionButton(
+                      icon: Icons.payments_rounded,
+                      label: 'Mark Paid (${comp.planCurrencySymbol}${comp.dueAmount.toStringAsFixed(0)} Due)',
+                      color: const Color(0xFF047857),
+                      bgColor: const Color(0xFFECFDF5),
+                      borderColor: const Color(0xFFA7F3D0),
+                      onPressed: () => _showCollectCompanyPaymentDialog(comp),
+                    )
+                  else
+                    Container(
+                      height: 34,
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFECFDF5),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFFA7F3D0)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.verified_rounded, size: 14, color: Color(0xFF047857)),
+                          const SizedBox(width: 5),
+                          Text('Paid', style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w700, color: const Color(0xFF047857))),
+                        ],
+                      ),
+                    ),
+                  _buildTileActionButton(
+                    icon: Icons.receipt_long_rounded,
+                    label: comp.dueAmount > 0 ? 'Send Bill' : 'Send Receipt',
+                    color: const Color(0xFFB45309),
+                    bgColor: const Color(0xFFFFFBEB),
+                    borderColor: const Color(0xFFFDE68A),
+                    onPressed: () => _generateAndShareCompanyBill(comp),
+                  ),
                   _buildTileActionButton(
                     icon: Icons.lock_reset_rounded,
                     label: 'Reset Password',
@@ -2719,6 +2876,407 @@ Login URL: https://app.stepzcrm.com
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showCollectCompanyPaymentDialog(CompanyModel comp) {
+    final compProv = context.read<CompanyProvider>();
+    final defaultAmt = comp.dueAmount > 0
+        ? comp.dueAmount
+        : (comp.planBillingCycle == 'YEARLY'
+            ? comp.planPriceYearly
+            : comp.planPriceMonthly);
+    final amountCtrl = TextEditingController(
+      text: defaultAmt > 0 ? defaultAmt.toStringAsFixed(2) : '',
+    );
+    final dueCtrl = TextEditingController(text: '0');
+    final refCtrl = TextEditingController();
+    final notesCtrl = TextEditingController(
+      text: 'Subscription payment collected',
+    );
+    String mode = 'BANK_TRANSFER';
+    String cycle = comp.planBillingCycle.isNotEmpty
+        ? comp.planBillingCycle
+        : 'MONTHLY';
+    int extDays = cycle == 'YEARLY' ? 365 : 30;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (dCtx, setDlg) => AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
+          title: Text(
+            'Mark Paid / Collect — ${comp.name}',
+            style: GoogleFonts.inter(fontWeight: FontWeight.w800, fontSize: 16),
+          ),
+          content: SizedBox(
+            width: 440,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: amountCtrl,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    decoration: InputDecoration(
+                      labelText: 'Amount Paid (${comp.planCurrency})',
+                      border: const OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: dueCtrl,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    decoration: InputDecoration(
+                      labelText: 'Remaining Due (${comp.planCurrency})',
+                      border: const OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          value: cycle,
+                          decoration: const InputDecoration(
+                            labelText: 'Billing Cycle',
+                            border: OutlineInputBorder(),
+                          ),
+                          items: const [
+                            DropdownMenuItem(
+                              value: 'MONTHLY',
+                              child: Text('Monthly'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'YEARLY',
+                              child: Text('Yearly'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'DAYS',
+                              child: Text('Custom Days'),
+                            ),
+                          ],
+                          onChanged: (v) {
+                            if (v != null) {
+                              setDlg(() {
+                                cycle = v;
+                                extDays = v == 'YEARLY' ? 365 : 30;
+                              });
+                            }
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextFormField(
+                          initialValue: '$extDays',
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: 'Extend Days',
+                            border: OutlineInputBorder(),
+                          ),
+                          onChanged: (v) => extDays = int.tryParse(v) ?? 0,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<String>(
+                    value: mode,
+                    decoration: const InputDecoration(
+                      labelText: 'Payment Mode',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: const [
+                      DropdownMenuItem(
+                        value: 'BANK_TRANSFER',
+                        child: Text('Bank Transfer'),
+                      ),
+                      DropdownMenuItem(value: 'UPI', child: Text('UPI')),
+                      DropdownMenuItem(value: 'CASH', child: Text('Cash')),
+                      DropdownMenuItem(value: 'CARD', child: Text('Card')),
+                      DropdownMenuItem(value: 'STRIPE', child: Text('Stripe')),
+                    ],
+                    onChanged: (v) => setDlg(() => mode = v ?? 'BANK_TRANSFER'),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: refCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Transaction / Receipt Ref',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: notesCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Notes',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF047857),
+                foregroundColor: Colors.white,
+              ),
+              icon: const Icon(Icons.check_circle_rounded, size: 16),
+              label: const Text('Mark Paid & Issue Receipt'),
+              onPressed: () async {
+                final amt = double.tryParse(amountCtrl.text.trim()) ?? 0;
+                final rem = double.tryParse(dueCtrl.text.trim()) ?? 0;
+                final navigator = Navigator.of(ctx);
+                final messenger = ScaffoldMessenger.of(context);
+                final res = await ActionLoader.run(
+                  context,
+                  message: 'Recording payment & generating receipt...',
+                  task: () => compProv.collectCompanyPayment(comp.id, {
+                    'amount_paid': amt,
+                    'remaining_due': rem,
+                    'billing_cycle': cycle,
+                    'extension_days': extDays,
+                    'payment_mode': mode,
+                    'transaction_ref': refCtrl.text.trim(),
+                    'notes': notesCtrl.text.trim(),
+                    'currency': comp.planCurrency,
+                  }),
+                );
+                if (!mounted) return;
+                if (res != null) {
+                  if (ctx.mounted) navigator.pop();
+                  final receipt = res['receipt'] as Map<String, dynamic>?;
+                  final recNo = receipt?['receipt_number'] ?? 'SUB-RECEIPT';
+                  messenger.showSnackBar(
+                    SnackBar(
+                      content: Text('Payment recorded ($recNo) for ${comp.name}'),
+                      backgroundColor: AppColors.success,
+                      action: SnackBarAction(
+                        label: 'Send Bill',
+                        textColor: Colors.white,
+                        onPressed: () => _generateAndShareCompanyBill(comp, latestReceipt: receipt),
+                      ),
+                    ),
+                  );
+                } else {
+                  messenger.showSnackBar(
+                    SnackBar(
+                      content: Text(compProv.errorMessage ?? 'Failed to record payment'),
+                      backgroundColor: AppColors.danger,
+                    ),
+                  );
+                }
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _generateAndShareCompanyBill(
+    CompanyModel comp, {
+    Map<String, dynamic>? latestReceipt,
+  }) async {
+    final compProv = context.read<CompanyProvider>();
+    Map<String, dynamic>? receipt = latestReceipt;
+
+    if (receipt == null) {
+      await ActionLoader.run(
+        context,
+        message: 'Preparing subscription bill PDF...',
+        task: () => compProv.fetchSubscriptionHistory(companyId: comp.id),
+      );
+      if (compProv.subscriptionHistory.isNotEmpty) {
+        final h = compProv.subscriptionHistory.first;
+        receipt = {
+          'receipt_number': h.receiptNumber.isNotEmpty ? h.receiptNumber : 'BILL-${comp.name.toUpperCase().replaceAll(RegExp(r'[^A-Z0-9]'), '').padRight(4, 'X').substring(0, 4)}',
+          'plan_name': h.planName,
+          'billing_cycle': h.billingCycle,
+          'amount_paid': h.amountPaid,
+          'due_amount': h.dueAmount,
+          'currency': h.currency,
+          'payment_status': h.paymentStatus,
+          'payment_mode': h.paymentMode,
+          'transaction_ref': h.transactionRef,
+          'approved_by_name': h.approvedByName,
+          'created_at': h.createdAt,
+          'notes': h.notes,
+        };
+      }
+    }
+
+    final curr = (receipt?['currency'] ?? comp.planCurrency).toString();
+    final amtPaid = (receipt?['amount_paid'] as num?)?.toDouble() ??
+        (comp.planBillingCycle == 'YEARLY' ? comp.planPriceYearly : comp.planPriceMonthly);
+    final dueAmt = (receipt?['due_amount'] as num?)?.toDouble() ?? 0.0;
+    final recNo = (receipt?['receipt_number'] ?? '').toString().isNotEmpty
+        ? receipt!['receipt_number'].toString()
+        : 'INV-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
+    final statusStr = (receipt?['payment_status'] ?? 'PAID').toString();
+    final modeStr = (receipt?['payment_mode'] ?? 'BANK_TRANSFER').toString();
+    final refStr = (receipt?['transaction_ref'] ?? '-').toString();
+    final planName = (receipt?['plan_name'] ?? comp.planName).toString();
+    final cycleStr = (receipt?['billing_cycle'] ?? comp.planBillingCycle).toString();
+    final dateStr = (receipt?['created_at'] ?? DateTime.now().toIso8601String()).toString();
+    final clientEmail = comp.contactEmail.isNotEmpty ? comp.contactEmail : comp.adminEmail;
+
+    final doc = pw.Document();
+    doc.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(28),
+        build: (pw.Context pCtx) => pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      'SUBSCRIPTION BILL / RECEIPT',
+                      style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo900),
+                    ),
+                    pw.SizedBox(height: 4),
+                    pw.Text('Document No: $recNo', style: const pw.TextStyle(fontSize: 11)),
+                    pw.Text('Date: ${dateStr.length >= 10 ? dateStr.substring(0, 10) : dateStr}', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
+                  ],
+                ),
+                pw.Container(
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: pw.BoxDecoration(
+                    color: statusStr == 'DUE' ? PdfColors.red100 : PdfColors.green100,
+                    borderRadius: pw.BorderRadius.circular(6),
+                  ),
+                  child: pw.Text(
+                    statusStr,
+                    style: pw.TextStyle(
+                      fontWeight: pw.FontWeight.bold,
+                      fontSize: 11,
+                      color: statusStr == 'DUE' ? PdfColors.red900 : PdfColors.green900,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            pw.Divider(height: 24),
+            pw.Text('Billed To (Client Company):', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11)),
+            pw.SizedBox(height: 4),
+            pw.Text(comp.name, style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold)),
+            if (clientEmail.isNotEmpty) pw.Text('Email: $clientEmail', style: const pw.TextStyle(fontSize: 10)),
+            if (comp.contactPhone.isNotEmpty) pw.Text('Phone: ${comp.contactPhone}', style: const pw.TextStyle(fontSize: 10)),
+            if (comp.address.isNotEmpty) pw.Text('Address: ${comp.address}', style: const pw.TextStyle(fontSize: 10)),
+            pw.SizedBox(height: 16),
+            pw.TableHelper.fromTextArray(
+              headers: ['Plan', 'Cycle', 'Mode', 'Ref', 'Paid', 'Due'],
+              data: [
+                [
+                  planName,
+                  cycleStr,
+                  modeStr,
+                  refStr.isNotEmpty ? refStr : '-',
+                  '$curr ${amtPaid.toStringAsFixed(2)}',
+                  '$curr ${dueAmt.toStringAsFixed(2)}',
+                ],
+              ],
+              headerStyle: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 9.5),
+              headerDecoration: const pw.BoxDecoration(color: PdfColors.indigo800),
+              cellStyle: const pw.TextStyle(fontSize: 9.5),
+            ),
+            pw.SizedBox(height: 18),
+            if (dueAmt > 0)
+              pw.Text('Balance Due: $curr ${dueAmt.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.red800))
+            else
+              pw.Text('Total Paid: $curr ${amtPaid.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.green800)),
+            if (comp.planExpiresAt != null && comp.planExpiresAt!.isNotEmpty)
+              pw.Padding(
+                padding: const pw.EdgeInsets.only(top: 6),
+                child: pw.Text('Plan Valid Until: ${comp.planExpiresAt!.substring(0, 10)}', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
+              ),
+            if (compProv.subscriptionHistory.isNotEmpty) ...[
+              pw.SizedBox(height: 16),
+              pw.Text('Payment & Billing History (${compProv.subscriptionHistory.length} entries)', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo900)),
+              pw.SizedBox(height: 6),
+              pw.TableHelper.fromTextArray(
+                headers: ['Date', 'Receipt #', 'Mode', 'Ref', 'Paid', 'Due', 'Status'],
+                data: compProv.subscriptionHistory.map((h) {
+                  final hDate = h.createdAt.length >= 10 ? h.createdAt.substring(0, 10) : h.createdAt;
+                  return [
+                    hDate,
+                    h.receiptNumber.isNotEmpty ? h.receiptNumber : '-',
+                    h.paymentMode,
+                    h.transactionRef.isNotEmpty ? h.transactionRef : '-',
+                    '${h.currency} ${h.amountPaid.toStringAsFixed(2)}',
+                    '${h.currency} ${h.dueAmount.toStringAsFixed(2)}',
+                    h.paymentStatus,
+                  ];
+                }).toList(),
+                headerStyle: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 8.5),
+                headerDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey700),
+                cellStyle: const pw.TextStyle(fontSize: 8.5),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+
+    final bytes = await doc.save();
+    if (!mounted) return;
+    final filename = '${recNo}_${comp.name.replaceAll(RegExp(r'[^a-zA-Z0-9]+'), '_')}.pdf';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: Text('Subscription Bill Ready', style: GoogleFonts.inter(fontWeight: FontWeight.w800, fontSize: 16)),
+        content: Text(
+          'Bill $recNo for ${comp.name} ($curr ${amtPaid.toStringAsFixed(2)}${dueAmt > 0 ? ", Due: $curr ${dueAmt.toStringAsFixed(2)}" : ""}).\n\nClient Email: ${clientEmail.isNotEmpty ? clientEmail : "N/A"}',
+          style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF475569)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Close'),
+          ),
+          OutlinedButton.icon(
+            icon: const Icon(Icons.print_rounded, size: 16),
+            label: const Text('Print / Save PDF'),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await Printing.layoutPdf(onLayout: (_) async => bytes, name: filename);
+            },
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF047857),
+              foregroundColor: Colors.white,
+            ),
+            icon: const Icon(Icons.share_rounded, size: 16),
+            label: const Text('Send / Share PDF'),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await Printing.sharePdf(bytes: bytes, filename: filename);
+            },
+          ),
+        ],
       ),
     );
   }

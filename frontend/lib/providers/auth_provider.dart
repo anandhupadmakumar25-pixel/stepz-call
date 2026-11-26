@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../core/network/api_client.dart';
+import '../core/utils/region_detector.dart';
 import '../models/user_model.dart';
 
 class AuthProvider extends ChangeNotifier {
@@ -77,10 +78,12 @@ class AuthProvider extends ChangeNotifier {
 
     try {
       final cleanInput = usernameOrEmail.trim();
+      final detectedCountryIso = await RegionDetector.detectCountryIsoWithLocation();
       final res = await ApiClient.post('/accounts/login/', {
         'email': cleanInput,
         'username': cleanInput,
         'password': password.trim(),
+        if (detectedCountryIso != null) 'detected_country_iso': detectedCountryIso,
       });
 
       final accessToken = res['access'];
@@ -147,6 +150,10 @@ class AuthProvider extends ChangeNotifier {
     String? address,
     String? gstin,
     String? website,
+    String? countryCode,
+    String? countryIso,
+    String? currency,
+    String? currencySymbol,
   }) {
     if (_currentUser == null) return;
     final json = _currentUser!.toJson();
@@ -157,6 +164,10 @@ class AuthProvider extends ChangeNotifier {
     if (address != null) json['company_address'] = address;
     if (gstin != null) json['company_gstin'] = gstin;
     if (website != null) json['company_website'] = website;
+    if (countryCode != null) json['company_country_code'] = countryCode;
+    if (countryIso != null) json['company_country_iso'] = countryIso;
+    if (currency != null) json['company_currency'] = currency;
+    if (currencySymbol != null) json['company_currency_symbol'] = currencySymbol;
     _currentUser = UserModel.fromJson(json);
     notifyListeners();
   }
@@ -176,6 +187,7 @@ class AuthProvider extends ChangeNotifier {
       await ApiClient.post('/accounts/logout/', {});
     } catch (_) {}
     await ApiClient.clearSession();
+    RegionDetector.clearCache();
     _currentUser = null;
     notifyListeners();
   }

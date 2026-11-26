@@ -285,6 +285,16 @@ class _MainLayoutState extends State<MainLayout> with WidgetsBindingObserver {
             routeKey: 'plans',
             screen: const PlanManagementScreen(),
           ),
+          _NavItem(
+            section: 'SUBSCRIPTION',
+            title: 'Billing & Earnings',
+            icon: Icons.monetization_on_outlined,
+            activeIcon: Icons.monetization_on_rounded,
+            badge: 'Sales',
+            badgeColor: AppColors.goldLuxury,
+            routeKey: 'billing',
+            screen: const PlatformBillingScreen(),
+          ),
         ]);
       }
     } else {
@@ -349,17 +359,21 @@ class _MainLayoutState extends State<MainLayout> with WidgetsBindingObserver {
         );
       }
 
-      // Leave, Holidays & Regularization
-      if (user.hasAnyPermission([
-        'leave.apply_own',
-        'leave.approve',
-        'leave.manage_types',
-      ])) {
-        final delegated = user.isDelegatedFor('attendance_leave');
+      // Leave, Holidays & Payroll
+      if ((user.hasMenuPermission('leave') || user.hasMenuPermission('payroll')) &&
+          user.hasAnyPermission([
+            'leave.apply_own',
+            'leave.approve',
+            'leave.manage_types',
+            'payroll.process_salary',
+            'payroll.manage_rules',
+            'payroll.view_own',
+          ])) {
+        final delegated = user.isDelegatedFor('attendance_leave') || user.isDelegatedFor('payroll');
         navItems.add(
           _NavItem(
             section: 'HR & ORGANIZATION',
-            title: 'Leave & Attendance',
+            title: 'Leave & Payroll',
             icon: Icons.event_note_outlined,
             activeIcon: Icons.event_note_rounded,
             badge: delegated ? 'Delegated' : null,

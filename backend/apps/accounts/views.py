@@ -167,6 +167,10 @@ class EmployeeListCreateView(views.APIView):
                 employee_code=data.get('employee_code', ''),
                 daily_call_target=data.get('daily_call_target', 50),
                 is_geofence_required=data.get('is_geofence_required', True),
+                joining_date=data.get('joining_date'),
+                shift_start_time=data.get('shift_start_time') or '09:00:00',
+                shift_end_time=data.get('shift_end_time') or '18:00:00',
+                grace_period_minutes=data.get('grace_period_minutes', 15),
                 status='ACTIVE'
             )
 
@@ -183,6 +187,30 @@ class EmployeeListCreateView(views.APIView):
             if data.get('custom_role_ids'):
                 roles = CustomRole.objects.filter(id__in=data['custom_role_ids'], company=company)
                 user.custom_roles.set(roles)
+
+            # Optional initial salary structure at employee onboarding
+            basic_sal = data.get('basic_salary') or 0
+            hra_sal = data.get('hra') or 0
+            allow_sal = data.get('allowances') or 0
+            bank_name = (data.get('bank_name') or '').strip()
+            if float(basic_sal) > 0 or float(hra_sal) > 0 or float(allow_sal) > 0 or bank_name:
+                from apps.accounts.models import EmployeeSalaryStructure
+                EmployeeSalaryStructure.objects.update_or_create(
+                    user=user,
+                    defaults={
+                        'company': company,
+                        'currency': (data.get('salary_currency') or company.currency or 'INR').strip().upper(),
+                        'basic_salary': basic_sal,
+                        'hra': hra_sal,
+                        'allowances': allow_sal,
+                        'pf_deduction': data.get('pf_deduction') or 0,
+                        'esi_deduction': data.get('esi_deduction') or 0,
+                        'tax_deduction': data.get('tax_deduction') or 0,
+                        'bank_name': bank_name,
+                        'account_number': (data.get('account_number') or '').strip(),
+                        'ifsc_iban': (data.get('ifsc_iban') or '').strip(),
+                    },
+                )
 
         return Response(EmployeeListSerializer(user).data, status=status.HTTP_201_CREATED)
 
@@ -251,6 +279,8 @@ class EmployeeDetailView(views.APIView):
             profile.shift_start_time = request.data['shift_start_time']
         if 'shift_end_time' in request.data:
             profile.shift_end_time = request.data['shift_end_time']
+        if 'joining_date' in request.data:
+            profile.joining_date = request.data['joining_date'] or None
         if 'team_id' in request.data:
             team_id = request.data['team_id']
             profile.team = Team.objects.filter(id=team_id, company=company).first() if team_id else None
@@ -486,6 +516,17 @@ class AttendanceCheckInView(views.APIView):
         lng = request.data.get('longitude')
         address = request.data.get('address', '')
         notes = request.data.get('notes', '')
+        is_mocked = bool(request.data.get('is_mocked', False))
+        try:
+            gps_accuracy = float(request.data.get('accuracy') or 0.0)
+        except (TypeError, ValueError):
+            gps_accuracy = 0.0
+
+        if is_mocked:
+            return Response(
+                {"error": "Mock / spoofed GPS location detected. Please disable fake GPS apps to check in."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         profile = getattr(user, 'employee_profile', None)
         department = profile.department if profile else None
@@ -514,7 +555,7 @@ class AttendanceCheckInView(views.APIView):
                 closest_branch = None
                 closest_dist = float('inf')
                 for b in branches:
-                    if b.latitude is not None and b.longitude is not None:
+                    if getattr(b, 'geofence_enabled', True) and b.latitude is not None and b.longitude is not None:
                         dist = calculate_haversine_distance(lat, lng, b.latitude, b.longitude)
                         if dist < closest_dist:
                             closest_dist = dist
@@ -524,13 +565,24 @@ class AttendanceCheckInView(views.APIView):
                     matched_branch = closest_branch
                     min_distance = round(closest_dist, 1)
                     radius = closest_branch.radius_meters or 100
-                    if closest_dist <= radius:
+                    # Compensate for real-world GPS horizontal accuracy drift (only for valid GPS fixes <= 50m)
+                    accuracy_buffer = min(max(gps_accuracy, 0.0), 15.0) if 0 < gps_accuracy <= 50.0 else 0.0
+                    effective_radius = radius + accuracy_buffer
+                    if closest_dist <= effective_radius:
                         is_in_geofence = True
                         att_status = 'PRESENT'
                     else:
                         return Response(
                             {
-                                "error": f"Check-in blocked: You are {min_distance}m away from {closest_branch.name} (allowed radius: {radius}m). Move inside the office radius to check in."
+                                "error": (
+                                    f"Check-in blocked: You are {min_distance}m away from {closest_branch.name} "
+                                    f"(allowed radius: {radius}m, GPS accuracy: ±{round(gps_accuracy, 1)}m). "
+                                    "Move inside the office radius and refresh GPS to check in."
+                                ),
+                                "distance_meters": min_distance,
+                                "allowed_radius": radius,
+                                "gps_accuracy": round(gps_accuracy, 1),
+                                "branch_name": closest_branch.name,
                             },
                             status=status.HTTP_403_FORBIDDEN,
                         )
@@ -719,9 +771,9 @@ class AttendanceAdminRecordsView(views.APIView):
                 try:
                     target_date = timezone.datetime.strptime(date_str, '%Y-%m-%d').date()
                 except ValueError:
-                    target_date = timezone.now().date()
+                    target_date = timezone.localdate()
             else:
-                target_date = timezone.now().date()
+                target_date = timezone.localdate()
             records = AttendanceRecord.objects.filter(company=company, date=target_date).select_related('user', 'department', 'matched_branch')
 
         branch_id = request.query_params.get('branch_id')
@@ -736,12 +788,67 @@ class AttendanceAdminRecordsView(views.APIView):
         if status_filter:
             records = records.filter(status=status_filter)
 
-        total_employees = User.objects.filter(company=company, role__in=['MANAGER', 'EMPLOYEE'], is_active=True).count()
+        user_id = request.query_params.get('user_id')
+        if user_id:
+            records = records.filter(user_id=user_id)
+
+        employee_count = User.objects.filter(company=company, role__in=['MANAGER', 'EMPLOYEE'], is_active=True).count()
+        admin_punched_in_count = records.filter(
+            user__role='COMPANY_ADMIN',
+            check_in_time__isnull=False,
+        ).values('user_id').distinct().count()
+        total_employees = employee_count + admin_punched_in_count
         present_count = records.filter(status__in=['PRESENT', 'LATE']).values('user_id').distinct().count()
         late_count = records.filter(status='LATE').values('user_id').distinct().count()
         out_of_fence_count = records.filter(status='OUT_OF_FENCE').values('user_id').distinct().count()
         checked_in_count = records.filter(check_in_time__isnull=False).values('user_id').distinct().count()
-        absent_count = max(0, total_employees - checked_in_count)
+        staff_checked_in_count = records.filter(
+            user__role__in=['MANAGER', 'EMPLOYEE'],
+            check_in_time__isnull=False,
+        ).values('user_id').distinct().count()
+        absent_count = max(0, employee_count - staff_checked_in_count)
+
+        serialized_records = list(AttendanceRecordSerializer(records, many=True).data)
+
+        # For single-day Live Team Attendance, also include active employees who haven't checked in yet
+        if not (date_from or date_to) and not user_id and (not status_filter or status_filter == 'ABSENT'):
+            all_day_user_ids = set(
+                AttendanceRecord.objects.filter(company=company, date=target_date).values_list('user_id', flat=True)
+            )
+            staff_qs = User.objects.filter(
+                company=company,
+                role__in=['MANAGER', 'EMPLOYEE'],
+                is_active=True,
+            ).exclude(id__in=all_day_user_ids).select_related('branch', 'employee_profile__department')
+
+            if branch_id and branch_id != 'ALL':
+                staff_qs = staff_qs.filter(branch_id=branch_id)
+            if department_id and department_id != 'ALL':
+                staff_qs = staff_qs.filter(employee_profile__department_id=department_id)
+
+            for emp in staff_qs:
+                prof = getattr(emp, 'employee_profile', None)
+                dept = prof.department if prof else None
+                serialized_records.append({
+                    'id': f'absent-{emp.id}',
+                    'user': str(emp.id),
+                    'user_name': emp.full_name,
+                    'user_email': emp.email,
+                    'user_phone': emp.phone or '',
+                    'department': str(dept.id) if dept else None,
+                    'department_name': dept.name if dept else '',
+                    'matched_branch': str(emp.branch_id) if emp.branch_id else None,
+                    'matched_branch_name': emp.branch.name if emp.branch else '',
+                    'date': str(target_date),
+                    'tracking_mode': dept.attendance_mode if dept else 'GEOFENCE',
+                    'check_in_time': None,
+                    'check_out_time': None,
+                    'working_hours': 0.0,
+                    'status': 'ABSENT',
+                    'notes': '',
+                    'field_visits': [],
+                    'created_at': None,
+                })
 
         return Response({
             'date': str(target_date),
@@ -753,7 +860,7 @@ class AttendanceAdminRecordsView(views.APIView):
                 'absent_count': absent_count,
                 'checked_in_count': checked_in_count,
             },
-            'records': AttendanceRecordSerializer(records, many=True).data
+            'records': serialized_records
         })
 
 class TeamListCreateView(views.APIView):

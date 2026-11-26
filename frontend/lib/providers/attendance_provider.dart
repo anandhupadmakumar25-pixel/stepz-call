@@ -61,6 +61,8 @@ class AttendanceProvider extends ChangeNotifier {
     double? longitude,
     String address = '',
     String notes = '',
+    double? accuracy,
+    bool isMocked = false,
   }) async {
     _isLoading = true;
     _errorMessage = null;
@@ -72,6 +74,8 @@ class AttendanceProvider extends ChangeNotifier {
         'longitude': longitude,
         'address': address,
         'notes': notes,
+        if (accuracy != null) 'accuracy': accuracy,
+        'is_mocked': isMocked,
       });
       _todayAttendance = AttendanceModel.fromJson(res as Map<String, dynamic>);
       _isCheckedIn = true;

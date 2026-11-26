@@ -12,6 +12,7 @@ class GlassTextField extends StatefulWidget {
   final Widget? suffixIcon;
   final bool obscureText;
   final TextInputType keyboardType;
+  final TextInputAction? textInputAction;
   final ValueChanged<String>? onChanged;
   final ValueChanged<String>? onSubmitted;
   final FormFieldValidator<String>? validator;
@@ -38,6 +39,7 @@ class GlassTextField extends StatefulWidget {
     this.suffixIcon,
     this.obscureText = false,
     this.keyboardType = TextInputType.text,
+    this.textInputAction,
     this.onChanged,
     this.onSubmitted,
     this.validator,
@@ -152,6 +154,7 @@ class _GlassTextFieldState extends State<GlassTextField> {
                     focusNode: _focusNode,
                     obscureText: widget.obscureText,
                     keyboardType: widget.keyboardType,
+                    textInputAction: widget.textInputAction,
                     onChanged: (val) {
                       fieldState.didChange(val);
                       if (widget.onChanged != null) widget.onChanged!(val);

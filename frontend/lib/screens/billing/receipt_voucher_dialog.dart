@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../core/responsive/responsive_layout.dart';
+import '../../core/widgets/action_loader.dart';
 import '../../core/services/pdf_invoice_service.dart';
 import '../../models/receipt_voucher_model.dart';
 import '../../providers/auth_provider.dart';
@@ -33,7 +34,9 @@ class ReceiptVoucherDialog extends StatelessWidget {
 
     final curr = voucher.currency.isNotEmpty
         ? voucher.currency
-        : (comp?.currency ?? (user?.companyCurrency.isNotEmpty == true ? user!.companyCurrency : 'INR'));
+        : (user?.companyCurrency.isNotEmpty == true
+            ? user!.companyCurrency
+            : (comp?.currency ?? 'INR'));
 
     return Dialog(
       backgroundColor: Colors.transparent,
@@ -98,14 +101,18 @@ class ReceiptVoucherDialog extends StatelessWidget {
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                             visualDensity: VisualDensity.compact,
                           ),
-                          onPressed: () => PdfInvoiceService.printReceiptVoucher(
-                            voucher,
-                            companyName: companyName,
-                            companyPhone: companyPhone,
-                            companyEmail: companyEmail,
-                            companyAddress: companyAddress,
-                            companyGstin: companyCr,
-                            companyLogo: companyLogo,
+                          onPressed: () => ActionLoader.run(
+                            context,
+                            message: 'Generating Receipt PDF...',
+                            task: () => PdfInvoiceService.printReceiptVoucher(
+                              voucher,
+                              companyName: companyName,
+                              companyPhone: companyPhone,
+                              companyEmail: companyEmail,
+                              companyAddress: companyAddress,
+                              companyGstin: companyCr,
+                              companyLogo: companyLogo,
+                            ),
                           ),
                           icon: const Icon(Icons.print_rounded, size: 15),
                           label: const Text('Print / PDF'),
@@ -118,9 +125,13 @@ class ReceiptVoucherDialog extends StatelessWidget {
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                             visualDensity: VisualDensity.compact,
                           ),
-                          onPressed: () => PdfInvoiceService.shareReceiptVoucherToWhatsApp(
-                            voucher,
-                            companyName: companyName,
+                          onPressed: () => ActionLoader.run(
+                            context,
+                            message: 'Opening WhatsApp...',
+                            task: () => PdfInvoiceService.shareReceiptVoucherToWhatsApp(
+                              voucher,
+                              companyName: companyName,
+                            ),
                           ),
                           icon: const Icon(Icons.chat_bubble_outline_rounded, size: 15),
                           label: const Text('WhatsApp'),

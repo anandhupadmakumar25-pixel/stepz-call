@@ -2,12 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:provider/provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/action_loader.dart';
+import '../../core/widgets/app_back_button.dart';
+import '../../core/widgets/glass/app_background.dart';
 import '../../core/widgets/glass/glass_card.dart';
 import '../../core/network/api_client.dart';
+import '../../models/attendance_model.dart';
 import '../../models/lead_model.dart';
 import '../../models/recording_model.dart';
 import '../../models/call_model.dart';
+import '../../providers/auth_provider.dart';
 import '../tasks/calling_tasks_screen.dart';
 import '../tasks/task_detail_execution_screen.dart';
 import '../calls/call_recordings_screen.dart';
@@ -16,8 +22,13 @@ import '../leads/lead_detail_screen.dart';
 
 class EmployeeActivityDetailDialog extends StatefulWidget {
   final Map<String, dynamic> employee;
+  final bool asPage;
 
-  const EmployeeActivityDetailDialog({super.key, required this.employee});
+  const EmployeeActivityDetailDialog({
+    super.key,
+    required this.employee,
+    this.asPage = true,
+  });
 
   @override
   State<EmployeeActivityDetailDialog> createState() => _EmployeeActivityDetailDialogState();
@@ -29,15 +40,67 @@ class _EmployeeActivityDetailDialogState extends State<EmployeeActivityDetailDia
   bool _isLoading = true;
   String? _errorMessage;
 
-  List<CallingTaskModel> _tasks = [];
-  List<CallRecordingModel> _recordings = [];
-  List<CallAttemptModel> _calls = [];
-  List<LeadModel> _leads = [];
+  String _datePreset = 'ALL'; // ALL, TODAY, 7D, 30D, CUSTOM
+  DateTimeRange? _customRange;
+
+  List<CallingTaskModel> _allTasks = [];
+  List<CallRecordingModel> _allRecordings = [];
+  List<CallAttemptModel> _allCalls = [];
+  List<LeadModel> _allLeads = [];
+  List<AttendanceModel> _allAttendanceRecords = [];
+  List<Map<String, dynamic>> _leaveRequests = [];
+  List<Map<String, dynamic>> _leaveTypes = [];
+
+  DateTimeRange? get _effectiveRange {
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day);
+    final todayEnd = DateTime(now.year, now.month, now.day, 23, 59, 59);
+    switch (_datePreset) {
+      case 'TODAY':
+        return DateTimeRange(start: todayStart, end: todayEnd);
+      case '7D':
+        return DateTimeRange(start: todayStart.subtract(const Duration(days: 6)), end: todayEnd);
+      case '30D':
+        return DateTimeRange(start: todayStart.subtract(const Duration(days: 29)), end: todayEnd);
+      case 'CUSTOM':
+        return _customRange;
+      default:
+        return null;
+    }
+  }
+
+  bool _matchesDate(DateTime? dt) {
+    final range = _effectiveRange;
+    if (range == null) return true;
+    if (dt == null) return false;
+    final local = dt.toLocal();
+    final day = DateTime(local.year, local.month, local.day);
+    final start = DateTime(range.start.year, range.start.month, range.start.day);
+    final end = DateTime(range.end.year, range.end.month, range.end.day);
+    return !day.isBefore(start) && !day.isAfter(end);
+  }
+
+  bool _matchesDateStr(String? raw) {
+    if (_effectiveRange == null) return true;
+    if (raw == null || raw.isEmpty) return false;
+    return _matchesDate(DateTime.tryParse(raw));
+  }
+
+  List<CallingTaskModel> get _tasks =>
+      _allTasks.where((t) => _matchesDateStr(t.createdAt)).toList();
+  List<CallRecordingModel> get _recordings =>
+      _allRecordings.where((r) => _matchesDate(r.createdAt)).toList();
+  List<CallAttemptModel> get _calls =>
+      _allCalls.where((c) => _matchesDateStr(c.createdAt)).toList();
+  List<LeadModel> get _leads =>
+      _allLeads.where((l) => _matchesDateStr(l.createdAt)).toList();
+  List<AttendanceModel> get _attendanceRecords =>
+      _allAttendanceRecords.where((a) => _matchesDateStr(a.date)).toList();
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
     _fetchEmployeeData();
   }
 
@@ -61,7 +124,7 @@ class _EmployeeActivityDetailDialogState extends State<EmployeeActivityDetailDia
       try {
         final taskRes = await ApiClient.get('/leads/tasks/?assigned_to=$empId');
         if (taskRes is List) {
-          _tasks = taskRes.map((t) => CallingTaskModel.fromJson(t)).toList();
+          _allTasks = taskRes.map((t) => CallingTaskModel.fromJson(t)).toList();
         }
       } catch (_) {}
 
@@ -69,7 +132,7 @@ class _EmployeeActivityDetailDialogState extends State<EmployeeActivityDetailDia
       try {
         final recRes = await ApiClient.get('/calls/recordings/?employee=$empId');
         if (recRes is List) {
-          _recordings = recRes.map((r) => CallRecordingModel.fromJson(r)).toList();
+          _allRecordings = recRes.map((r) => CallRecordingModel.fromJson(r)).toList();
         }
       } catch (_) {}
 
@@ -77,7 +140,7 @@ class _EmployeeActivityDetailDialogState extends State<EmployeeActivityDetailDia
       try {
         final callRes = await ApiClient.get('/calls/?employee=$empId');
         if (callRes is List) {
-          _calls = callRes.map((c) => CallAttemptModel.fromJson(c)).toList();
+          _allCalls = callRes.map((c) => CallAttemptModel.fromJson(c)).toList();
         }
       } catch (_) {}
 
@@ -85,9 +148,37 @@ class _EmployeeActivityDetailDialogState extends State<EmployeeActivityDetailDia
       try {
         final leadRes = await ApiClient.get('/leads/?assigned_to=$empId');
         if (leadRes is List) {
-          _leads = leadRes.map((l) => LeadModel.fromJson(l)).toList();
+          _allLeads = leadRes.map((l) => LeadModel.fromJson(l)).toList();
         } else if (leadRes is Map && leadRes['results'] is List) {
-          _leads = (leadRes['results'] as List).map((l) => LeadModel.fromJson(l)).toList();
+          _allLeads = (leadRes['results'] as List).map((l) => LeadModel.fromJson(l)).toList();
+        }
+      } catch (_) {}
+
+      // 5. Fetch Attendance (range or last 60 days)
+      try {
+        final range = _effectiveRange;
+        final now = DateTime.now();
+        final from = (range?.start ?? now.subtract(const Duration(days: 60))).toIso8601String().split('T').first;
+        final to = (range?.end ?? now).toIso8601String().split('T').first;
+        final attRes = await ApiClient.get('/accounts/attendance/records/?user_id=$empId&date_from=$from&date_to=$to');
+        if (attRes is Map && attRes['records'] is List) {
+          _allAttendanceRecords = (attRes['records'] as List)
+              .map((r) => AttendanceModel.fromJson(Map<String, dynamic>.from(r)))
+              .toList();
+        }
+      } catch (_) {}
+
+      // 6. Fetch Leaves & Leave Types
+      try {
+        final leaveRes = await ApiClient.get('/accounts/leaves/?user_id=$empId');
+        if (leaveRes is List) {
+          _leaveRequests = leaveRes.whereType<Map<String, dynamic>>().toList();
+        }
+      } catch (_) {}
+      try {
+        final ltRes = await ApiClient.get('/accounts/leave-types/');
+        if (ltRes is List) {
+          _leaveTypes = ltRes.whereType<Map<String, dynamic>>().toList();
         }
       } catch (_) {}
     } catch (e) {
@@ -159,27 +250,27 @@ class _EmployeeActivityDetailDialogState extends State<EmployeeActivityDetailDia
     final phone = emp['phone'] ?? '';
     final branchName = emp['branch_name'] as String?;
     final deptName = emp['department_name'] as String?;
-    final target = emp['daily_call_target'] ?? 50;
+    final profile = emp['employee_profile'] as Map<String, dynamic>? ?? {};
+    final target = profile['daily_call_target'] ?? emp['daily_call_target'] ?? 50;
 
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 960, maxHeight: 880),
-        child: GlassCard(
-          blur: 24,
-          opacity: 0.98,
-          borderRadius: BorderRadius.circular(20),
-          borderColor: const Color(0xFFCBD5E1),
-          padding: const EdgeInsets.all(22),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+    final contentCard = GlassCard(
+      blur: 24,
+      opacity: 0.96,
+      borderRadius: BorderRadius.circular(widget.asPage ? 20 : 20),
+      borderColor: const Color(0xFFCBD5E1),
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // 1. Header Profile & Back/Close Button
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 1. Header Profile & Close Button
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
+              if (widget.asPage) ...[
+                const AppBackButton(),
+                const SizedBox(width: 10),
+              ],
+              Container(
                     width: 52,
                     height: 52,
                     decoration: BoxDecoration(
@@ -255,13 +346,62 @@ class _EmployeeActivityDetailDialogState extends State<EmployeeActivityDetailDia
                       ],
                     ),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.close_rounded, color: Color(0xFF64748B)),
-                    onPressed: () => Navigator.of(context).pop(),
+                  if (!widget.asPage)
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded, color: Color(0xFF64748B)),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 12),
+
+              // Date History Filter Bar
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  const Icon(Icons.date_range_rounded, size: 16, color: Color(0xFF475569)),
+                  Text('History:', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFF334155))),
+                  for (final entry in const [
+                    ('ALL', 'All Dates'),
+                    ('TODAY', 'Today'),
+                    ('7D', 'Last 7 Days'),
+                    ('30D', 'Last 30 Days'),
+                  ])
+                    ChoiceChip(
+                      label: Text(entry.$2, style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w600)),
+                      selected: _datePreset == entry.$1,
+                      onSelected: (_) => setState(() => _datePreset = entry.$1),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ActionChip(
+                    avatar: const Icon(Icons.calendar_today_rounded, size: 14),
+                    label: Text(
+                      _datePreset == 'CUSTOM' && _customRange != null
+                          ? '${DateFormat('dd MMM').format(_customRange!.start)} - ${DateFormat('dd MMM').format(_customRange!.end)}'
+                          : 'Pick Date / Range',
+                      style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w700),
+                    ),
+                    onPressed: () async {
+                      final picked = await showDateRangePicker(
+                        context: context,
+                        firstDate: DateTime(2023),
+                        lastDate: DateTime.now().add(const Duration(days: 1)),
+                        initialDateRange: _customRange,
+                      );
+                      if (picked != null && mounted) {
+                        setState(() {
+                          _customRange = picked;
+                          _datePreset = 'CUSTOM';
+                        });
+                        _fetchEmployeeData();
+                      }
+                    },
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
 
               // 2. Metrics Quick Overview Row
               Container(
@@ -364,6 +504,7 @@ class _EmployeeActivityDetailDialogState extends State<EmployeeActivityDetailDia
               // 4. Tab Bar
               TabBar(
                 controller: _tabController,
+                isScrollable: true,
                 labelColor: const Color(0xFF2563EB),
                 unselectedLabelColor: const Color(0xFF64748B),
                 indicatorColor: const Color(0xFF2563EB),
@@ -375,6 +516,7 @@ class _EmployeeActivityDetailDialogState extends State<EmployeeActivityDetailDia
                   Tab(text: 'Audio Recordings (${_recordings.length})'),
                   Tab(text: 'Call Logs (${_calls.length})'),
                   Tab(text: 'Assigned Leads (${_leads.length})'),
+                  Tab(text: 'Attendance & Leaves (${_attendanceRecords.length})'),
                 ],
               ),
               const SizedBox(height: 12),
@@ -403,12 +545,33 @@ class _EmployeeActivityDetailDialogState extends State<EmployeeActivityDetailDia
                               _buildRecordingsTab(),
                               _buildCallsTab(),
                               _buildLeadsTab(),
+                              _buildAttendanceAndLeavesTab(),
                             ],
                           ),
               ),
             ],
           ),
+    );
+
+    if (widget.asPage) {
+      return Scaffold(
+        body: AppBackground(
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: contentCard,
+            ),
+          ),
         ),
+      );
+    }
+
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 960, maxHeight: 880),
+        child: contentCard,
       ),
     );
   }
@@ -918,6 +1081,305 @@ class _EmployeeActivityDetailDialogState extends State<EmployeeActivityDetailDia
 
   Widget _buildDivider() {
     return Container(width: 1, height: 32, color: const Color(0xFFCBD5E1));
+  }
+
+  Widget _buildAttendanceAndLeavesTab() {
+    final user = context.read<AuthProvider>().currentUser;
+    final canApproveLeave = (user?.role == 'COMPANY_ADMIN') ||
+        (user?.isMasterAdmin ?? false) ||
+        (user?.hasPermission('leave.approve') ?? false);
+    final canApplyLeave = canApproveLeave || (user?.hasPermission('leave.apply_own') ?? false);
+
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Leave Requests (${_leaveRequests.length})',
+                style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+              ),
+              if (canApplyLeave && _leaveTypes.isNotEmpty)
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF059669),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  icon: const Icon(Icons.event_available_rounded, size: 15),
+                  label: Text('Apply Leave', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700)),
+                  onPressed: _openApplyLeaveForEmployeeDialog,
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (_leaveRequests.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: Text('No leave requests found.', style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B))),
+            )
+          else
+            ..._leaveRequests.map((lr) {
+              final st = (lr['status'] ?? 'PENDING').toString().toUpperCase();
+              final stColor = st == 'APPROVED'
+                  ? const Color(0xFF059669)
+                  : (st == 'REJECTED' ? const Color(0xFFDC2626) : const Color(0xFFD97706));
+              return Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          '${lr['leave_type_name'] ?? 'Leave'} · ${lr['start_date']} to ${lr['end_date']} (${lr['days_count']}d)',
+                          style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: stColor.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(st, style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w800, color: stColor)),
+                        ),
+                      ],
+                    ),
+                    if ((lr['reason'] ?? '').toString().trim().isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text('Reason: ${lr['reason']}', style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF475569))),
+                    ],
+                    if (st == 'PENDING' && canApproveLeave) ...[
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          OutlinedButton(
+                            onPressed: () => _handleLeaveAction(lr['id'].toString(), 'REJECT'),
+                            style: OutlinedButton.styleFrom(foregroundColor: const Color(0xFFDC2626), visualDensity: VisualDensity.compact),
+                            child: const Text('Reject'),
+                          ),
+                          const SizedBox(width: 8),
+                          ElevatedButton(
+                            onPressed: () => _handleLeaveAction(lr['id'].toString(), 'APPROVE'),
+                            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF059669), foregroundColor: Colors.white, visualDensity: VisualDensity.compact),
+                            child: const Text('Approve'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              );
+            }),
+          const SizedBox(height: 16),
+          Text(
+            'Check-In / Check-Out History (Last 30 Days)',
+            style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+          ),
+          const SizedBox(height: 8),
+          if (_attendanceRecords.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: Text('No attendance records found for the last 30 days.', style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B))),
+            )
+          else
+            ..._attendanceRecords.map((rec) {
+              final inTime = rec.checkInTime != null ? DateFormat('hh:mm a').format(rec.checkInTime!.toLocal()) : '--';
+              final outTime = rec.checkOutTime != null ? DateFormat('hh:mm a').format(rec.checkOutTime!.toLocal()) : '--';
+              return Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(rec.date, style: GoogleFonts.robotoMono(fontSize: 12.5, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A))),
+                        Text(
+                          '${rec.status} · In: $inTime · Out: $outTime (${rec.workingHours.toStringAsFixed(1)}h)',
+                          style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w600, color: const Color(0xFF334155)),
+                        ),
+                      ],
+                    ),
+                    if (rec.earlyCheckoutReason.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFFBEB),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.4)),
+                        ),
+                        child: Text(
+                          'Early Checkout Reason: ${rec.earlyCheckoutReason}',
+                          style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF92400E)),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              );
+            }),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _handleLeaveAction(String leaveId, String action) async {
+    await ActionLoader.run(
+      context,
+      message: action == 'APPROVE' ? 'Approving Leave...' : 'Rejecting Leave...',
+      task: () => ApiClient.post('/accounts/leaves/$leaveId/action/', {'action': action}),
+    );
+    await _fetchEmployeeData();
+  }
+
+  void _openApplyLeaveForEmployeeDialog() {
+    if (_leaveTypes.isEmpty) return;
+    String selectedType = _leaveTypes.first['id'].toString();
+    DateTime start = DateTime.now();
+    DateTime end = DateTime.now();
+    bool halfDay = false;
+    final reasonCtrl = TextEditingController();
+    String? err;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (c, setDlg) => AlertDialog(
+          title: const Text('Apply Leave'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (err != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text(err!, style: const TextStyle(color: Color(0xFFDC2626), fontSize: 12)),
+                  ),
+                DropdownButtonFormField<String>(
+                  initialValue: selectedType,
+                  decoration: const InputDecoration(labelText: 'Leave Type'),
+                  items: _leaveTypes
+                      .map((t) => DropdownMenuItem<String>(
+                            value: t['id'].toString(),
+                            child: Text('${t['name']}'),
+                          ))
+                      .toList(),
+                  onChanged: (v) {
+                    if (v != null) setDlg(() => selectedType = v);
+                  },
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () async {
+                          final picked = await showDatePicker(
+                            context: c,
+                            initialDate: start,
+                            firstDate: DateTime(2024),
+                            lastDate: DateTime(2030),
+                          );
+                          if (picked != null) {
+                            setDlg(() {
+                              start = picked;
+                              if (end.isBefore(start)) end = start;
+                            });
+                          }
+                        },
+                        child: Text('From: ${start.toIso8601String().split('T').first}', style: const TextStyle(fontSize: 11)),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () async {
+                          final picked = await showDatePicker(
+                            context: c,
+                            initialDate: end,
+                            firstDate: start,
+                            lastDate: DateTime(2030),
+                          );
+                          if (picked != null) setDlg(() => end = picked);
+                        },
+                        child: Text('To: ${end.toIso8601String().split('T').first}', style: const TextStyle(fontSize: 11)),
+                      ),
+                    ),
+                  ],
+                ),
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: halfDay,
+                  title: const Text('Half Day', style: TextStyle(fontSize: 13)),
+                  onChanged: (v) => setDlg(() => halfDay = v ?? false),
+                ),
+                TextField(
+                  controller: reasonCtrl,
+                  decoration: const InputDecoration(labelText: 'Reason'),
+                  maxLines: 2,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF059669), foregroundColor: Colors.white),
+              onPressed: () async {
+                try {
+                  await ActionLoader.run(
+                    c,
+                    message: 'Submitting Leave...',
+                    task: () => ApiClient.post('/accounts/leaves/', {
+                      'user_id': widget.employee['id']?.toString(),
+                      'leave_type': selectedType,
+                      'start_date': start.toIso8601String().split('T').first,
+                      'end_date': end.toIso8601String().split('T').first,
+                      'is_half_day': halfDay,
+                      'reason': reasonCtrl.text.trim(),
+                    }),
+                  );
+                  if (ctx.mounted) Navigator.pop(ctx);
+                  await _fetchEmployeeData();
+                } catch (e) {
+                  setDlg(() => err = e.toString());
+                }
+              },
+              child: const Text('Submit'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildPill(String text, IconData icon, Color color) {

@@ -4,9 +4,12 @@ import 'package:provider/provider.dart';
 import '../../core/widgets/glass/glass_card.dart';
 import '../../core/widgets/glass/gradient_button.dart';
 import '../../core/widgets/company_logo_view.dart';
+import '../../core/widgets/action_loader.dart';
 import '../../core/services/pdf_invoice_service.dart';
+import '../../core/utils/region_detector.dart';
 import '../../models/quotation_model.dart';
 import '../../models/invoice_model.dart';
+import '../../models/plan_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/company_provider.dart';
 import '../billing/record_payment_dialog.dart';
@@ -42,7 +45,7 @@ class _QuotationDetailDialogState extends State<QuotationDetailDialog> {
     Navigator.of(context).pop(invoice);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Fixed Price Invoice ${invoice.invoiceNumber} generated successfully at agreed price Rs. ${invoice.grandTotal.toStringAsFixed(2)}!'),
+        content: Text('Fixed Price Invoice ${invoice.invoiceNumber} generated successfully at agreed price ${PlanModel.getSymbolForCurrency(invoice.currency)} ${invoice.grandTotal.toStringAsFixed(2)}!'),
         backgroundColor: const Color(0xFF10B981),
         action: SnackBarAction(
           label: 'Record Payment',
@@ -204,7 +207,7 @@ class _QuotationDetailDialogState extends State<QuotationDetailDialog> {
                                   ),
                                   if (compGstin.isNotEmpty) ...[
                                     const SizedBox(height: 2),
-                                    Text('GSTIN: $compGstin', style: GoogleFonts.robotoMono(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF0F766E))),
+                                    Text('${RegionDetector.taxIdLabel(context.read<AuthProvider>().currentUser?.companyCountryIso)}: $compGstin', style: GoogleFonts.robotoMono(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF0F766E))),
                                   ],
                                   if (compAddress.isNotEmpty) ...[
                                     const SizedBox(height: 2),
@@ -386,14 +389,14 @@ class _QuotationDetailDialogState extends State<QuotationDetailDialog> {
                                             ],
                                             if (q.showPrice) ...[
                                               const SizedBox(width: 8),
-                                              SizedBox(width: 100, child: Text('₹${item.unitPrice.toStringAsFixed(2)}', textAlign: TextAlign.right, style: GoogleFonts.robotoMono(fontSize: 12))),
+                                              SizedBox(width: 100, child: Text('${PlanModel.getSymbolForCurrency(q.currency)}${item.unitPrice.toStringAsFixed(2)}', textAlign: TextAlign.right, style: GoogleFonts.robotoMono(fontSize: 12))),
                                             ],
                                             if (q.showTax) ...[
                                               const SizedBox(width: 8),
                                               SizedBox(width: 75, child: Text('${item.taxPercent.toStringAsFixed(0)}%', textAlign: TextAlign.right, style: GoogleFonts.robotoMono(fontSize: 12))),
                                             ],
                                             const SizedBox(width: 8),
-                                            SizedBox(width: 100, child: Text('₹${item.total.toStringAsFixed(2)}', textAlign: TextAlign.right, style: GoogleFonts.robotoMono(fontSize: 12, fontWeight: FontWeight.w700))),
+                                            SizedBox(width: 100, child: Text('${PlanModel.getSymbolForCurrency(q.currency)}${item.total.toStringAsFixed(2)}', textAlign: TextAlign.right, style: GoogleFonts.robotoMono(fontSize: 12, fontWeight: FontWeight.w700))),
                                           ],
                                         ),
                                       );
@@ -419,23 +422,23 @@ class _QuotationDetailDialogState extends State<QuotationDetailDialog> {
                         ),
                         child: Column(
                           children: [
-                            _buildAmountRow('Subtotal', '${q.currency.isNotEmpty ? q.currency : "₹"} ${q.subtotal.toStringAsFixed(2)}'),
+                            _buildAmountRow('Subtotal', '${PlanModel.getSymbolForCurrency(q.currency)} ${q.subtotal.toStringAsFixed(2)}'),
                             if (q.totalCost > 0 && (context.read<AuthProvider>().currentUser?.hasPermission('quotations.view_cost_cst') ?? false)) ...[
-                              _buildAmountRow('Total Cost (CST)', '${q.currency.isNotEmpty ? q.currency : "₹"} ${q.totalCost.toStringAsFixed(2)}', textColor: const Color(0xFFD97706)),
+                              _buildAmountRow('Total Cost (CST)', '${PlanModel.getSymbolForCurrency(q.currency)} ${q.totalCost.toStringAsFixed(2)}', textColor: const Color(0xFFD97706)),
                               _buildAmountRow(
                                 'Gross Margin',
-                                '${q.currency.isNotEmpty ? q.currency : "₹"} ${q.grossMargin.toStringAsFixed(2)} (${q.subtotal > 0 ? ((q.grossMargin / q.subtotal) * 100).toStringAsFixed(1) : 0}%)',
+                                '${PlanModel.getSymbolForCurrency(q.currency)} ${q.grossMargin.toStringAsFixed(2)} (${q.subtotal > 0 ? ((q.grossMargin / q.subtotal) * 100).toStringAsFixed(1) : 0}%)',
                                 textColor: const Color(0xFF059669),
                               ),
                             ],
                             if (q.discountAmount > 0)
-                              _buildAmountRow('Discount', '-${q.currency.isNotEmpty ? q.currency : "₹"} ${q.discountAmount.toStringAsFixed(2)}', textColor: const Color(0xFFDC2626)),
+                              _buildAmountRow('Discount', '-${PlanModel.getSymbolForCurrency(q.currency)} ${q.discountAmount.toStringAsFixed(2)}', textColor: const Color(0xFFDC2626)),
                             if (q.taxAmount > 0)
-                              _buildAmountRow('Tax / GST', '${q.currency.isNotEmpty ? q.currency : "₹"} ${q.taxAmount.toStringAsFixed(2)}'),
+                              _buildAmountRow(RegionDetector.taxSummaryLabel(context.read<AuthProvider>().currentUser?.companyCountryIso), '${PlanModel.getSymbolForCurrency(q.currency)} ${q.taxAmount.toStringAsFixed(2)}'),
                             const Divider(color: Color(0xFFCBD5E1), height: 16),
                             _buildAmountRow(
                               'Grand Total',
-                              '${q.currency.isNotEmpty ? q.currency : "₹"} ${q.grandTotal.toStringAsFixed(2)}',
+                              '${PlanModel.getSymbolForCurrency(q.currency)} ${q.grandTotal.toStringAsFixed(2)}',
                               isBold: true,
                               fontSize: 16,
                               textColor: const Color(0xFF1E3A8A),
@@ -480,7 +483,15 @@ class _QuotationDetailDialogState extends State<QuotationDetailDialog> {
                     ),
                     icon: const Icon(Icons.chat_rounded, size: 18),
                     label: Text('Share to WhatsApp', style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 12)),
-                    onPressed: () => PdfInvoiceService.shareQuotationToWhatsApp(q, companyName: compName),
+                    onPressed: () => ActionLoader.run(
+                      context,
+                      message: 'Opening WhatsApp...',
+                      task: () => PdfInvoiceService.shareQuotationToWhatsApp(
+                        q,
+                        companyName: compName,
+                        defaultCountryCode: context.read<AuthProvider>().currentUser?.companyCountryCode ?? '+91',
+                      ),
+                    ),
                   ),
                   Wrap(
                     spacing: 10,
@@ -598,16 +609,20 @@ class _QuotationDetailDialogState extends State<QuotationDetailDialog> {
                 InkWell(
                   onTap: () {
                     Navigator.pop(ctx);
-                    PdfInvoiceService.printQuotation(
-                      q,
-                      companyName: compName,
-                      companyPhone: compPhone,
-                      companyEmail: compEmail,
-                      companyAddress: compAddress,
-                      companyGstin: compGstin,
-                      companyWebsite: compWebsite,
-                      companyLogo: compLogo,
-                      includeCst: false,
+                    ActionLoader.run(
+                      context,
+                      message: 'Generating Quotation PDF...',
+                      task: () => PdfInvoiceService.printQuotation(
+                        q,
+                        companyName: compName,
+                        companyPhone: compPhone,
+                        companyEmail: compEmail,
+                        companyAddress: compAddress,
+                        companyGstin: compGstin,
+                        companyWebsite: compWebsite,
+                        companyLogo: compLogo,
+                        includeCst: false,
+                      ),
                     );
                   },
                   borderRadius: BorderRadius.circular(12),
@@ -652,20 +667,26 @@ class _QuotationDetailDialogState extends State<QuotationDetailDialog> {
                 ),
                 const SizedBox(height: 12),
 
-                // Option 2: Commercial Quotation with CST
+                // Option 2: Commercial Quotation with CST (Admin / Permitted only)
+                if ((context.read<AuthProvider>().currentUser?.role == 'COMPANY_ADMIN') ||
+                    (context.read<AuthProvider>().currentUser?.hasPermission('quotations.view_cost_cst') ?? false))
                 InkWell(
                   onTap: () {
                     Navigator.pop(ctx);
-                    PdfInvoiceService.printQuotation(
-                      q,
-                      companyName: compName,
-                      companyPhone: compPhone,
-                      companyEmail: compEmail,
-                      companyAddress: compAddress,
-                      companyGstin: compGstin,
-                      companyWebsite: compWebsite,
-                      companyLogo: compLogo,
-                      includeCst: true,
+                    ActionLoader.run(
+                      context,
+                      message: 'Generating Commercial PDF...',
+                      task: () => PdfInvoiceService.printQuotation(
+                        q,
+                        companyName: compName,
+                        companyPhone: compPhone,
+                        companyEmail: compEmail,
+                        companyAddress: compAddress,
+                        companyGstin: compGstin,
+                        companyWebsite: compWebsite,
+                        companyLogo: compLogo,
+                        includeCst: true,
+                      ),
                     );
                   },
                   borderRadius: BorderRadius.circular(12),

@@ -27,9 +27,15 @@ class BillingProvider extends ChangeNotifier {
   List<DocumentTemplateModel> get templates => _templates;
   List<DocumentTemplateModel> templatesForType(String docType) =>
       _templates.where((t) => t.docType == docType && t.isActive).toList();
-  DocumentTemplateModel? defaultTemplateFor(String docType) {
+  DocumentTemplateModel? defaultTemplateFor(String docType, {String? branchId}) {
     final list = templatesForType(docType);
     if (list.isEmpty) return null;
+    if (branchId != null && branchId.isNotEmpty) {
+      final branchList = list.where((t) => t.branchId == branchId).toList();
+      if (branchList.isNotEmpty) {
+        return branchList.firstWhere((t) => t.isDefault, orElse: () => branchList.first);
+      }
+    }
     return list.firstWhere((t) => t.isDefault, orElse: () => list.first);
   }
   QuotationModel? get selectedQuotation => _selectedQuotation;
@@ -569,6 +575,7 @@ class BillingProvider extends ChangeNotifier {
     required String name,
     required String docType,
     required TemplateLayoutConfig layout,
+    String? branchId,
     bool isDefault = false,
   }) async {
     _errorMessage = null;
@@ -576,6 +583,7 @@ class BillingProvider extends ChangeNotifier {
       final res = await ApiClient.post('/billing/templates/', {
         'name': name.trim(),
         'doc_type': docType,
+        'branch': (branchId != null && branchId.isNotEmpty) ? branchId : null,
         'is_default': isDefault,
         'layout_json': layout.toJson(),
       });
@@ -597,6 +605,7 @@ class BillingProvider extends ChangeNotifier {
     required String id,
     String? name,
     TemplateLayoutConfig? layout,
+    String? branchId,
     bool? isDefault,
   }) async {
     _errorMessage = null;
@@ -604,6 +613,7 @@ class BillingProvider extends ChangeNotifier {
       final payload = <String, dynamic>{};
       if (name != null) payload['name'] = name.trim();
       if (layout != null) payload['layout_json'] = layout.toJson();
+      if (branchId != null) payload['branch'] = branchId.isEmpty ? null : branchId;
       if (isDefault != null) payload['is_default'] = isDefault;
       final res = await ApiClient.patch('/billing/templates/$id/', payload);
       final updated = DocumentTemplateModel.fromJson(res as Map<String, dynamic>);

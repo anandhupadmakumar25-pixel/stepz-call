@@ -39,7 +39,7 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen> {
       icon: Icons.storefront_rounded,
     ),
     'employees': _ModuleInfo(
-      title: 'Telecaller Team & Staff',
+      title: 'Employee & Role Management',
       desc: 'Agent staff management, user roles & calling targets',
       icon: Icons.people_alt_rounded,
     ),
@@ -47,6 +47,21 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen> {
       title: 'Stepz Attendance & Geofencing',
       desc: 'GPS geofenced check-in, multi-branch office radius & field staff visit routes',
       icon: Icons.location_on_rounded,
+    ),
+    'leave': _ModuleInfo(
+      title: 'Leave & Holiday Management',
+      desc: 'Leave types, balances, approvals & company holiday calendar',
+      icon: Icons.event_available_rounded,
+    ),
+    'payroll': _ModuleInfo(
+      title: 'HR Payroll & Payslips',
+      desc: 'Salary structures, attendance-based monthly payroll runs & PDF payslips',
+      icon: Icons.payments_rounded,
+    ),
+    'delegation': _ModuleInfo(
+      title: 'Role & Section Delegation',
+      desc: 'Temporary acting in-charge delegation & permission audit logs',
+      icon: Icons.admin_panel_settings_rounded,
     ),
     'leads': _ModuleInfo(
       title: 'Lead Workspace & Import',
@@ -72,6 +87,26 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen> {
       title: 'Call Logs & History',
       desc: 'Comprehensive telecom audit log, durations & outcomes',
       icon: Icons.history_rounded,
+    ),
+    'quotations': _ModuleInfo(
+      title: 'Quotations & Estimates',
+      desc: 'Multi-currency estimates, margin analysis & quote-to-bill conversion',
+      icon: Icons.request_quote_rounded,
+    ),
+    'billing': _ModuleInfo(
+      title: 'Bills, Invoices & Receipts',
+      desc: 'Fixed-price invoices, payment recording & receipt vouchers',
+      icon: Icons.receipt_long_rounded,
+    ),
+    'templates': _ModuleInfo(
+      title: 'Visual PDF Template Studio',
+      desc: 'Drag-and-drop A4 quotation, invoice & receipt template designer',
+      icon: Icons.design_services_rounded,
+    ),
+    'reports': _ModuleInfo(
+      title: 'Reports Center & Export',
+      desc: 'Sales, call, lead & HR attendance reports with CSV & PDF export',
+      icon: Icons.bar_chart_rounded,
     ),
     'analytics': _ModuleInfo(
       title: 'Analytics & Reporting',

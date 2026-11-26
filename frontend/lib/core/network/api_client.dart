@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../utils/region_detector.dart';
 // flutter build apk --release --dart-define=API_URL=https://web-production-4e39b.up.railway.app
 
 class ApiClient {
@@ -88,6 +89,10 @@ class ApiClient {
     }
     if (token != null && token.isNotEmpty) {
       headers['Authorization'] = 'Bearer $token';
+    }
+    final detectedIso = RegionDetector.detectCountryIso();
+    if (detectedIso != null && detectedIso.isNotEmpty) {
+      headers['X-Detected-Country'] = detectedIso;
     }
     return headers;
   }

@@ -1,5 +1,6 @@
 class ProductModel {
   final String id;
+  final String itemCode;
   final String name;
   final String description;
   final double unitPrice;
@@ -9,6 +10,7 @@ class ProductModel {
 
   ProductModel({
     required this.id,
+    this.itemCode = '',
     required this.name,
     this.description = '',
     this.unitPrice = 0.0,
@@ -20,6 +22,7 @@ class ProductModel {
   factory ProductModel.fromJson(Map<String, dynamic> json) {
     return ProductModel(
       id: json['id']?.toString() ?? '',
+      itemCode: json['item_code']?.toString() ?? '',
       name: json['name']?.toString() ?? '',
       description: json['description']?.toString() ?? '',
       unitPrice: double.tryParse(json['unit_price']?.toString() ?? '0') ?? 0.0,
@@ -32,6 +35,7 @@ class ProductModel {
   Map<String, dynamic> toJson() {
     return {
       'id': id,
+      'item_code': itemCode,
       'name': name,
       'description': description,
       'unit_price': unitPrice,

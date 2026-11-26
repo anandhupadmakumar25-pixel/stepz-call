@@ -478,3 +478,127 @@ class FullAppLogicAuditTests(TestCase):
         r_tok2 = admin_client.post('/api/v1/notifications/register-token/', {'token': 'fcm-tok-1', 'device_type': 'android'}, format='json')
         self.assertEqual(r_tok2.status_code, 200)
         self.assertEqual(PushDeviceToken.objects.get(token='fcm-tok-1').user_id, self.admin_a.id)
+
+    def test_employee_creation_with_salary_and_attendance_payroll_calculation(self):
+        from datetime import date
+        from apps.accounts.models import AttendanceRecord, EmployeeSalaryStructure
+        from apps.companies.models import CompanyCustomRule
+
+        admin_client = self._client(self.admin_a)
+        r_emp = admin_client.post(
+            '/api/v1/accounts/employees/',
+            {
+                'email': 'payroll_emp@companya.com',
+                'password': 'Password@123!',
+                'first_name': 'Payroll',
+                'last_name': 'Tester',
+                'role': 'EMPLOYEE',
+                'basic_salary': 2000,
+                'hra': 500,
+                'allowances': 500,
+                'pf_deduction': 100,
+                'salary_currency': 'QAR',
+            },
+            format='json',
+        )
+        self.assertEqual(r_emp.status_code, 201)
+        emp_id = r_emp.data['id']
+        sal = EmployeeSalaryStructure.objects.get(user_id=emp_id)
+        self.assertEqual(float(sal.gross_salary), 3000.0)
+        self.assertEqual(sal.currency, 'QAR')
+
+        # Multi-session check-ins on same day should count as 1 present day, plus 1 late day
+        AttendanceRecord.objects.create(company=self.company_a, user_id=emp_id, date=date(2026, 11, 2), status='PRESENT')
+        AttendanceRecord.objects.create(company=self.company_a, user_id=emp_id, date=date(2026, 11, 2), status='PRESENT')
+        AttendanceRecord.objects.create(company=self.company_a, user_id=emp_id, date=date(2026, 11, 3), status='LATE')
+
+        CompanyCustomRule.objects.create(
+            company=self.company_a,
+            name='Late Penalty',
+            trigger_metric='LATE_COUNT',
+            threshold_value=1,
+            action_type='FLAT_AMOUNT',
+            action_value=50,
+            is_active=True,
+        )
+
+        r_run = admin_client.post('/api/v1/accounts/payroll-runs/', {'month': 11, 'year': 2026}, format='json')
+        self.assertEqual(r_run.status_code, 201)
+        run_id = r_run.data['id']
+
+        r_detail = admin_client.get(f'/api/v1/accounts/payroll-runs/{run_id}/')
+        self.assertEqual(r_detail.status_code, 200)
+        slip = next(s for s in r_detail.data['payslips'] if str(s['user']) == str(emp_id))
+        self.assertEqual(float(slip['present_days']), 2.0)
+        self.assertEqual(slip['late_days'], 1)
+        self.assertEqual(float(slip['late_deduction']), 50.0)
+        self.assertEqual(float(slip['net_pay']), 2850.0)
+
+    def test_company_creation_with_plan_and_collect_payment(self):
+        from apps.companies.models import Plan, CompanySubscriptionHistory
+
+        plan = Plan.objects.create(
+            name='Pro Plan',
+            code='pro_test',
+            price_monthly=1000,
+            price_yearly=10000,
+            currency='INR',
+        )
+        super_client = self._client(self.super_a)
+
+        # 1. Create company with explicit PAID status (verifies receipt_number generation & timezone import)
+        r_paid = super_client.post('/api/v1/companies/', {
+            'name': 'Paid Tenant Co',
+            'admin_email': 'admin@paidtenant.com',
+            'plan_id': str(plan.id),
+            'plan_billing_cycle': 'MONTHLY',
+            'initial_payment_status': 'PAID',
+        }, format='json')
+        self.assertEqual(r_paid.status_code, 201)
+        self.assertEqual(float(r_paid.data['company']['due_amount']), 0.0)
+        self.assertEqual(r_paid.data['company']['payment_status'], 'PAID')
+        paid_hist = CompanySubscriptionHistory.objects.get(company_id=r_paid.data['company']['id'])
+        self.assertEqual(paid_hist.payment_status, 'PAID')
+        self.assertTrue(paid_hist.receipt_number.startswith('SUB-'))
+
+        # 2. Create company with default status (defaults to DUE), then collect payment
+        r_due = super_client.post('/api/v1/companies/', {
+            'name': 'Due Tenant Co',
+            'admin_email': 'admin@duetenant.com',
+            'plan_id': str(plan.id),
+            'plan_billing_cycle': 'MONTHLY',
+        }, format='json')
+        self.assertEqual(r_due.status_code, 201)
+        self.assertEqual(float(r_due.data['company']['due_amount']), 1000.0)
+        self.assertEqual(r_due.data['company']['payment_status'], 'DUE')
+        due_company_id = r_due.data['company']['id']
+        due_hist = CompanySubscriptionHistory.objects.get(company_id=due_company_id)
+        self.assertEqual(due_hist.payment_status, 'DUE')
+        self.assertEqual(float(due_hist.due_amount), 1000.0)
+        self.assertEqual(due_hist.receipt_number, '')
+
+        r_collect = super_client.post(f'/api/v1/companies/{due_company_id}/collect-payment/', {
+            'amount_paid': 1000,
+            'payment_mode': 'UPI',
+            'transaction_ref': 'UPI-999',
+        }, format='json')
+        self.assertEqual(r_collect.status_code, 201)
+        due_hist.refresh_from_db()
+        self.assertEqual(due_hist.payment_status, 'PAID')
+        self.assertEqual(float(due_hist.due_amount), 0.0)
+        self.assertTrue(r_collect.data['receipt']['receipt_number'].startswith('SUB-'))
+
+        # 3. Expired paid tenant auto-suspends and generates renewal due on fetch
+        from datetime import timedelta
+        from django.utils import timezone
+        from apps.companies.models import Company
+        paid_comp = Company.objects.get(id=r_paid.data['company']['id'])
+        paid_comp.plan_expires_at = timezone.now() - timedelta(days=1)
+        paid_comp.save(update_fields=['plan_expires_at'])
+
+        r_list = super_client.get('/api/v1/companies/')
+        self.assertEqual(r_list.status_code, 200)
+        exp_row = next(c for c in r_list.data if c['id'] == str(paid_comp.id))
+        self.assertEqual(exp_row['status'], 'SUSPENDED')
+        self.assertEqual(float(exp_row['due_amount']), 1000.0)
+        self.assertEqual(exp_row['payment_status'], 'PARTIAL')

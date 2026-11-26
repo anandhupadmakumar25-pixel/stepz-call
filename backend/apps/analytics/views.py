@@ -3,7 +3,7 @@ from django.utils import timezone
 from django.db.models import Count, Q, Max, Sum
 from rest_framework import views
 from rest_framework.response import Response
-from apps.leads.models import Lead, ImportBatch
+from apps.leads.models import Branch, Lead, ImportBatch
 from apps.calls.models import CallAttempt
 from apps.callbacks.models import Callback
 from apps.accounts.models import User, AttendanceRecord
@@ -39,6 +39,13 @@ class AdminDashboardMetricsView(views.APIView):
             call_qs = CallAttempt.objects.filter(company=company)
             cb_qs = Callback.objects.filter(company=company)
             emp_qs = User.objects.filter(company=company, role__in=['EMPLOYEE', 'MANAGER'], is_active=True)
+
+        branch_id = request.query_params.get('branch_id')
+        if branch_id and branch_id != 'ALL':
+            lead_qs = lead_qs.filter(branch_id=branch_id)
+            call_qs = call_qs.filter(lead__branch_id=branch_id)
+            cb_qs = cb_qs.filter(lead__branch_id=branch_id)
+            emp_qs = emp_qs.filter(branch_id=branch_id)
 
         now = timezone.now()
         today = now.date()
@@ -145,6 +152,36 @@ class AdminDashboardMetricsView(views.APIView):
                 'last_activity': last_call.isoformat() if last_call else None,
             })
 
+        # 6. Branch-Wise Sales & Performance Breakdown (for multi-branch visibility)
+        branch_sales = []
+        if company:
+            branches_qs = Branch.objects.filter(company=company, is_active=True).order_by('name')
+            for br in branches_qs:
+                br_quotes = Quotation.objects.filter(company=company, branch=br)
+                br_invs = Invoice.objects.filter(company=company, branch=br).exclude(payment_status='CANCELLED')
+                inv_agg = br_invs.aggregate(
+                    total_sales=Sum('grand_total'),
+                    collected=Sum('amount_paid'),
+                )
+                q_agg = br_quotes.aggregate(total_val=Sum('grand_total'))
+                total_sales = float(inv_agg['total_sales'] or 0.0)
+                collected = float(inv_agg['collected'] or 0.0)
+                branch_sales.append({
+                    'branch_id': str(br.id),
+                    'branch_name': br.name,
+                    'branch_code': br.code,
+                    'quotations_count': br_quotes.count(),
+                    'quotations_value': float(q_agg['total_val'] or 0.0),
+                    'invoices_count': br_invs.count(),
+                    'total_sales': total_sales,
+                    'collected_amount': collected,
+                    'pending_balance': max(0.0, total_sales - collected),
+                    'leads_count': Lead.objects.filter(company=company, branch=br).count(),
+                    'calls_today': CallAttempt.objects.filter(
+                        company=company, lead__branch=br, created_at__date=today
+                    ).values('lead_id').distinct().count(),
+                })
+
         return Response({
             'kpis': {
                 'total_registered_leads': total_registered_leads,
@@ -166,6 +203,7 @@ class AdminDashboardMetricsView(views.APIView):
             'lead_statuses': status_counts,
             'activity_timeline': activity_timeline,
             'employee_performance': employee_performance,
+            'branch_sales': branch_sales,
             'recent_companies': recent_companies,
             'super_admins_breakdown': super_admins_breakdown,
             'onboarding_rate': 75,

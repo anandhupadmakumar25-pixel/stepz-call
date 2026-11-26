@@ -4,15 +4,18 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_back_button.dart';
+import '../../core/widgets/action_loader.dart';
 import '../../core/widgets/glass/app_background.dart';
 import '../../core/widgets/glass/glass_card.dart';
 import '../../core/widgets/glass/gradient_button.dart';
 import '../../core/services/pdf_invoice_service.dart';
+import '../../core/utils/region_detector.dart';
 import '../../core/responsive/responsive_layout.dart';
 import '../../models/lead_model.dart';
 import '../../models/quotation_model.dart';
 import '../../models/invoice_model.dart';
 import '../../models/product_model.dart';
+import '../../models/plan_model.dart';
 import '../../models/document_template_model.dart';
 import '../../providers/billing_provider.dart';
 import '../../providers/employee_provider.dart';
@@ -171,6 +174,8 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
   final List<_LineItemEntry> _items = [];
   bool _isSaving = false;
   bool _showMobilePreview = false;
+  static const String _mainBranchSentinel = '__MAIN__';
+  String? _selectedBranchId;
   String? _selectedTemplateId;
   Map<String, dynamic> _selectedTemplateSnapshot = {};
   final Map<String, TextEditingController> _customFieldControllers = {};
@@ -195,10 +200,10 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
 
     if (editQ != null && editQ.currency.isNotEmpty) {
       _currency = editQ.currency;
-    } else if (comp != null) {
-      _currency = comp.currency;
     } else if (user != null && user.companyCurrency.isNotEmpty) {
       _currency = user.companyCurrency;
+    } else if (comp != null && comp.currency.isNotEmpty) {
+      _currency = comp.currency;
     } else {
       _currency = 'INR';
     }
@@ -294,8 +299,11 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
       _selectedTemplateSnapshot = Map<String, dynamic>.from(widget.invoiceToEdit!.templateSnapshot);
       _syncTemplateControllers();
     }
+    if (user?.branchId?.isNotEmpty == true) {
+      _selectedBranchId = user!.branchId;
+    }
 
-    // Fetch saved product catalog, leads, and document templates
+    // Fetch saved product catalog, leads, branches, employees, and document templates
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       final bp = context.read<BillingProvider>();
@@ -304,10 +312,16 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
       if (leadP.leads.isEmpty) {
         leadP.fetchLeads();
       }
+      if (leadP.branches.isEmpty) {
+        await leadP.fetchBranches();
+      }
+      if (!mounted) return;
       final empP = context.read<EmployeeProvider>();
       if (empP.employees.isEmpty) {
-        empP.fetchEmployees();
+        await empP.fetchEmployees();
       }
+      if (!mounted) return;
+      _autoResolveBranch();
       final docType = _createAsInvoice ? 'INVOICE' : 'QUOTATION';
       await bp.fetchTemplates(docType: docType);
       if (!mounted) return;
@@ -318,6 +332,63 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
         }
       }
     });
+  }
+
+  String? _branchIdForRepName(String repName, List<dynamic> employees) {
+    final target = repName.trim().toLowerCase();
+    if (target.isEmpty) return null;
+    for (final emp in employees) {
+      final full = '${emp['first_name'] ?? ''} ${emp['last_name'] ?? ''}'.trim().toLowerCase();
+      final email = (emp['email']?.toString() ?? '').trim().toLowerCase();
+      if (full == target || email == target) {
+        final bId = emp['branch']?.toString() ?? '';
+        if (bId.isNotEmpty) return bId;
+      }
+    }
+    return null;
+  }
+
+  String _defaultMainOrFirstBranchId(List<dynamic> branches) {
+    if (branches.isEmpty) return _mainBranchSentinel;
+    for (final b in branches) {
+      final name = (b.name ?? '').toString().toLowerCase();
+      if (name.contains('main') || name.contains('head') || name.contains('hq')) {
+        return b.id.toString();
+      }
+    }
+    return branches.first.id.toString();
+  }
+
+  void _autoResolveBranch() {
+    if (!mounted) return;
+    final branches = context.read<LeadProvider>().branches;
+    final employees = context.read<EmployeeProvider>().employees;
+    final authUser = context.read<AuthProvider>().currentUser;
+
+    if (branches.isEmpty) {
+      setState(() => _selectedBranchId = _mainBranchSentinel);
+      return;
+    }
+
+    final validIds = branches.map((b) => b.id).toSet();
+    if (_selectedBranchId != null && validIds.contains(_selectedBranchId)) {
+      return;
+    }
+
+    final fromRep = _branchIdForRepName(_salesRepController.text, employees);
+    if (fromRep != null && validIds.contains(fromRep)) {
+      setState(() => _selectedBranchId = fromRep);
+      return;
+    }
+    if (authUser?.branchId != null && validIds.contains(authUser!.branchId)) {
+      setState(() => _selectedBranchId = authUser.branchId);
+      return;
+    }
+    if (_activeTemplateLayout.branchId.isNotEmpty && validIds.contains(_activeTemplateLayout.branchId)) {
+      setState(() => _selectedBranchId = _activeTemplateLayout.branchId);
+      return;
+    }
+    setState(() => _selectedBranchId = _defaultMainOrFirstBranchId(branches));
   }
 
   void _resetToStandardTemplate() {
@@ -457,7 +528,7 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
     });
   }
 
-  void _addItemRow({String? name, String? itemCode, double? price, double? cst, double? tax}) {
+  _LineItemEntry _addItemRow({String? name, String? itemCode, double? price, double? cst, double? tax}) {
     final item = _LineItemEntry();
     if (name != null) item.descriptionController.text = name;
     if (itemCode != null) item.itemCodeController.text = itemCode;
@@ -480,6 +551,7 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
     item.discountController.addListener(() => _onItemValuesChanged(item));
     item.totalController.addListener(() => setState(() {}));
     _items.add(item);
+    return item;
   }
 
   void _addSectionTitleRow() {
@@ -580,7 +652,7 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                           dense: true,
                           title: Row(
                             children: [
-                              Text('Total (₹)', style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w700)),
+                              Text('Total (${PlanModel.getSymbolForCurrency(_currency)})', style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w700)),
                               const SizedBox(width: 8),
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
@@ -979,6 +1051,12 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
       'cr_number': _crNumberController.text.trim(),
       'currency': _currency,
       if (_selectedTemplateId != null) 'template': _selectedTemplateId,
+      if (_selectedBranchId != null && _selectedBranchId!.isNotEmpty && _selectedBranchId != _mainBranchSentinel)
+        'branch': _selectedBranchId
+      else if (context.read<LeadProvider>().branches.isNotEmpty)
+        'branch': _defaultMainOrFirstBranchId(context.read<LeadProvider>().branches)
+      else if (_activeTemplateLayout.branchId.isNotEmpty)
+        'branch': _activeTemplateLayout.branchId,
       if (_buildFinalTemplateSnapshot().isNotEmpty) 'template_snapshot': _buildFinalTemplateSnapshot(),
       if (_validUntil != null) 'valid_until': _validUntil!.toIso8601String().split('T').first,
       'custom_columns': {
@@ -1040,6 +1118,12 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
       'cr_number': _crNumberController.text.trim(),
       'currency': _currency,
       if (_selectedTemplateId != null) 'template': _selectedTemplateId,
+      if (_selectedBranchId != null && _selectedBranchId!.isNotEmpty && _selectedBranchId != _mainBranchSentinel)
+        'branch': _selectedBranchId
+      else if (context.read<LeadProvider>().branches.isNotEmpty)
+        'branch': _defaultMainOrFirstBranchId(context.read<LeadProvider>().branches)
+      else if (_activeTemplateLayout.branchId.isNotEmpty)
+        'branch': _activeTemplateLayout.branchId,
       if (_buildFinalTemplateSnapshot().isNotEmpty) 'template_snapshot': _buildFinalTemplateSnapshot(),
       if (_validUntil != null) 'due_date': _validUntil!.toIso8601String().split('T').first,
       'custom_columns': {
@@ -1526,7 +1610,19 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                                           : PopupMenuButton<String>(
                                               tooltip: 'Select from staff',
                                               icon: const Icon(Icons.arrow_drop_down_rounded, color: Color(0xFF64748B)),
-                                              onSelected: (name) => setState(() => _salesRepController.text = name),
+                                              onSelected: (name) {
+                                                setState(() {
+                                                  _salesRepController.text = name;
+                                                  final branches = context.read<LeadProvider>().branches;
+                                                  final validIds = branches.map((b) => b.id).toSet();
+                                                  final repBranch = _branchIdForRepName(name, employees);
+                                                  if (repBranch != null && validIds.contains(repBranch)) {
+                                                    _selectedBranchId = repBranch;
+                                                  } else if (branches.isEmpty) {
+                                                    _selectedBranchId = _mainBranchSentinel;
+                                                  }
+                                                });
+                                              },
                                               itemBuilder: (_) => employees
                                                   .where((e) => e['is_active'] != false)
                                                   .map((e) {
@@ -1543,6 +1639,60 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                                     ),
                                   ),
                                 ],
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              flex: 2,
+                              child: Builder(
+                                builder: (ctx) {
+                                  final branches = ctx.watch<LeadProvider>().branches;
+                                  final validIds = branches.map((b) => b.id).toSet();
+                                  final effectiveBranchVal = branches.isEmpty
+                                      ? _mainBranchSentinel
+                                      : (validIds.contains(_selectedBranchId)
+                                          ? _selectedBranchId
+                                          : _defaultMainOrFirstBranchId(branches));
+                                  return Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text('Branch *', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF475569))),
+                                      const SizedBox(height: 5),
+                                      DropdownButtonFormField<String>(
+                                        initialValue: effectiveBranchVal,
+                                        isExpanded: true,
+                                        style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w600, color: const Color(0xFF0F172A)),
+                                        decoration: InputDecoration(
+                                          isDense: true,
+                                          filled: true,
+                                          fillColor: Colors.white,
+                                          prefixIcon: const Icon(Icons.store_mall_directory_outlined, size: 16, color: Color(0xFF64748B)),
+                                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFCBD5E1))),
+                                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+                                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.5)),
+                                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                        ),
+                                        items: branches.isEmpty
+                                            ? [
+                                                DropdownMenuItem<String>(
+                                                  value: _mainBranchSentinel,
+                                                  child: Text('Main Branch', style: GoogleFonts.inter(fontSize: 12.5)),
+                                                ),
+                                              ]
+                                            : branches
+                                                .map((b) => DropdownMenuItem<String>(
+                                                      value: b.id,
+                                                      child: Text(b.name, overflow: TextOverflow.ellipsis, style: GoogleFonts.inter(fontSize: 12.5)),
+                                                    ))
+                                                .toList(),
+                                        onChanged: branches.isEmpty
+                                            ? null
+                                            : (val) => setState(() => _selectedBranchId = val),
+                                        validator: (val) => (val == null || val.isEmpty) ? 'Required' : null,
+                                      ),
+                                    ],
+                                  );
+                                },
                               ),
                             ),
                             const SizedBox(width: 10),
@@ -1654,69 +1804,6 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                           const SizedBox(height: 16),
                         ],
 
-                        // Saved Products Quick Tag Bar
-                        if (products.isNotEmpty) ...[
-                          Row(
-                            children: [
-                              const Icon(Icons.inventory_2_outlined, size: 14, color: Color(0xFF64748B)),
-                              const SizedBox(width: 6),
-                              Text(
-                                'Saved Products Catalog (Tap to quickly add row):',
-                                style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF64748B)),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 6),
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 6,
-                            children: products.take(8).map((p) {
-                              return InkWell(
-                                onTap: () {
-                                  // If the last item is completely empty, populate it; otherwise add a new row
-                                  if (_items.isNotEmpty && _items.last.descriptionController.text.trim().isEmpty) {
-                                    final last = _items.last;
-                                    last.descriptionController.text = p.name;
-                                    last.rateController.text = p.unitPrice.toStringAsFixed(2);
-                                    last.taxController.text = p.taxPercent.toStringAsFixed(0);
-                                    setState(() {});
-                                  } else {
-                                    setState(() {
-                                      _addItemRow(name: p.name, price: p.unitPrice, tax: p.taxPercent);
-                                    });
-                                  }
-                                },
-                                borderRadius: BorderRadius.circular(8),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFF1F5F9),
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(color: const Color(0xFFCBD5E1)),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Icon(Icons.add_rounded, size: 14, color: Color(0xFF2563EB)),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        p.name,
-                                        style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF1E293B)),
-                                      ),
-                                      const SizedBox(width: 6),
-                                      Text(
-                                        '₹${p.unitPrice.toStringAsFixed(0)}',
-                                        style: GoogleFonts.robotoMono(fontSize: 10, fontWeight: FontWeight.w700, color: const Color(0xFF059669)),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              );
-                            }).toList(),
-                          ),
-                          const SizedBox(height: 14),
-                        ],
-
                         // Line Items Table Header Toolbar
                         Wrap(
                           alignment: WrapAlignment.spaceBetween,
@@ -1780,57 +1867,17 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                                     visualDensity: VisualDensity.compact,
                                     onPressed: () => setState(() => _showTax = true),
                                   ),
-                                if (context.read<AuthProvider>().currentUser?.hasPermission('quotations.view_cost_cst') ?? false)
-                                  OutlinedButton.icon(
-                                    style: OutlinedButton.styleFrom(
-                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                      backgroundColor: _showMarginAnalysis ? const Color(0xFFF0FDF4) : Colors.transparent,
-                                      side: BorderSide(color: _showMarginAnalysis ? const Color(0xFF16A34A) : const Color(0xFFCBD5E1)),
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                    ),
-                                    onPressed: () => setState(() => _showMarginAnalysis = !_showMarginAnalysis),
-                                    icon: Icon(_showMarginAnalysis ? Icons.query_stats_rounded : Icons.visibility_off_outlined, size: 15, color: _showMarginAnalysis ? const Color(0xFF15803D) : const Color(0xFF64748B)),
-                                    label: Text(_showMarginAnalysis ? 'Cost & Margin: ON' : 'Cost & Margin: OFF', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: _showMarginAnalysis ? const Color(0xFF15803D) : const Color(0xFF64748B))),
-                                  ),
-                                InkWell(
-                                  onTap: () => setState(() => _hideCostInPdf = !_hideCostInPdf),
-                                  borderRadius: BorderRadius.circular(8),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                                    decoration: BoxDecoration(
-                                      color: _hideCostInPdf ? const Color(0xFFFEF3C7) : const Color(0xFFF1F5F9),
-                                      borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(color: _hideCostInPdf ? const Color(0xFFFCD34D) : const Color(0xFFCBD5E1)),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(_hideCostInPdf ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded, size: 15, color: _hideCostInPdf ? const Color(0xFFB45309) : const Color(0xFF64748B)),
-                                        const SizedBox(width: 4),
-                                        Text('Hide Cost in PDF', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: _hideCostInPdf ? const Color(0xFF92400E) : const Color(0xFF475569))),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                                OutlinedButton.icon(
-                                  style: OutlinedButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                    side: const BorderSide(color: Color(0xFF6366F1)),
+                                ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF047857),
+                                    foregroundColor: Colors.white,
+                                    elevation: 0,
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                   ),
-                                  onPressed: _showAddColumnDialog,
-                                  icon: const Icon(Icons.view_column_rounded, size: 15, color: Color(0xFF4F46E5)),
-                                  label: Text('Columns / Add Spec', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF4F46E5))),
-                                ),
-                                OutlinedButton.icon(
-                                  style: OutlinedButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                    side: const BorderSide(color: Color(0xFFD97706)),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                  ),
-                                  onPressed: _addSectionTitleRow,
-                                  icon: const Icon(Icons.title_rounded, size: 15, color: Color(0xFFB45309)),
-                                  label: Text('+ Add Title Row', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFFB45309))),
+                                  onPressed: () => _showCatalogItemPickerDialog(products: products),
+                                  icon: const Icon(Icons.inventory_2_outlined, size: 15),
+                                  label: Text('Select Item', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700)),
                                 ),
                                 ElevatedButton.icon(
                                   style: ElevatedButton.styleFrom(
@@ -1843,6 +1890,99 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                                   onPressed: () => setState(() => _addItemRow()),
                                   icon: const Icon(Icons.add_rounded, size: 15),
                                   label: Text('+ Add Item Row', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700)),
+                                ),
+                                PopupMenuButton<String>(
+                                  tooltip: 'Table & Column Options',
+                                  onSelected: (val) {
+                                    if (val == 'margin') {
+                                      setState(() => _showMarginAnalysis = !_showMarginAnalysis);
+                                    } else if (val == 'hide_cost_pdf') {
+                                      setState(() => _hideCostInPdf = !_hideCostInPdf);
+                                    } else if (val == 'columns') {
+                                      _showAddColumnDialog();
+                                    } else if (val == 'title_row') {
+                                      _addSectionTitleRow();
+                                    }
+                                  },
+                                  itemBuilder: (ctx) {
+                                    final u = context.read<AuthProvider>().currentUser;
+                                    final canViewCost = (u?.role == 'COMPANY_ADMIN') || (u?.hasPermission('quotations.view_cost_cst') ?? false);
+                                    return [
+                                    if (canViewCost) ...[
+                                      PopupMenuItem(
+                                        value: 'margin',
+                                        child: Row(
+                                          children: [
+                                            Icon(
+                                              _showMarginAnalysis ? Icons.query_stats_rounded : Icons.visibility_off_outlined,
+                                              size: 17,
+                                              color: _showMarginAnalysis ? const Color(0xFF15803D) : const Color(0xFF64748B),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Text(
+                                              _showMarginAnalysis ? 'Cost & Margin: ON' : 'Cost & Margin: OFF',
+                                              style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w600),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      PopupMenuItem(
+                                        value: 'hide_cost_pdf',
+                                        child: Row(
+                                          children: [
+                                            Icon(
+                                              _hideCostInPdf ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded,
+                                              size: 17,
+                                              color: _hideCostInPdf ? const Color(0xFFB45309) : const Color(0xFF64748B),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Text(
+                                              'Hide Cost in PDF',
+                                              style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w600),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                    PopupMenuItem(
+                                      value: 'columns',
+                                      child: Row(
+                                        children: [
+                                          const Icon(Icons.view_column_rounded, size: 17, color: Color(0xFF4F46E5)),
+                                          const SizedBox(width: 8),
+                                          Text('Columns / Add Spec', style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w600)),
+                                        ],
+                                      ),
+                                    ),
+                                    PopupMenuItem(
+                                      value: 'title_row',
+                                      child: Row(
+                                        children: [
+                                          const Icon(Icons.title_rounded, size: 17, color: Color(0xFFB45309)),
+                                          const SizedBox(width: 8),
+                                          Text('+ Add Title Row', style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w600)),
+                                        ],
+                                      ),
+                                    ),
+                                  ];
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: const Color(0xFFCBD5E1)),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(Icons.menu_rounded, size: 15, color: Color(0xFF334155)),
+                                        const SizedBox(width: 5),
+                                        Text('Menu', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF334155))),
+                                        const Icon(Icons.arrow_drop_down_rounded, size: 16, color: Color(0xFF64748B)),
+                                      ],
+                                    ),
+                                  ),
                                 ),
                               ],
                             ),
@@ -2124,10 +2264,7 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                                                       },
                                                       displayStringForOption: (ProductModel p) => p.name,
                                                       onSelected: (ProductModel selection) {
-                                                        item.descriptionController.text = selection.name;
-                                                        item.rateController.text = selection.unitPrice.toStringAsFixed(2);
-                                                        item.taxController.text = selection.taxPercent.toStringAsFixed(0);
-                                                        _onItemValuesChanged(item);
+                                                        _applyProductToRow(item, selection);
                                                       },
                                                       fieldViewBuilder: (context, textEditingController, focusNode, onFieldSubmitted) {
                                                         if (textEditingController.text != item.descriptionController.text && item.descriptionController.text.isNotEmpty) {
@@ -2148,11 +2285,21 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                                                               setState(() {});
                                                             }
                                                           },
-                                                          decoration: const InputDecoration(
-                                                            hintText: 'Search or enter product...',
+                                                          decoration: InputDecoration(
+                                                            hintText: 'Enter or pick product...',
                                                             isDense: true,
-                                                            border: OutlineInputBorder(),
-                                                            contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                                            border: const OutlineInputBorder(),
+                                                            contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                                            suffixIcon: IconButton(
+                                                              icon: const Icon(Icons.search_rounded, size: 16, color: Color(0xFF2563EB)),
+                                                              tooltip: 'Browse Catalog Items',
+                                                              padding: EdgeInsets.zero,
+                                                              constraints: const BoxConstraints(),
+                                                              onPressed: () => _showCatalogItemPickerDialog(
+                                                                products: products,
+                                                                targetItem: item,
+                                                              ),
+                                                            ),
                                                           ),
                                                         );
                                                       },
@@ -2518,14 +2665,36 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                               if (_createAsInvoice) {
                                 final inv = await _saveInvoice();
                                 if (inv != null) {
+                                  final parentCtx = nav.context;
                                   nav.pop(inv);
-                                  await PdfInvoiceService.shareInvoiceToWhatsApp(inv, companyName: compName);
+                                  if (parentCtx.mounted) {
+                                    await ActionLoader.run(
+                                      parentCtx,
+                                      message: 'Opening WhatsApp...',
+                                      task: () => PdfInvoiceService.shareInvoiceToWhatsApp(
+                                        inv,
+                                        companyName: compName,
+                                        defaultCountryCode: authUser?.companyCountryCode ?? '+91',
+                                      ),
+                                    );
+                                  }
                                 }
                               } else {
                                 final quote = await _saveQuotation();
                                 if (quote != null) {
+                                  final parentCtx = nav.context;
                                   nav.pop(quote);
-                                  await PdfInvoiceService.shareQuotationToWhatsApp(quote, companyName: compName);
+                                  if (parentCtx.mounted) {
+                                    await ActionLoader.run(
+                                      parentCtx,
+                                      message: 'Opening WhatsApp...',
+                                      task: () => PdfInvoiceService.shareQuotationToWhatsApp(
+                                        quote,
+                                        companyName: compName,
+                                        defaultCountryCode: authUser?.companyCountryCode ?? '+91',
+                                      ),
+                                    );
+                                  }
                                 }
                               }
                             },
@@ -2549,21 +2718,30 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                               if (_createAsInvoice) {
                                 final inv = await _saveInvoice();
                                 if (inv != null) {
+                                  final parentCtx = nav.context;
                                   nav.pop(inv);
-                                  await PdfInvoiceService.printInvoice(
-                                    inv,
-                                    companyName: compName,
-                                    companyPhone: compPhone,
-                                    companyEmail: compEmail,
-                                    companyAddress: compAddress,
-                                    companyGstin: compGstin,
-                                    companyWebsite: compWebsite,
-                                    companyLogo: compLogo,
-                                  );
+                                  if (parentCtx.mounted) {
+                                    await ActionLoader.run(
+                                      parentCtx,
+                                      message: 'Generating Invoice PDF...',
+                                      task: () => PdfInvoiceService.printInvoice(
+                                        inv,
+                                        companyName: compName,
+                                        companyPhone: compPhone,
+                                        companyEmail: compEmail,
+                                        companyAddress: compAddress,
+                                        companyGstin: compGstin,
+                                        companyWebsite: compWebsite,
+                                        companyLogo: compLogo,
+                                      ),
+                                    );
+                                  }
                                 }
                               } else {
-                                bool includeCst = !_hideCostInPdf;
-                                if (_showMarginAnalysis) {
+                                final authU = context.read<AuthProvider>().currentUser;
+                                final canExportCost = (authU?.role == 'COMPANY_ADMIN') || (authU?.hasPermission('quotations.view_cost_cst') ?? false);
+                                bool includeCst = canExportCost && !_hideCostInPdf;
+                                if (canExportCost && _showMarginAnalysis) {
                                   final chosen = await _promptPrintFormat(context);
                                   if (chosen != null) {
                                     includeCst = chosen;
@@ -2571,18 +2749,25 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                                 }
                                 final quote = await _saveQuotation();
                                 if (quote != null) {
+                                  final parentCtx = nav.context;
                                   nav.pop(quote);
-                                  await PdfInvoiceService.printQuotation(
-                                    quote,
-                                    companyName: compName,
-                                    companyPhone: compPhone,
-                                    companyEmail: compEmail,
-                                    companyAddress: compAddress,
-                                    companyGstin: compGstin,
-                                    companyWebsite: compWebsite,
-                                    companyLogo: compLogo,
-                                    includeCst: includeCst,
-                                  );
+                                  if (parentCtx.mounted) {
+                                    await ActionLoader.run(
+                                      parentCtx,
+                                      message: 'Generating Quotation PDF...',
+                                      task: () => PdfInvoiceService.printQuotation(
+                                        quote,
+                                        companyName: compName,
+                                        companyPhone: compPhone,
+                                        companyEmail: compEmail,
+                                        companyAddress: compAddress,
+                                        companyGstin: compGstin,
+                                        companyWebsite: compWebsite,
+                                        companyLogo: compLogo,
+                                        includeCst: includeCst,
+                                      ),
+                                    );
+                                  }
                                 }
                               }
                             },
@@ -2666,6 +2851,176 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
           padding: EdgeInsets.all(isMobile ? 14 : 24),
           child: contentBody,
         ),
+      ),
+    );
+  }
+
+  void _applyProductToRow(_LineItemEntry item, ProductModel p) {
+    if (p.itemCode.isNotEmpty) {
+      item.itemCodeController.text = p.itemCode;
+    } else if (item.itemCodeController.text.trim().isEmpty && p.id.isNotEmpty) {
+      final cleanId = p.id.replaceAll('-', '').toUpperCase();
+      item.itemCodeController.text = cleanId.length >= 6 ? 'ITM-${cleanId.substring(0, 6)}' : 'ITM-$cleanId';
+    }
+    item.descriptionController.text = p.name;
+    item.rateController.text = p.unitPrice.toStringAsFixed(2);
+    item.taxController.text = p.taxPercent.toStringAsFixed(0);
+    _onItemValuesChanged(item);
+  }
+
+  void _showCatalogItemPickerDialog({
+    required List<ProductModel> products,
+    _LineItemEntry? targetItem,
+  }) {
+    String query = '';
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (dCtx, setDlg) {
+          final q = query.trim().toLowerCase();
+          final filtered = q.isEmpty
+              ? products
+              : products.where((p) {
+                  return p.name.toLowerCase().contains(q) ||
+                      p.itemCode.toLowerCase().contains(q) ||
+                      p.description.toLowerCase().contains(q) ||
+                      p.unit.toLowerCase().contains(q) ||
+                      p.id.toLowerCase().contains(q);
+                }).toList();
+
+          return Dialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 620, maxHeight: 580),
+              child: Padding(
+                padding: const EdgeInsets.all(18),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFECFDF5),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.inventory_2_rounded, color: Color(0xFF047857), size: 20),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Select Catalog Item',
+                                style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+                              ),
+                              Text(
+                                'Search and click an item to load code, price, and tax',
+                                style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B)),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close_rounded),
+                          onPressed: () => Navigator.pop(ctx),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      autofocus: true,
+                      onChanged: (v) => setDlg(() => query = v),
+                      decoration: InputDecoration(
+                        hintText: 'Search by item name, description, or unit...',
+                        prefixIcon: const Icon(Icons.search_rounded, size: 18),
+                        filled: true,
+                        fillColor: const Color(0xFFF8FAFC),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Expanded(
+                      child: filtered.isEmpty
+                          ? Center(
+                              child: Text(
+                                products.isEmpty
+                                    ? 'No catalog items saved yet. Type a new item in the row to auto-save it.'
+                                    : 'No items match "$query".',
+                                style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF64748B)),
+                                textAlign: TextAlign.center,
+                              ),
+                            )
+                          : ListView.separated(
+                              itemCount: filtered.length,
+                              separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                              itemBuilder: (_, i) {
+                                final p = filtered[i];
+                                final cleanId = p.id.replaceAll('-', '').toUpperCase();
+                                final code = p.itemCode.isNotEmpty
+                                    ? p.itemCode
+                                    : (cleanId.length >= 6 ? 'ITM-${cleanId.substring(0, 6)}' : 'ITM-$cleanId');
+                                return ListTile(
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  title: Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        margin: const EdgeInsets.only(right: 8),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFEFF6FF),
+                                          borderRadius: BorderRadius.circular(5),
+                                        ),
+                                        child: Text(code, style: GoogleFonts.robotoMono(fontSize: 10, fontWeight: FontWeight.w700, color: const Color(0xFF1D4ED8))),
+                                      ),
+                                      Expanded(
+                                        child: Text(
+                                          p.name,
+                                          style: GoogleFonts.inter(fontSize: 13.5, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  subtitle: Text(
+                                    '${p.description.isNotEmpty ? "${p.description} · " : ""}Unit: ${p.unit} · Tax: ${p.taxPercent.toStringAsFixed(0)}%',
+                                    style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B)),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  trailing: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
+                                      Text(
+                                        '$_currency ${p.unitPrice.toStringAsFixed(2)}',
+                                        style: GoogleFonts.robotoMono(fontSize: 13, fontWeight: FontWeight.w800, color: const Color(0xFF047857)),
+                                      ),
+                                      Text(
+                                        'Tap to select',
+                                        style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w600, color: const Color(0xFF2563EB)),
+                                      ),
+                                    ],
+                                  ),
+                                  onTap: () {
+                                    Navigator.pop(ctx);
+                                    setState(() {
+                                      final row = targetItem ?? _addItemRow();
+                                      _applyProductToRow(row, p);
+                                    });
+                                  },
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -2983,6 +3338,236 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
     );
   }
 
+  Widget _buildCanvasLivePreview({
+    required TemplateLayoutConfig layout,
+    required String effectiveLogo,
+    required Map<String, String> tags,
+  }) {
+    String resolveTags(String raw) {
+      var out = raw;
+      tags.forEach((k, v) {
+        out = out.replaceAll('{{$k}}', v);
+      });
+      return out;
+    }
+
+    Color hex(String h, {Color fallback = Colors.transparent}) {
+      if (h.isEmpty) return fallback;
+      try {
+        final clean = h.replaceAll('#', '');
+        if (clean.length == 6) return Color(int.parse('FF$clean', radix: 16));
+      } catch (_) {}
+      return fallback;
+    }
+
+    String cellFor(_LineItemEntry item, String col, int rowIdx) {
+      final c = col.toLowerCase().trim();
+      if (c == 'sl. no' || c == 'sl no' || c == 'sr no' || c == 's.no' || c == '#') {
+        return '${rowIdx + 1}';
+      }
+      if (c.contains('qty')) return item.qtyController.text;
+      if (c.contains('item name') || c.contains('description')) {
+        return item.descriptionController.text;
+      }
+      if (c.contains('code')) return item.itemCodeController.text;
+      if (c.contains('unit price') || c.contains('rate')) {
+        return item.rate.toStringAsFixed(2);
+      }
+      if (c.contains('ex. tax') || c.contains('subtotal')) {
+        return (item.quantity * item.rate).toStringAsFixed(2);
+      }
+      if (c.contains('vat%') || c.contains('tax%')) {
+        return item.taxPercent.toStringAsFixed(0);
+      }
+      if (c == 'vat' || c == 'tax') {
+        return ((item.quantity * item.rate) * (item.taxPercent / 100)).toStringAsFixed(2);
+      }
+      if (c.contains('total') || c.contains('amount')) {
+        return item.totalController.text;
+      }
+      return item.customControllers[col]?.text ?? '';
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const double a4W = 595.0;
+        const double a4H = 842.0;
+        final scale = ((constraints.maxWidth - 20) / a4W).clamp(0.35, 1.0);
+
+        // Wrap-content table height & dynamic shift for elements below the table
+        final tableEl = layout.canvasElements.where((e) => e.type == 'table').firstOrNull;
+        final activeRows = _items.where((it) => !it.isSectionTitle).toList();
+        double deltaY = 0.0;
+        if (tableEl != null) {
+          final double actualTableH = 22.0 + (activeRows.isEmpty ? 1 : activeRows.length) * 20.0 + 20.0;
+          deltaY = actualTableH - tableEl.h;
+        }
+
+        double maxBottom = a4H;
+        for (final el in layout.canvasElements) {
+          final isBelowTable = tableEl != null && el.id != tableEl.id && el.y >= (tableEl.y + tableEl.h - 12);
+          final effY = isBelowTable ? (el.y + deltaY).clamp(0.0, 4000.0) : el.y;
+          final effH = (el.type == 'table' && tableEl != null)
+              ? (22.0 + (activeRows.isEmpty ? 1 : activeRows.length) * 20.0 + 20.0)
+              : el.h;
+          if (effY + effH + 24 > maxBottom) {
+            maxBottom = effY + effH + 24;
+          }
+        }
+
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(10),
+          child: Center(
+            child: Container(
+              width: a4W * scale,
+              height: maxBottom * scale,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.08),
+                    blurRadius: 10,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: Stack(
+                children: layout.canvasElements.map((el) {
+                  final isBelowTable = tableEl != null && el.id != tableEl.id && el.y >= (tableEl.y + tableEl.h - 12);
+                  final double effY = isBelowTable ? (el.y + deltaY).clamp(0.0, 4000.0) : el.y;
+                  Widget child;
+                  if (el.type == 'line') {
+                    child = Center(
+                      child: Container(
+                        width: double.infinity,
+                        height: (el.borderWidth * scale).clamp(1.0, 2.5),
+                        color: hex(el.colorHex, fallback: const Color(0xFF0F172A)),
+                      ),
+                    );
+                  } else if (el.type == 'box') {
+                    child = Container(
+                      decoration: BoxDecoration(
+                        color: hex(el.bgColorHex),
+                        border: el.borderWidth > 0
+                            ? Border.all(
+                                color: hex(el.borderColorHex, fallback: const Color(0xFF334155)),
+                                width: el.borderWidth,
+                              )
+                            : null,
+                      ),
+                    );
+                  } else if (el.type == 'image') {
+                    final src = el.imageSource == '{{branch_logo}}'
+                        ? effectiveLogo
+                        : (el.imageSource.isNotEmpty ? el.imageSource : effectiveLogo);
+                    child = src.isNotEmpty ? _buildPreviewLogo(src) : const SizedBox.shrink();
+                  } else if (el.type == 'table') {
+                    final cols = el.tableColumns.isEmpty ? ['Qty', 'Item Name', 'Total'] : el.tableColumns;
+                    final headerBg = hex(el.bgColorHex, fallback: const Color(0xFFCBD5E1));
+                    final textCol = hex(el.colorHex, fallback: const Color(0xFF0F172A));
+                    child = Container(
+                      decoration: BoxDecoration(
+                        border: Border.all(color: const Color(0xFF475569), width: 0.6),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            color: headerBg,
+                            child: Row(
+                              children: cols
+                                  .map((c) => Expanded(
+                                        child: Padding(
+                                          padding: EdgeInsets.all(2.5 * scale),
+                                          child: Text(
+                                            c,
+                                            textAlign: TextAlign.center,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: GoogleFonts.inter(
+                                              fontSize: (7.5 * scale).clamp(5.0, 10.0),
+                                              fontWeight: FontWeight.w700,
+                                              color: textCol,
+                                            ),
+                                          ),
+                                        ),
+                                      ))
+                                  .toList(),
+                            ),
+                          ),
+                          ...activeRows.asMap().entries.map((entry) => Container(
+                                decoration: const BoxDecoration(
+                                  border: Border(top: BorderSide(color: Color(0xFFCBD5E1), width: 0.5)),
+                                ),
+                                child: Row(
+                                  children: cols
+                                      .map((c) => Expanded(
+                                            child: Padding(
+                                              padding: EdgeInsets.all(2.5 * scale),
+                                              child: Text(
+                                                cellFor(entry.value, c, entry.key),
+                                                maxLines: 2,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: GoogleFonts.inter(
+                                                  fontSize: (7.0 * scale).clamp(5.0, 10.0),
+                                                ),
+                                              ),
+                                            ),
+                                          ))
+                                      .toList(),
+                                ),
+                              )),
+                          Container(
+                            decoration: BoxDecoration(
+                              color: headerBg,
+                              border: const Border(top: BorderSide(color: Color(0xFF475569), width: 0.6)),
+                            ),
+                            padding: EdgeInsets.symmetric(vertical: 2.5 * scale, horizontal: 4 * scale),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text('TOTAL', style: GoogleFonts.inter(fontSize: (7.5 * scale).clamp(5.0, 10.0), fontWeight: FontWeight.w700, color: textCol)),
+                                Text('${tags['currency'] ?? ''} ${tags['grand_total'] ?? '0.00'}',
+                                    style: GoogleFonts.inter(fontSize: (7.5 * scale).clamp(5.0, 10.0), fontWeight: FontWeight.w700, color: textCol)),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  } else {
+                    final align = el.align == 'center'
+                        ? TextAlign.center
+                        : (el.align == 'right' ? TextAlign.right : TextAlign.left);
+                    child = Text(
+                      resolveTags(el.text),
+                      textAlign: align,
+                      style: GoogleFonts.inter(
+                        fontSize: (el.fontSize * scale).clamp(5.0, 24.0),
+                        fontWeight: el.bold ? FontWeight.w700 : FontWeight.w400,
+                        fontStyle: el.italic ? FontStyle.italic : FontStyle.normal,
+                        color: hex(el.colorHex, fallback: const Color(0xFF0F172A)),
+                      ),
+                    );
+                  }
+                  return Positioned(
+                    left: el.x * scale,
+                    top: effY * scale,
+                    width: el.w * scale,
+                    height: el.type == 'table'
+                        ? null
+                        : (el.h * scale).clamp(el.type == 'line' ? 8.0 : 12.0, maxBottom * scale),
+                    child: child,
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildPreviewLogo(String rawLogo) {
     final trimmed = rawLogo.trim();
     if (trimmed.isEmpty) return const SizedBox.shrink();
@@ -3036,8 +3621,29 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
     final phone = _phoneController.text.trim();
     final city = _locationController.text.trim();
     final salesRep = _salesRepController.text.trim();
-    final branchObj = layout.branchId.isNotEmpty
-        ? context.read<LeadProvider>().branches.where((b) => b.id == layout.branchId).firstOrNull
+    final employees = context.read<EmployeeProvider>().employees;
+    final resolvedRepName = salesRep.isNotEmpty ? salesRep : (authUser?.fullName ?? '');
+    String resolvedRepPhone = '';
+    for (final emp in employees) {
+      final full = '${emp['first_name'] ?? ''} ${emp['last_name'] ?? ''}'.trim();
+      final email = emp['email']?.toString() ?? '';
+      if (resolvedRepName.isNotEmpty &&
+          (full.toLowerCase() == resolvedRepName.toLowerCase() ||
+              email.toLowerCase() == resolvedRepName.toLowerCase())) {
+        resolvedRepPhone = emp['phone']?.toString() ?? '';
+        break;
+      }
+    }
+    if (resolvedRepPhone.isEmpty) {
+      resolvedRepPhone = (authUser?.phone?.isNotEmpty == true)
+          ? authUser!.phone!
+          : compPhone;
+    }
+    final effectiveBranchId = (_selectedBranchId != null && _selectedBranchId != _mainBranchSentinel)
+        ? _selectedBranchId!
+        : layout.branchId;
+    final branchObj = effectiveBranchId.isNotEmpty
+        ? context.read<LeadProvider>().branches.where((b) => b.id == effectiveBranchId).firstOrNull
         : null;
     final branchName = branchObj?.name ?? '';
     final effectiveLogo = layout.logoOverride.isNotEmpty
@@ -3091,7 +3697,42 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
             ),
           ),
           Expanded(
-            child: SingleChildScrollView(
+            child: (layout.useCanvasMode && layout.canvasElements.isNotEmpty)
+                ? _buildCanvasLivePreview(
+                    layout: layout,
+                    effectiveLogo: effectiveLogo,
+                    tags: {
+                      'doc_number': _createAsInvoice ? 'INV-DRAFT' : 'QTN-DRAFT',
+                      'date': DateTime.now().toIso8601String().split('T').first,
+                      'client_po': _clientCodeController.text.trim(),
+                      'incoterms': _incotermsController.text.trim(),
+                      'currency': _currency,
+                      'delivery_address': city,
+                      'company_trn': compGstin,
+                      'customer_name': customerName,
+                      'customer_address': _addressController.text.trim(),
+                      'contact_person': _contactPersonController.text.trim(),
+                      'customer_phone': phone,
+                      'customer_trn': _crNumberController.text.trim(),
+                      'subtotal': _calculatedSubtotal.toStringAsFixed(2),
+                      'tax_amount': _calculatedTax.toStringAsFixed(2),
+                      'extra_charge': '0.00',
+                      'grand_total': _calculatedGrandTotal.toStringAsFixed(2),
+                      'amount_in_words': '',
+                      'vat_in_words': '',
+                      'bank_details': _bankDetailsController.text.trim().isNotEmpty
+                          ? _bankDetailsController.text.trim()
+                          : layout.bankDetailsText,
+                      'terms': _termsController.text.trim(),
+                      'branch_name': branchName.isNotEmpty ? branchName : compName,
+                      'branch_address': branchObj?.address.isNotEmpty == true ? branchObj!.address : compAddress,
+                      'branch_email': compEmail,
+                      'branch_phone': compPhone,
+                      'sales_rep_name': resolvedRepName,
+                      'sales_rep_phone': resolvedRepPhone,
+                    },
+                  )
+                : SingleChildScrollView(
               padding: const EdgeInsets.all(12),
               child: Stack(
                 children: [
@@ -3142,7 +3783,7 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                                       if (compPhone.isNotEmpty || compEmail.isNotEmpty)
                                         Text([if (compPhone.isNotEmpty) compPhone, if (compEmail.isNotEmpty) compEmail].join(' · '), style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF64748B))),
                                       if (compGstin.isNotEmpty)
-                                        Text('Tax / GSTIN: $compGstin', style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w600, color: const Color(0xFF475569))),
+                                        Text('${RegionDetector.taxIdLabel(authUser?.companyCountryIso)}: $compGstin', style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w600, color: const Color(0xFF475569))),
                                     ],
                                   ),
                                 ),

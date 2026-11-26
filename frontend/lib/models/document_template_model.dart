@@ -95,6 +95,137 @@ class TemplateStampConfig {
       };
 }
 
+class CanvasElement {
+  String id;
+  String type; // 'text', 'field', 'image', 'table', 'line', 'box'
+  double x; // A4 pt (0..595)
+  double y; // A4 pt (0..842)
+  double w;
+  double h;
+  String text;
+  double fontSize;
+  bool bold;
+  bool italic;
+  String align; // 'left', 'center', 'right'
+  String colorHex;
+  String bgColorHex;
+  String borderColorHex;
+  double borderWidth;
+  String imageSource; // '{{branch_logo}}' or base64/url
+  List<String> tableColumns;
+  bool locked;
+
+  CanvasElement({
+    required this.id,
+    required this.type,
+    required this.x,
+    required this.y,
+    required this.w,
+    required this.h,
+    this.text = '',
+    this.fontSize = 10.0,
+    this.bold = false,
+    this.italic = false,
+    this.align = 'left',
+    this.colorHex = '#0F172A',
+    this.bgColorHex = '',
+    this.borderColorHex = '',
+    this.borderWidth = 0.0,
+    this.imageSource = '',
+    this.tableColumns = const [],
+    this.locked = false,
+  });
+
+  CanvasElement copyWith({
+    String? id,
+    String? type,
+    double? x,
+    double? y,
+    double? w,
+    double? h,
+    String? text,
+    double? fontSize,
+    bool? bold,
+    bool? italic,
+    String? align,
+    String? colorHex,
+    String? bgColorHex,
+    String? borderColorHex,
+    double? borderWidth,
+    String? imageSource,
+    List<String>? tableColumns,
+    bool? locked,
+  }) {
+    return CanvasElement(
+      id: id ?? this.id,
+      type: type ?? this.type,
+      x: x ?? this.x,
+      y: y ?? this.y,
+      w: w ?? this.w,
+      h: h ?? this.h,
+      text: text ?? this.text,
+      fontSize: fontSize ?? this.fontSize,
+      bold: bold ?? this.bold,
+      italic: italic ?? this.italic,
+      align: align ?? this.align,
+      colorHex: colorHex ?? this.colorHex,
+      bgColorHex: bgColorHex ?? this.bgColorHex,
+      borderColorHex: borderColorHex ?? this.borderColorHex,
+      borderWidth: borderWidth ?? this.borderWidth,
+      imageSource: imageSource ?? this.imageSource,
+      tableColumns: tableColumns ?? List<String>.from(this.tableColumns),
+      locked: locked ?? this.locked,
+    );
+  }
+
+  factory CanvasElement.fromJson(Map<String, dynamic> json) {
+    return CanvasElement(
+      id: json['id']?.toString() ?? DateTime.now().microsecondsSinceEpoch.toString(),
+      type: json['type']?.toString() ?? 'text',
+      x: (json['x'] as num?)?.toDouble() ?? 32.0,
+      y: (json['y'] as num?)?.toDouble() ?? 32.0,
+      w: (json['w'] as num?)?.toDouble() ?? 180.0,
+      h: (json['h'] as num?)?.toDouble() ?? 32.0,
+      text: json['text']?.toString() ?? '',
+      fontSize: (json['font_size'] as num?)?.toDouble() ?? 10.0,
+      bold: json['bold'] == true,
+      italic: json['italic'] == true,
+      align: json['align']?.toString() ?? 'left',
+      colorHex: json['color']?.toString() ?? '#0F172A',
+      bgColorHex: json['bg_color']?.toString() ?? '',
+      borderColorHex: json['border_color']?.toString() ?? '',
+      borderWidth: (json['border_width'] as num?)?.toDouble() ?? 0.0,
+      imageSource: json['image_source']?.toString() ?? '',
+      tableColumns: (json['table_columns'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const [],
+      locked: json['locked'] == true,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'type': type,
+        'x': x,
+        'y': y,
+        'w': w,
+        'h': h,
+        'text': text,
+        'font_size': fontSize,
+        'bold': bold,
+        'italic': italic,
+        'align': align,
+        'color': colorHex,
+        'bg_color': bgColorHex,
+        'border_color': borderColorHex,
+        'border_width': borderWidth,
+        'image_source': imageSource,
+        'table_columns': tableColumns,
+        'locked': locked,
+      };
+}
+
 class TemplateLayoutConfig {
   String preset; // 'classic_corporate', 'modern_minimal', 'banknote_voucher'
   String primaryColorHex;
@@ -132,6 +263,8 @@ class TemplateLayoutConfig {
   bool showValidUntil;
   List<String> customHeaderFields;
   Map<String, String> filledFields;
+  bool useCanvasMode;
+  List<CanvasElement> canvasElements;
 
   TemplateLayoutConfig({
     this.preset = 'classic_corporate',
@@ -166,6 +299,8 @@ class TemplateLayoutConfig {
     this.showValidUntil = true,
     this.customHeaderFields = const [],
     this.filledFields = const {},
+    this.useCanvasMode = false,
+    this.canvasElements = const [],
   });
 
   bool isBlockVisible(String id) {
@@ -176,11 +311,13 @@ class TemplateLayoutConfig {
   factory TemplateLayoutConfig.defaultFor(String docType) {
     final isReceipt = docType == 'RECEIPT';
     return TemplateLayoutConfig(
-      preset: isReceipt ? 'banknote_voucher' : 'classic_corporate',
+      preset: isReceipt ? 'banknote_voucher' : 'parfemperor_standard',
       primaryColorHex: '#1E3A8A',
       accentColorHex: '#059669',
       borderStyle: isReceipt ? 'double' : 'solid',
-      logoPosition: 'left',
+      logoPosition: isReceipt ? 'left' : 'center',
+      useCanvasMode: !isReceipt,
+      canvasElements: isReceipt ? const [] : buildStandardParfemperorCanvas(docType),
       blocks: [
         TemplateBlockConfig(id: 'header', label: 'Company Header & Logo', visible: true, order: 0),
         TemplateBlockConfig(id: 'client_meta', label: 'Client & Document Info', visible: true, order: 1),
@@ -202,6 +339,143 @@ class TemplateLayoutConfig {
         colorHex: '#1E3A8A',
       ),
     );
+  }
+
+  /// Decomposes the uploaded Parfemperor Proforma Invoice / Quotation layout
+  /// into fully editable, draggable, and deletable Canva-style elements.
+  static List<CanvasElement> buildStandardParfemperorCanvas(String docType) {
+    final docTitle = docType == 'QUOTATION'
+        ? 'QUOTATION'
+        : (docType == 'RECEIPT' ? 'RECEIPT VOUCHER' : 'PROFORMA INVOICE');
+    final numLabel = docType == 'QUOTATION' ? 'Quote No.' : 'INV. No.';
+    final dateLabel = docType == 'QUOTATION' ? 'Quote Date' : 'INV. Date';
+
+    return [
+      CanvasElement(
+        id: 'std_logo',
+        type: 'image',
+        x: 207,
+        y: 22,
+        w: 180,
+        h: 64,
+        imageSource: '{{branch_logo}}',
+      ),
+      CanvasElement(
+        id: 'std_meta_left',
+        type: 'text',
+        x: 32,
+        y: 98,
+        w: 270,
+        h: 112,
+        fontSize: 9.5,
+        text:
+            '$numLabel : {{doc_number}}\n$dateLabel : {{date}}\nClient PO. : {{client_po}}\nIncoterms : {{incoterms}}\nCurrency : {{currency}}\nDelivery address : {{delivery_address}}\nTRN : {{company_trn}}\nSales Rep : {{sales_rep_name}} ({{sales_rep_phone}})',
+      ),
+      CanvasElement(
+        id: 'std_client_right',
+        type: 'text',
+        x: 335,
+        y: 102,
+        w: 228,
+        h: 96,
+        fontSize: 9.5,
+        text:
+            '{{customer_name}}\n{{customer_address}}\n{{contact_person}}\nTEL: {{customer_phone}}\nTRN: {{customer_trn}}',
+      ),
+      CanvasElement(
+        id: 'std_title',
+        type: 'text',
+        x: 145,
+        y: 218,
+        w: 305,
+        h: 24,
+        fontSize: 13.0,
+        bold: true,
+        align: 'center',
+        text: docTitle,
+      ),
+      CanvasElement(
+        id: 'std_table',
+        type: 'table',
+        x: 32,
+        y: 248,
+        w: 531,
+        h: 348,
+        fontSize: 8.5,
+        borderColorHex: '#334155',
+        borderWidth: 0.8,
+        tableColumns: [
+          'Qty',
+          'Item Name',
+          'Item code',
+          'Category',
+          'HS code',
+          'Pkg',
+          'Origin',
+          'Unit price',
+          'Ex. Tax',
+          'VAT%',
+          'VAT',
+          'Total',
+        ],
+      ),
+      CanvasElement(
+        id: 'std_words',
+        type: 'text',
+        x: 32,
+        y: 604,
+        w: 340,
+        h: 38,
+        fontSize: 9.0,
+        bold: true,
+        text: 'Amount In Words : {{amount_in_words}}\nVAT In Words : {{vat_in_words}}',
+      ),
+      CanvasElement(
+        id: 'std_totals',
+        type: 'text',
+        x: 380,
+        y: 604,
+        w: 183,
+        h: 42,
+        fontSize: 9.5,
+        bold: true,
+        align: 'right',
+        text: 'Extra / Clearance : {{extra_charge}}\nTOTAL AMOUNT : {{currency}} {{grand_total}}',
+      ),
+      CanvasElement(
+        id: 'std_divider',
+        type: 'line',
+        x: 32,
+        y: 650,
+        w: 531,
+        h: 2,
+        colorHex: '#0F172A',
+        borderWidth: 1.0,
+      ),
+      CanvasElement(
+        id: 'std_terms',
+        type: 'text',
+        x: 32,
+        y: 658,
+        w: 531,
+        h: 120,
+        fontSize: 8.0,
+        text:
+            'Terms & Conditions\n{{bank_details}}\n{{terms}}',
+      ),
+      CanvasElement(
+        id: 'std_footer',
+        type: 'text',
+        x: 32,
+        y: 790,
+        w: 531,
+        h: 24,
+        fontSize: 8.5,
+        bold: true,
+        align: 'center',
+        text: '{{branch_name}} | {{branch_address}} | {{branch_email}} | tel: {{branch_phone}}',
+      ),
+    ];
   }
 
   factory TemplateLayoutConfig.fromJson(Map<String, dynamic>? json, {String docType = 'QUOTATION'}) {
@@ -258,11 +532,20 @@ class TemplateLayoutConfig {
       showValidUntil: formFields['show_valid_until'] == null ? true : formFields['show_valid_until'] == true,
       customHeaderFields: (formFields['custom_header_fields'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
       filledFields: rawFilled.map((k, v) => MapEntry(k.toString(), v?.toString() ?? '')),
+      useCanvasMode: json['use_canvas_mode'] == true,
+      canvasElements: (json['canvas_elements'] as List<dynamic>?)
+              ?.whereType<Map<String, dynamic>>()
+              .map(CanvasElement.fromJson)
+              .toList() ??
+          const [],
     );
   }
 
   Map<String, dynamic> toJson() => {
         'preset': preset,
+        'use_canvas_mode': useCanvasMode,
+        if (canvasElements.isNotEmpty)
+          'canvas_elements': canvasElements.map((e) => e.toJson()).toList(),
         'theme': {
           'primary_color': primaryColorHex,
           'accent_color': accentColorHex,
@@ -316,6 +599,8 @@ class DocumentTemplateModel {
   final String id;
   final String name;
   final String docType; // 'QUOTATION', 'INVOICE', 'RECEIPT'
+  final String branchId;
+  final String branchName;
   final bool isDefault;
   final bool isActive;
   final TemplateLayoutConfig layout;
@@ -326,6 +611,8 @@ class DocumentTemplateModel {
     required this.id,
     required this.name,
     required this.docType,
+    this.branchId = '',
+    this.branchName = '',
     this.isDefault = false,
     this.isActive = true,
     required this.layout,
@@ -335,13 +622,17 @@ class DocumentTemplateModel {
 
   factory DocumentTemplateModel.fromJson(Map<String, dynamic> json) {
     final docType = json['doc_type']?.toString() ?? 'QUOTATION';
+    final layout = TemplateLayoutConfig.fromJson(json['layout_json'] as Map<String, dynamic>?, docType: docType);
+    final brId = json['branch']?.toString() ?? layout.branchId;
     return DocumentTemplateModel(
       id: json['id']?.toString() ?? '',
       name: json['name']?.toString() ?? 'Untitled Template',
       docType: docType,
+      branchId: brId,
+      branchName: json['branch_name']?.toString() ?? '',
       isDefault: json['is_default'] == true,
       isActive: json['is_active'] == null ? true : json['is_active'] == true,
-      layout: TemplateLayoutConfig.fromJson(json['layout_json'] as Map<String, dynamic>?, docType: docType),
+      layout: layout,
       createdByName: json['created_by_name']?.toString() ?? '',
       createdAt: json['created_at']?.toString() ?? '',
     );

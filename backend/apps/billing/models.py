@@ -19,6 +19,13 @@ class DocumentTemplate(TenantModel):
 
     name = models.CharField(max_length=120)
     doc_type = models.CharField(max_length=20, choices=DOC_TYPE_CHOICES, db_index=True)
+    branch = models.ForeignKey(
+        'leads.Branch',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='document_templates',
+    )
     is_default = models.BooleanField(default=False, db_index=True)
     is_active = models.BooleanField(default=True, db_index=True)
     layout_json = models.JSONField(default=dict, blank=True)
@@ -50,6 +57,13 @@ class Quotation(TenantModel):
 
     lead = models.ForeignKey(
         'leads.Lead',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='quotations'
+    )
+    branch = models.ForeignKey(
+        'leads.Branch',
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -127,6 +141,13 @@ class Invoice(TenantModel):
     )
     lead = models.ForeignKey(
         'leads.Lead',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='invoices'
+    )
+    branch = models.ForeignKey(
+        'leads.Branch',
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -230,6 +251,13 @@ class ReceiptVoucher(TenantModel):
         blank=True,
         related_name='receipt_vouchers'
     )
+    branch = models.ForeignKey(
+        'leads.Branch',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='receipt_vouchers'
+    )
     customer_name = models.CharField(max_length=150)
     customer_phone = models.CharField(max_length=32, blank=True)
     customer_email = models.EmailField(blank=True)
@@ -308,6 +336,7 @@ class ReceiptVoucher(TenantModel):
 
 
 class Product(TenantModel):
+    item_code = models.CharField(max_length=64, blank=True, default='')
     name = models.CharField(max_length=255, db_index=True)
     description = models.TextField(blank=True)
     unit_price = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)

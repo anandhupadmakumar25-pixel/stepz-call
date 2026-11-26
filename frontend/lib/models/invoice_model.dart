@@ -22,6 +22,7 @@ class InvoiceModel {
 
   final String? createdBy;
   final String createdByName;
+  final String createdByPhone;
   final String date;
   final String? dueDate;
   final List<String> customColumns;
@@ -75,6 +76,7 @@ class InvoiceModel {
     this.currency = 'INR',
     this.createdBy,
     this.createdByName = '',
+    this.createdByPhone = '',
     required this.date,
     this.dueDate,
     this.customColumns = const [],
@@ -162,6 +164,7 @@ class InvoiceModel {
       currency: json['currency']?.toString() ?? 'INR',
       createdBy: json['created_by']?.toString() ?? json['createdBy']?.toString(),
       createdByName: json['created_by_name']?.toString() ?? json['createdByName']?.toString() ?? '',
+      createdByPhone: json['created_by_phone']?.toString() ?? json['createdByPhone']?.toString() ?? '',
       date: json['date']?.toString() ?? '',
       dueDate: json['due_date']?.toString() ?? json['dueDate']?.toString(),
       customColumns: customCols,
@@ -245,6 +248,13 @@ class BillingOverviewModel {
   final double pendingReceivables;
   final int paidInvoiceCount;
   final int pendingInvoiceCount;
+  final String targetCurrency;
+  final String targetCurrencySymbol;
+  final bool hasFxConversion;
+  final String quotationsFxText;
+  final String invoicedFxText;
+  final String collectedFxText;
+  final String pendingFxText;
 
   BillingOverviewModel({
     this.quotationCount = 0,
@@ -255,6 +265,13 @@ class BillingOverviewModel {
     this.pendingReceivables = 0.0,
     this.paidInvoiceCount = 0,
     this.pendingInvoiceCount = 0,
+    this.targetCurrency = '',
+    this.targetCurrencySymbol = '',
+    this.hasFxConversion = false,
+    this.quotationsFxText = '',
+    this.invoicedFxText = '',
+    this.collectedFxText = '',
+    this.pendingFxText = '',
   });
 
   factory BillingOverviewModel.fromJson(Map<String, dynamic> json) {
@@ -270,6 +287,10 @@ class BillingOverviewModel {
       return int.tryParse(val.toString()) ?? 0;
     }
 
+    final fx = json['fx_breakdown'] is Map<String, dynamic>
+        ? json['fx_breakdown'] as Map<String, dynamic>
+        : const <String, dynamic>{};
+
     return BillingOverviewModel(
       quotationCount: parseInt(json['quotation_count']),
       totalQuotationValue: parseNum(json['total_quotation_value']),
@@ -279,6 +300,13 @@ class BillingOverviewModel {
       pendingReceivables: parseNum(json['pending_receivables']),
       paidInvoiceCount: parseInt(json['paid_invoice_count']),
       pendingInvoiceCount: parseInt(json['pending_invoice_count']),
+      targetCurrency: json['target_currency']?.toString() ?? '',
+      targetCurrencySymbol: json['target_currency_symbol']?.toString() ?? '',
+      hasFxConversion: json['has_fx_conversion'] == true,
+      quotationsFxText: fx['quotations_text']?.toString() ?? '',
+      invoicedFxText: fx['invoiced_text']?.toString() ?? '',
+      collectedFxText: fx['collected_text']?.toString() ?? '',
+      pendingFxText: fx['pending_text']?.toString() ?? '',
     );
   }
 }

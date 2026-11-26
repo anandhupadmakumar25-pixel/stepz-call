@@ -176,6 +176,7 @@ from corsheaders.defaults import default_headers
 CORS_ALLOW_HEADERS = list(default_headers) + [
     'bypass-tunnel-reminder',
     'ngrok-skip-browser-warning',
+    'x-detected-country',
 ]
 
 CSRF_TRUSTED_ORIGINS = [

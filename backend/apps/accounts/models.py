@@ -425,6 +425,7 @@ class EmployeeProfile(TimeStampedModel):
     shift_start_time = models.TimeField(null=True, blank=True, default='09:00:00')
     shift_end_time = models.TimeField(null=True, blank=True, default='18:00:00')
     grace_period_minutes = models.PositiveIntegerField(default=15)
+    joining_date = models.DateField(null=True, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='ACTIVE', db_index=True)
 
     def __str__(self):

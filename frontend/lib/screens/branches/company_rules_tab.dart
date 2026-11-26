@@ -7,6 +7,7 @@ import '../../core/widgets/glass/glass_text_field.dart';
 import '../../core/widgets/glass/gradient_button.dart';
 import '../../core/widgets/glass/animated_status_badge.dart';
 import '../../core/responsive/responsive_layout.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/company_provider.dart';
 import '../../models/company_policy_model.dart';
 
@@ -220,16 +221,17 @@ class _CompanyRulesTabState extends State<CompanyRulesTab> {
               liveSummary = 'Accumulating $threshVal unverified Out-of-Fence check-ins ';
             }
 
+            final sym = context.read<AuthProvider>().currentUser?.companyCurrencySymbol ?? '₹';
             if (actionType == 'LOP_DAYS') {
               liveSummary += 'deducts $actVal Day(s) Loss of Pay (LOP) from salary.';
             } else if (actionType == 'FLAT_AMOUNT') {
-              liveSummary += 'deducts a flat fine of ₹$actVal.';
+              liveSummary += 'deducts a flat fine of $sym$actVal.';
             } else if (actionType == 'PERCENTAGE') {
               liveSummary += 'deducts $actVal% of monthly basic pay.';
             } else if (actionType == 'WARNING') {
               liveSummary += 'automatically sends a formal warning notice.';
             } else if (actionType == 'BONUS_AMOUNT') {
-              liveSummary += 'awards a bonus addition of ₹$actVal.';
+              liveSummary += 'awards a bonus addition of $sym$actVal.';
             }
 
             return Dialog(
@@ -416,12 +418,12 @@ class _CompanyRulesTabState extends State<CompanyRulesTab> {
                                         child: DropdownButton<String>(
                                           isExpanded: true,
                                           value: actionType,
-                                          items: const [
-                                            DropdownMenuItem(value: 'LOP_DAYS', child: Text('Loss of Pay (Days)')),
-                                            DropdownMenuItem(value: 'FLAT_AMOUNT', child: Text('Flat Deduction (₹)')),
-                                            DropdownMenuItem(value: 'PERCENTAGE', child: Text('Percentage Deduction (%)')),
-                                            DropdownMenuItem(value: 'WARNING', child: Text('Formal Warning')),
-                                            DropdownMenuItem(value: 'BONUS_AMOUNT', child: Text('Incentive Addition (+₹)')),
+                                          items: [
+                                            const DropdownMenuItem(value: 'LOP_DAYS', child: Text('Loss of Pay (Days)')),
+                                            DropdownMenuItem(value: 'FLAT_AMOUNT', child: Text('Flat Deduction ($sym)')),
+                                            const DropdownMenuItem(value: 'PERCENTAGE', child: Text('Percentage Deduction (%)')),
+                                            const DropdownMenuItem(value: 'WARNING', child: Text('Formal Warning')),
+                                            DropdownMenuItem(value: 'BONUS_AMOUNT', child: Text('Incentive Addition (+$sym)')),
                                           ],
                                           onChanged: (v) {
                                             if (v != null) {

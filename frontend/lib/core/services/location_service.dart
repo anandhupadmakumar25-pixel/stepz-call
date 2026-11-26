@@ -53,20 +53,34 @@ class LocationService {
         );
       }
 
-      // 3. Attempt High Accuracy GPS acquisition (with 6s timeout)
+      // 3. Attempt Best-for-Navigation GPS acquisition (with 8s timeout)
       Position? position;
       try {
         position = await Geolocator.getCurrentPosition(
           locationSettings: const LocationSettings(
-            accuracy: LocationAccuracy.high,
-            timeLimit: Duration(seconds: 6),
+            accuracy: LocationAccuracy.bestForNavigation,
+            timeLimit: Duration(seconds: 8),
           ),
         );
       } catch (e) {
-        debugPrint('High accuracy GPS timed out or failed: $e. Falling back to medium accuracy...');
+        debugPrint('Best-for-navigation GPS timed out: $e. Falling back to high accuracy...');
       }
 
-      // 4. Fallback to Medium Accuracy (Cell/Wi-Fi) if high accuracy timed out
+      // 4. Fallback to High Accuracy if bestForNavigation timed out
+      if (position == null) {
+        try {
+          position = await Geolocator.getCurrentPosition(
+            locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.high,
+              timeLimit: Duration(seconds: 6),
+            ),
+          );
+        } catch (e) {
+          debugPrint('High accuracy GPS timed out: $e. Falling back to medium accuracy...');
+        }
+      }
+
+      // 5. Fallback to Medium Accuracy (Cell/Wi-Fi) if high accuracy timed out
       if (position == null) {
         try {
           position = await Geolocator.getCurrentPosition(
@@ -80,7 +94,7 @@ class LocationService {
         }
       }
 
-      // 5. Final Fallback: Last known location
+      // 6. Final Fallback: Last known location
       position ??= await Geolocator.getLastKnownPosition();
 
       if (position == null) {
@@ -97,6 +111,27 @@ class LocationService {
         errorMessage: 'GPS detection error: ${e.toString()}',
       );
     }
+  }
+
+  /// Samples up to [samples] quick GPS fixes and returns the reading with the
+  /// tightest horizontal accuracy (lowest meters), stopping early if <= 12m.
+  static Future<LocationResult> getAccurateLocation({int samples = 3}) async {
+    LocationResult? bestResult;
+    for (int i = 0; i < samples; i++) {
+      final res = await getCurrentLocation();
+      if (!res.success || res.position == null) {
+        if (bestResult == null && i == samples - 1) return res;
+        continue;
+      }
+      if (bestResult == null ||
+          res.position!.accuracy < bestResult.position!.accuracy) {
+        bestResult = res;
+      }
+      if (bestResult.position!.accuracy <= 12.0) {
+        break;
+      }
+    }
+    return bestResult ?? await getCurrentLocation();
   }
 
   /// Calculates geodesic distance in meters between two coordinates.
