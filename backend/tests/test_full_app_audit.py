@@ -602,3 +602,123 @@ class FullAppLogicAuditTests(TestCase):
         self.assertEqual(exp_row['status'], 'SUSPENDED')
         self.assertEqual(float(exp_row['due_amount']), 1000.0)
         self.assertEqual(exp_row['payment_status'], 'PARTIAL')
+
+    def test_checkin_menu_access_lock(self):
+        from apps.companies.models import CompanyPayrollPolicy
+        policy, _ = CompanyPayrollPolicy.objects.get_or_create(company=self.company_a)
+        policy.require_checkin_for_menu_access = True
+        policy.save(update_fields=['require_checkin_for_menu_access'])
+
+        admin_client = self._client(self.admin_a)
+        emp_client = self._client(self.emp_a)
+
+        # Company Admin bypasses check-in lock
+        self.assertEqual(admin_client.get('/api/v1/leads/').status_code, 200)
+
+        # Employee without active check-in is blocked from operational menus (leads)
+        r_blocked = emp_client.get('/api/v1/leads/')
+        self.assertEqual(r_blocked.status_code, 403)
+
+        # Attendance & profile endpoints remain accessible so employee can punch in
+        self.assertEqual(emp_client.get('/api/v1/accounts/profile/').status_code, 200)
+        self.assertEqual(emp_client.get('/api/v1/accounts/attendance/today/').status_code, 200)
+
+        # Active check-in unlocks operational menus
+        att = AttendanceRecord.objects.create(
+            user=self.emp_a,
+            company=self.company_a,
+            date=timezone.localdate(),
+            check_in_time=timezone.now(),
+        )
+        self.assertEqual(emp_client.get('/api/v1/leads/').status_code, 200)
+
+        # Checking out re-locks operational menus
+        att.check_out_time = timezone.now()
+        att.save(update_fields=['check_out_time'])
+        self.assertEqual(emp_client.get('/api/v1/leads/').status_code, 403)
+
+        # Per-employee EXEMPT override bypasses company lock
+        self.emp_profile.require_checkin_override = 'EXEMPT'
+        self.emp_profile.save(update_fields=['require_checkin_override'])
+        self.assertEqual(emp_client.get('/api/v1/leads/').status_code, 200)
+
+    def test_per_employee_quotation_approval_workflow(self):
+        self.emp_role.permissions = [
+            'quotations.view_own',
+            'quotations.create',
+            'quotations.edit',
+            'quotations.convert_to_invoice',
+        ]
+        self.emp_role.save(update_fields=['permissions'])
+
+        approver_role = CustomRole.objects.create(
+            company=self.company_a,
+            name='Quotation Approver Role',
+            permissions=[
+                'quotations.view_all',
+                'quotations.create',
+                'quotations.edit',
+                'quotations.approve',
+            ],
+        )
+        approver = User.objects.create_user(
+            email='approver@alpha.com',
+            password='Password123!',
+            first_name='Quote',
+            last_name='Approver',
+            role='EMPLOYEE',
+            company=self.company_a,
+        )
+        approver.custom_roles.add(approver_role)
+        EmployeeProfile.objects.create(user=approver)
+
+        self.emp_profile.require_quotation_approval = True
+        self.emp_profile.quotation_approver = approver
+        self.emp_profile.save(update_fields=['require_quotation_approval', 'quotation_approver'])
+
+        emp_client = self._client(self.emp_a)
+        approver_client = self._client(approver)
+
+        # 1. Employee creates quotation -> automatically PENDING_APPROVAL
+        r_create = emp_client.post('/api/v1/billing/quotations/', {
+            'customer_name': 'Acme Client',
+            'customer_phone': '+919999999999',
+            'items': [{'description': 'Service A', 'quantity': 1, 'unit_price': 1000, 'total': 1000}],
+            'subtotal': 1000,
+            'grand_total': 1000,
+        }, format='json')
+        self.assertEqual(r_create.status_code, 201)
+        self.assertEqual(r_create.data['status'], 'PENDING_APPROVAL')
+        quote_id = r_create.data['id']
+
+        # 2. Conversion blocked while PENDING_APPROVAL
+        r_conv_blocked = emp_client.post(f'/api/v1/billing/quotations/{quote_id}/convert-to-invoice/', {}, format='json')
+        self.assertEqual(r_conv_blocked.status_code, 403)
+
+        # 3. Assigned approver rejects with reason
+        r_reject = approver_client.post(f'/api/v1/billing/quotations/{quote_id}/approval/', {
+            'action': 'REJECT',
+            'rejection_reason': 'Fix unit price',
+        }, format='json')
+        self.assertEqual(r_reject.status_code, 200)
+        self.assertEqual(r_reject.data['status'], 'REJECTED')
+        self.assertEqual(r_reject.data['rejection_reason'], 'Fix unit price')
+
+        # 4. Employee edits & resubmits -> resets to PENDING_APPROVAL
+        r_patch = emp_client.patch(f'/api/v1/billing/quotations/{quote_id}/', {
+            'notes': 'Updated price as requested',
+        }, format='json')
+        self.assertEqual(r_patch.status_code, 200)
+        self.assertEqual(r_patch.data['status'], 'PENDING_APPROVAL')
+        self.assertEqual(r_patch.data['rejection_reason'], '')
+
+        # 5. Approver approves -> APPROVED, then conversion succeeds
+        r_approve = approver_client.post(f'/api/v1/billing/quotations/{quote_id}/approval/', {
+            'action': 'APPROVE',
+        }, format='json')
+        self.assertEqual(r_approve.status_code, 200)
+        self.assertEqual(r_approve.data['status'], 'APPROVED')
+        self.assertEqual(str(r_approve.data['approved_by']), str(approver.id))
+
+        r_conv_ok = emp_client.post(f'/api/v1/billing/quotations/{quote_id}/convert-to-invoice/', {}, format='json')
+        self.assertEqual(r_conv_ok.status_code, 201)

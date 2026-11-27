@@ -64,6 +64,9 @@ class _AddEmployeeScreenState extends State<AddEmployeeScreen> {
   List<String> _selectedAllowedBranches = [];
   final List<String> _selectedRoleIds = [];
   String _status = 'ACTIVE';
+  String _requireCheckinOverride = 'INHERIT';
+  bool _requireQuotationApproval = false;
+  String? _quotationApproverId;
   bool _isSubmitting = false;
   bool _obscurePassword = true;
 
@@ -109,6 +112,9 @@ class _AddEmployeeScreenState extends State<AddEmployeeScreen> {
       }
       _shiftStartTime = _parseTimeOfDay(profile['shift_start_time']?.toString(), const TimeOfDay(hour: 9, minute: 0));
       _shiftEndTime = _parseTimeOfDay(profile['shift_end_time']?.toString(), const TimeOfDay(hour: 18, minute: 0));
+      _requireCheckinOverride = (profile['require_checkin_override'] ?? 'INHERIT').toString();
+      _requireQuotationApproval = profile['require_quotation_approval'] == true;
+      _quotationApproverId = profile['quotation_approver']?.toString();
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final authUser = context.read<AuthProvider>().currentUser;
@@ -122,6 +128,7 @@ class _AddEmployeeScreenState extends State<AddEmployeeScreen> {
       context.read<RoleProvider>().fetchRoles();
       context.read<DepartmentProvider>().fetchDepartments();
       context.read<CompanyProvider>().fetchFeatureCatalog();
+      context.read<EmployeeProvider>().fetchEmployees();
     });
   }
 
@@ -207,6 +214,9 @@ class _AddEmployeeScreenState extends State<AddEmployeeScreen> {
         'shift_end_time': _formatTimeForApi(_shiftEndTime),
         'grace_period_minutes': int.tryParse(_graceCtrl.text) ?? 15,
         'status': _status,
+        'require_checkin_override': _requireCheckinOverride,
+        'require_quotation_approval': _requireQuotationApproval,
+        'quotation_approver_id': _requireQuotationApproval ? _quotationApproverId : null,
       });
     } else {
       ok = await empP.createEmployee({
@@ -225,6 +235,9 @@ class _AddEmployeeScreenState extends State<AddEmployeeScreen> {
         'shift_start_time': _formatTimeForApi(_shiftStartTime),
         'shift_end_time': _formatTimeForApi(_shiftEndTime),
         'grace_period_minutes': int.tryParse(_graceCtrl.text) ?? 15,
+        'require_checkin_override': _requireCheckinOverride,
+        'require_quotation_approval': _requireQuotationApproval,
+        'quotation_approver_id': _requireQuotationApproval ? _quotationApproverId : null,
         if ((double.tryParse(_basicSalaryCtrl.text) ?? 0) > 0 ||
             (double.tryParse(_hraCtrl.text) ?? 0) > 0 ||
             (double.tryParse(_allowancesCtrl.text) ?? 0) > 0 ||
@@ -1799,6 +1812,91 @@ class _AddEmployeeScreenState extends State<AddEmployeeScreen> {
                   color: AppColors.neonCyan),
             ),
           ),
+          const Divider(height: 24),
+          Text(
+            'Access & Approval Controls',
+            style: GoogleFonts.inter(
+                fontSize: 13, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
+          ),
+          const SizedBox(height: 10),
+          DropdownButtonFormField<String>(
+            initialValue: _requireCheckinOverride,
+            decoration: InputDecoration(
+              labelText: 'Check-In Menu Access Rule',
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            ),
+            items: const [
+              DropdownMenuItem(value: 'INHERIT', child: Text('Inherit Company Policy')),
+              DropdownMenuItem(value: 'REQUIRED', child: Text('Always Require Active Check-In')),
+              DropdownMenuItem(value: 'EXEMPT', child: Text('Exempt (Access Without Check-In)')),
+            ],
+            onChanged: (val) {
+              if (val != null) setState(() => _requireCheckinOverride = val);
+            },
+          ),
+          const SizedBox(height: 10),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text(
+              'Require Quotation Approval',
+              style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600),
+            ),
+            subtitle: Text(
+              'Quotations created or edited by this employee stay Pending Approval until approved',
+              style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B)),
+            ),
+            value: _requireQuotationApproval,
+            onChanged: (val) => setState(() => _requireQuotationApproval = val),
+          ),
+          if (_requireQuotationApproval) ...[
+            const SizedBox(height: 8),
+            Builder(builder: (context) {
+              final allEmps = context.watch<EmployeeProvider>().employees;
+              final currentEmpId = widget.employee?['id']?.toString();
+              final eligibleApprovers = allEmps.where((e) {
+                if (e['id']?.toString() == currentEmpId) return false;
+                if (e['is_active'] == false) return false;
+                final role = (e['role'] ?? '').toString();
+                if (role == 'COMPANY_ADMIN') return true;
+                final perms = (e['resolved_permissions'] as List<dynamic>?)
+                        ?.map((p) => p.toString())
+                        .toList() ??
+                    [];
+                return perms.contains('*') ||
+                    perms.contains('quotations.*') ||
+                    perms.contains('quotations.approve') ||
+                    perms.contains('quotations.create') ||
+                    perms.contains('quotations.edit');
+              }).toList();
+              final validIds = eligibleApprovers.map((e) => e['id']?.toString()).toSet();
+              final selectedVal = validIds.contains(_quotationApproverId) ? _quotationApproverId : null;
+              return DropdownButtonFormField<String?>(
+                initialValue: selectedVal,
+                decoration: InputDecoration(
+                  labelText: 'Quotation Approver',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                ),
+                items: [
+                  const DropdownMenuItem<String?>(
+                    value: null,
+                    child: Text('Company Admin (Default)'),
+                  ),
+                  ...eligibleApprovers.map((e) {
+                    final id = e['id']?.toString() ?? '';
+                    final name = (e['full_name'] ?? '${e['first_name'] ?? ''} ${e['last_name'] ?? ''}').toString().trim();
+                    final email = (e['email'] ?? '').toString();
+                    return DropdownMenuItem<String?>(
+                      value: id,
+                      child: Text(name.isNotEmpty ? '$name ($email)' : email, overflow: TextOverflow.ellipsis),
+                    );
+                  }),
+                ],
+                onChanged: (val) => setState(() => _quotationApproverId = val),
+              );
+            }),
+          ],
         ],
       ),
     );

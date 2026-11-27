@@ -186,6 +186,47 @@ class BillingProvider extends ChangeNotifier {
     }
   }
 
+  Future<QuotationModel?> approveOrRejectQuotation(
+    String quotationId, {
+    required String action,
+    String rejectionReason = '',
+  }) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final res = await ApiClient.post(
+        '/billing/quotations/$quotationId/approval/',
+        {
+          'action': action,
+          if (rejectionReason.isNotEmpty) 'rejection_reason': rejectionReason,
+        },
+      );
+      final updated = QuotationModel.fromJson(res);
+      final idx = _quotations.indexWhere((q) => q.id == quotationId);
+      if (idx != -1) {
+        _quotations[idx] = updated;
+      }
+      if (_selectedQuotation?.id == quotationId) {
+        _selectedQuotation = updated;
+      }
+      _isLoading = false;
+      notifyListeners();
+      return updated;
+    } on ApiException catch (e) {
+      _errorMessage = e.message;
+      _isLoading = false;
+      notifyListeners();
+      return null;
+    } catch (e) {
+      _errorMessage = e.toString();
+      _isLoading = false;
+      notifyListeners();
+      return null;
+    }
+  }
+
   Future<bool> deleteQuotation(String quotationId) async {
     _isLoading = true;
     _errorMessage = null;

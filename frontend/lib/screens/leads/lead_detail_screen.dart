@@ -145,9 +145,11 @@ class _LeadDetailScreenState extends State<LeadDetailScreen> {
 
   void _openQuotationDialog() {
     if (_lead == null) return;
-    showDialog(
-      context: context,
-      builder: (_) => QuotationFormDialog(lead: _lead),
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => QuotationFormDialog(lead: _lead),
+      ),
     ).then((_) => _loadData());
   }
 

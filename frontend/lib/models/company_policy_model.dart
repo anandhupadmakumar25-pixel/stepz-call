@@ -47,6 +47,7 @@ class CompanyPayrollPolicyModel {
   final double halfDayHours;
   final bool allowOutOfFencePunch;
   final bool strictGeofenceBlock;
+  final bool requireCheckinForMenuAccess;
   final int salaryCycleStartDay;
   final String payCalculationBasis; // 'CALENDAR_DAYS' or 'FIXED_26_DAYS'
   final bool overtimeEnabled;
@@ -64,6 +65,7 @@ class CompanyPayrollPolicyModel {
     this.halfDayHours = 4.5,
     this.allowOutOfFencePunch = true,
     this.strictGeofenceBlock = false,
+    this.requireCheckinForMenuAccess = false,
     this.salaryCycleStartDay = 1,
     this.payCalculationBasis = 'CALENDAR_DAYS',
     this.overtimeEnabled = false,
@@ -95,6 +97,7 @@ class CompanyPayrollPolicyModel {
       halfDayHours: parseNum(json['half_day_hours'], 4.5),
       allowOutOfFencePunch: json['allow_out_of_fence_punch'] ?? true,
       strictGeofenceBlock: json['strict_geofence_block'] ?? false,
+      requireCheckinForMenuAccess: json['require_checkin_for_menu_access'] ?? false,
       salaryCycleStartDay: parseInt(json['salary_cycle_start_day'], 1),
       payCalculationBasis: json['pay_calculation_basis']?.toString() ?? 'CALENDAR_DAYS',
       overtimeEnabled: json['overtime_enabled'] ?? false,
@@ -116,6 +119,7 @@ class CompanyPayrollPolicyModel {
       'half_day_hours': halfDayHours,
       'allow_out_of_fence_punch': allowOutOfFencePunch,
       'strict_geofence_block': strictGeofenceBlock,
+      'require_checkin_for_menu_access': requireCheckinForMenuAccess,
       'salary_cycle_start_day': salaryCycleStartDay,
       'pay_calculation_basis': payCalculationBasis,
       'overtime_enabled': overtimeEnabled,

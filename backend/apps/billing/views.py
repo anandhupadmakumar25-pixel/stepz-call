@@ -246,6 +246,12 @@ class QuotationListCreateView(views.APIView):
                 created_by=request.user
             )
 
+            prof = getattr(request.user, 'employee_profile', None)
+            if request.user.role != 'COMPANY_ADMIN' and prof and getattr(prof, 'require_quotation_approval', False):
+                quotation.status = 'PENDING_APPROVAL'
+                quotation.save(update_fields=['status'])
+                _notify_quotation_approval(quotation, request.user)
+
             # Auto-save line items to the company's product catalog for automatic search & load next time!
             items = data.get('items', [])
             if isinstance(items, list):
@@ -319,8 +325,17 @@ class QuotationDetailView(views.APIView):
             _attach_template_snapshot(data, quote.company, 'QUOTATION')
         serializer = QuotationSerializer(quote, data=data, partial=True)
         if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data)
+            updated_quote = serializer.save()
+            prof = getattr(request.user, 'employee_profile', None)
+            if request.user.role != 'COMPANY_ADMIN' and prof and prof.require_quotation_approval:
+                if updated_quote.status != 'CONVERTED':
+                    updated_quote.status = 'PENDING_APPROVAL'
+                    updated_quote.rejection_reason = ''
+                    updated_quote.approved_by = None
+                    updated_quote.approved_at = None
+                    updated_quote.save(update_fields=['status', 'rejection_reason', 'approved_by', 'approved_at'])
+                    _notify_quotation_approval(updated_quote, request.user)
+            return Response(QuotationSerializer(updated_quote).data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     def delete(self, request, pk):
@@ -355,6 +370,12 @@ class QuotationConvertToInvoiceView(views.APIView):
 
         if user.role == 'EMPLOYEE' and quote.created_by_id != user.id and (not quote.lead or quote.lead.assigned_to_id != user.id):
             return Response({"error": "Unauthorized. You can only convert your own quotations."}, status=status.HTTP_403_FORBIDDEN)
+
+        if quote.status in ('PENDING_APPROVAL', 'REJECTED'):
+            return Response(
+                {"error": "Quotation must be approved before converting to an invoice."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         existing_invoice = Invoice.objects.filter(quotation=quote).first()
         if quote.status == 'CONVERTED' or existing_invoice:
@@ -417,6 +438,84 @@ class QuotationConvertToInvoiceView(views.APIView):
         quote.save(update_fields=['status'])
 
         return Response(InvoiceSerializer(invoice).data, status=status.HTTP_201_CREATED)
+
+
+def _notify_quotation_approval(quotation, requester):
+    from django.contrib.auth import get_user_model
+    from apps.notifications.models import Notification
+    User = get_user_model()
+    recipients = set(
+        User.objects.filter(company=quotation.company, role='COMPANY_ADMIN', is_active=True)
+    )
+    prof = getattr(requester, 'employee_profile', None)
+    if prof and prof.quotation_approver and prof.quotation_approver.is_active:
+        recipients.add(prof.quotation_approver)
+    for recipient in recipients:
+        if recipient.id == requester.id:
+            continue
+        Notification.objects.create(
+            company=quotation.company,
+            user=recipient,
+            title='Quotation Approval Needed',
+            message=f'{requester.full_name} submitted {quotation.quotation_number} ({quotation.customer_name}) for approval.',
+            notification_type='QUOTATION_APPROVAL',
+            entity_type='quotation',
+            entity_id=str(quotation.id),
+        )
+
+
+class QuotationApproveRejectView(views.APIView):
+    permission_classes = [IsEmployee]
+
+    def post(self, request, pk):
+        from django.utils import timezone
+        from apps.notifications.models import Notification
+
+        user = request.user
+        company = user.company
+        quote = Quotation.objects.filter(id=pk).select_related('created_by').first()
+        if not quote:
+            return Response({"error": "Quotation not found."}, status=status.HTTP_404_NOT_FOUND)
+        if not user.is_super_admin and (not company or quote.company_id != company.id):
+            return Response({"error": "Unauthorized access."}, status=status.HTTP_403_FORBIDDEN)
+
+        creator_prof = getattr(quote.created_by, 'employee_profile', None) if quote.created_by else None
+        is_assigned_approver = bool(creator_prof and creator_prof.quotation_approver_id == user.id)
+        if not (user.is_company_admin or user.has_permission('quotations.approve') or is_assigned_approver):
+            return Response({"error": "Permission denied: you are not authorized to approve this quotation."}, status=status.HTTP_403_FORBIDDEN)
+
+        action = str(request.data.get('action') or '').strip().upper()
+        if action not in ('APPROVE', 'REJECT'):
+            return Response({"error": "Use action='APPROVE' or 'REJECT'."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if action == 'APPROVE':
+            quote.status = 'APPROVED'
+            quote.approved_by = user
+            quote.approved_at = timezone.now()
+            quote.rejection_reason = ''
+            quote.save(update_fields=['status', 'approved_by', 'approved_at', 'rejection_reason', 'updated_at'])
+            msg = f'Your quotation {quote.quotation_number} was approved by {user.full_name}.'
+        else:
+            reason = str(request.data.get('rejection_reason') or '').strip()
+            quote.status = 'REJECTED'
+            quote.approved_by = user
+            quote.approved_at = timezone.now()
+            quote.rejection_reason = reason
+            quote.save(update_fields=['status', 'approved_by', 'approved_at', 'rejection_reason', 'updated_at'])
+            msg = f'Your quotation {quote.quotation_number} was rejected by {user.full_name}.' + (f' Reason: {reason}' if reason else '')
+
+        if quote.created_by and quote.created_by_id != user.id:
+            Notification.objects.create(
+                company=quote.company,
+                user=quote.created_by,
+                title=f'Quotation {quote.status.title()}',
+                message=msg,
+                notification_type='QUOTATION_STATUS',
+                entity_type='quotation',
+                entity_id=str(quote.id),
+            )
+
+        return Response(_redact_cost_fields(QuotationSerializer(quote).data, user))
 
 
 class InvoiceListCreateView(views.APIView):

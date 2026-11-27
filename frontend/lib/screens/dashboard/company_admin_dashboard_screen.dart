@@ -731,9 +731,11 @@ class _CompanyAdminDashboardScreenState
                 height: 34,
                 child: OutlinedButton.icon(
                   onPressed: () {
-                    showDialog(
-                      context: context,
-                      builder: (_) => const QuotationFormDialog(),
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const QuotationFormDialog(),
+                      ),
                     );
                   },
                   icon: const Icon(Icons.request_quote_rounded,

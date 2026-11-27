@@ -121,6 +121,9 @@ class QuotationModel {
   final String notes;
   final String termsAndConditions;
   final String status;
+  final String? approvedByName;
+  final String? approvedAt;
+  final String rejectionReason;
   final String? templateId;
   final Map<String, dynamic> templateSnapshot;
   final String createdAt;
@@ -162,6 +165,9 @@ class QuotationModel {
     this.notes = '',
     this.termsAndConditions = '',
     this.status = 'DRAFT',
+    this.approvedByName,
+    this.approvedAt,
+    this.rejectionReason = '',
     this.templateId,
     this.templateSnapshot = const {},
     required this.createdAt,
@@ -203,6 +209,9 @@ class QuotationModel {
     String? notes,
     String? termsAndConditions,
     String? status,
+    String? approvedByName,
+    String? approvedAt,
+    String? rejectionReason,
     String? createdAt,
     String? updatedAt,
   }) {
@@ -241,6 +250,9 @@ class QuotationModel {
       notes: notes ?? this.notes,
       termsAndConditions: termsAndConditions ?? this.termsAndConditions,
       status: status ?? this.status,
+      approvedByName: approvedByName ?? this.approvedByName,
+      approvedAt: approvedAt ?? this.approvedAt,
+      rejectionReason: rejectionReason ?? this.rejectionReason,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -320,6 +332,9 @@ class QuotationModel {
       notes: json['notes']?.toString() ?? '',
       termsAndConditions: json['terms_and_conditions']?.toString() ?? json['termsAndConditions']?.toString() ?? '',
       status: json['status']?.toString() ?? 'DRAFT',
+      approvedByName: json['approved_by_name']?.toString(),
+      approvedAt: json['approved_at']?.toString(),
+      rejectionReason: json['rejection_reason']?.toString() ?? '',
       templateId: json['template']?.toString(),
       templateSnapshot: (json['template_snapshot'] as Map<String, dynamic>?) ?? const {},
       createdAt: json['created_at']?.toString() ?? json['createdAt']?.toString() ?? '',

@@ -380,7 +380,12 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                     builder: (ctx, kpiConstraints) {
                       final quotes = provider.quotations;
                       final sentQuotes = quotes.where((q) => q.status == 'SENT').length;
-                      final convertedQuotes = quotes.where((q) => q.status == 'CONVERTED' || q.status == 'ACCEPTED').length;
+                      final convertedQuotes = quotes
+                          .where((q) =>
+                              q.status == 'CONVERTED' ||
+                              q.status == 'ACCEPTED' ||
+                              q.status == 'APPROVED')
+                          .length;
                       final draftQuotes = quotes.where((q) => q.status == 'DRAFT').length;
                       final totalQuoteVal = quotes.fold<double>(0.0, (sum, q) => sum + q.grandTotal);
                       final authSym = context.watch<AuthProvider>().currentUser?.companyCurrencySymbol ?? '₹';
@@ -593,6 +598,21 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                                       _loadData();
                                     }, const Color(0xFF059669)),
                                     const SizedBox(width: 8),
+                                    _buildFilterPill('PENDING_APPROVAL', 'Pending Approval', _selectedQuoteStatus, (val) {
+                                      setState(() => _selectedQuoteStatus = val);
+                                      _loadData();
+                                    }, const Color(0xFFD97706)),
+                                    const SizedBox(width: 8),
+                                    _buildFilterPill('APPROVED', 'Approved', _selectedQuoteStatus, (val) {
+                                      setState(() => _selectedQuoteStatus = val);
+                                      _loadData();
+                                    }, const Color(0xFF10B981)),
+                                    const SizedBox(width: 8),
+                                    _buildFilterPill('REJECTED', 'Rejected', _selectedQuoteStatus, (val) {
+                                      setState(() => _selectedQuoteStatus = val);
+                                      _loadData();
+                                    }, const Color(0xFFDC2626)),
+                                    const SizedBox(width: 8),
                                     _buildFilterPill('SENT', 'Sent', _selectedQuoteStatus, (val) {
                                       setState(() => _selectedQuoteStatus = val);
                                       _loadData();
@@ -603,7 +623,7 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                                       _loadData();
                                     }, const Color(0xFF059669)),
                                     const SizedBox(width: 8),
-                                    _buildFilterPill('ACCEPTED', 'Approved', _selectedQuoteStatus, (val) {
+                                    _buildFilterPill('ACCEPTED', 'Accepted', _selectedQuoteStatus, (val) {
                                       setState(() => _selectedQuoteStatus = val);
                                       _loadData();
                                     }, const Color(0xFF10B981)),
@@ -1174,25 +1194,39 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
 
   Widget _buildQuotationCard(QuotationModel quote, bool isMobile) {
     final isConverted = quote.status == 'CONVERTED';
-    final isAccepted = quote.status == 'ACCEPTED';
+    final isAccepted = quote.status == 'ACCEPTED' || quote.status == 'APPROVED';
+    final isPendingApproval = quote.status == 'PENDING_APPROVAL';
+    final isRejected = quote.status == 'REJECTED';
 
     Color badgeBg = isConverted
         ? const Color(0xFFD1FAE5)
         : isAccepted
             ? const Color(0xFFDCFCE7)
-            : const Color(0xFFEFF6FF);
+            : isPendingApproval
+                ? const Color(0xFFFEF3C7)
+                : isRejected
+                    ? const Color(0xFFFEE2E2)
+                    : const Color(0xFFEFF6FF);
 
     Color badgeFg = isConverted
         ? const Color(0xFF047857)
         : isAccepted
             ? const Color(0xFF15803D)
-            : const Color(0xFF1D4ED8);
+            : isPendingApproval
+                ? const Color(0xFFB45309)
+                : isRejected
+                    ? const Color(0xFFB91C1C)
+                    : const Color(0xFF1D4ED8);
 
     String statusLabel = isConverted
         ? 'CONVERTED TO BILL'
-        : isAccepted
-            ? 'ACCEPTED'
-            : quote.status;
+        : quote.status == 'APPROVED'
+            ? 'APPROVED'
+            : quote.status == 'ACCEPTED'
+                ? 'ACCEPTED'
+                : isPendingApproval
+                    ? 'PENDING APPROVAL'
+                    : quote.status;
 
     return GlassCard(
       blur: 16,

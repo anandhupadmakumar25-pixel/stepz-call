@@ -79,6 +79,8 @@ class UserModel {
   final List<String> customRoleNames;
   final List<String> resolvedPermissions;
   final List<DelegationSummary> activeDelegations;
+  final bool requireCheckinForMenuAccess;
+  final bool isCheckedInNow;
 
   UserModel({
     required this.id,
@@ -115,6 +117,8 @@ class UserModel {
     this.customRoleNames = const [],
     this.resolvedPermissions = const [],
     this.activeDelegations = const [],
+    this.requireCheckinForMenuAccess = false,
+    this.isCheckedInNow = false,
   });
 
   static const Map<String, String> _v2MenuParentMap = {
@@ -134,6 +138,8 @@ class UserModel {
   bool get isEmployee => role == 'EMPLOYEE';
   bool get canManageCompany => isSuperAdmin || role == 'COMPANY_ADMIN' || role == 'MANAGER';
   bool get hasActiveDelegations => activeDelegations.isNotEmpty;
+  bool get isMenuLockedByCheckin =>
+      !isSuperAdmin && !isCompanyAdmin && requireCheckinForMenuAccess && !isCheckedInNow;
 
   bool hasMenuPermission(String menuKey) {
     if (isSuperAdmin) return true;
@@ -246,6 +252,8 @@ class UserModel {
       customRoleNames: parsedRoleNames,
       resolvedPermissions: parsedPerms,
       activeDelegations: parsedDelegations,
+      requireCheckinForMenuAccess: json['require_checkin_for_menu_access'] == true,
+      isCheckedInNow: json['is_checked_in_now'] == true,
     );
   }
 
@@ -280,5 +288,7 @@ class UserModel {
     'custom_role_names': customRoleNames,
     'resolved_permissions': resolvedPermissions,
     'active_delegations': activeDelegations.map((e) => e.toJson()).toList(),
+    'require_checkin_for_menu_access': requireCheckinForMenuAccess,
+    'is_checked_in_now': isCheckedInNow,
   };
 }

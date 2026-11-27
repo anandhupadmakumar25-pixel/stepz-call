@@ -53,39 +53,45 @@ class _NotificationDrawerState extends State<NotificationDrawer> {
                 children: [
                   // Drawer Header
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(18, 16, 14, 10),
+                    padding: const EdgeInsets.fromLTRB(14, 16, 12, 10),
                     child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                gradient: AppColors.primaryGradient,
-                                borderRadius: BorderRadius.circular(10),
+                        Expanded(
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  gradient: AppColors.primaryGradient,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: const Icon(Icons.notifications_rounded, size: 18, color: Colors.white),
                               ),
-                              child: const Icon(Icons.notifications_rounded, size: 18, color: Colors.white),
-                            ),
-                            const SizedBox(width: 10),
-                            Text(
-                              'Notifications',
-                              style: GoogleFonts.inter(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w800,
-                                color: const Color(0xFF0F172A),
-                              ),
-                            ),
-                            if (notifProvider.unreadCount > 0) ...[
                               const SizedBox(width: 8),
-                              AnimatedStatusBadge(
-                                label: '${notifProvider.unreadCount}',
-                                statusColor: AppColors.neonCoral,
+                              Flexible(
+                                child: Text(
+                                  'Notifications',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w800,
+                                    color: const Color(0xFF0F172A),
+                                  ),
+                                ),
                               ),
+                              if (notifProvider.unreadCount > 0) ...[
+                                const SizedBox(width: 6),
+                                AnimatedStatusBadge(
+                                  label: '${notifProvider.unreadCount}',
+                                  statusColor: AppColors.neonCoral,
+                                ),
+                              ],
                             ],
-                          ],
+                          ),
                         ),
-                        if (notifProvider.unreadCount > 0)
+                        if (notifProvider.unreadCount > 0) ...[
+                          const SizedBox(width: 6),
                           InkWell(
                             onTap: notifProvider.markAllRead,
                             borderRadius: BorderRadius.circular(6),
@@ -94,13 +100,14 @@ class _NotificationDrawerState extends State<NotificationDrawer> {
                               child: Text(
                                 'Mark all read',
                                 style: GoogleFonts.inter(
-                                  fontSize: 12,
+                                  fontSize: 11.5,
                                   fontWeight: FontWeight.w600,
                                   color: const Color(0xFF2563EB),
                                 ),
                               ),
                             ),
                           ),
+                        ],
                       ],
                     ),
                   ),

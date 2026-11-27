@@ -8,6 +8,7 @@ import '../../core/responsive/responsive_layout.dart';
 import '../../core/services/push_notification_service.dart';
 import '../../core/widgets/glass/app_background.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/attendance_provider.dart';
 import '../../providers/notification_provider.dart';
 import '../../providers/callback_provider.dart';
 import '../dashboard/admin_dashboard_screen.dart';
@@ -137,6 +138,26 @@ class _MainLayoutState extends State<MainLayout> with WidgetsBindingObserver {
   void _navigateByNotification(String notificationType, String entityType) {
     final routeKey = PushNotificationService.resolveRouteKey(notificationType, entityType);
     if (!mounted) return;
+    final user = context.read<AuthProvider>().currentUser;
+    final attP = context.read<AttendanceProvider>();
+    final isActivelyCheckedIn = attP.isCheckedIn ? !attP.isCheckedOut : (user?.isCheckedInNow ?? false);
+    final isLocked = user != null &&
+        !user.isSuperAdmin &&
+        !user.isCompanyAdmin &&
+        user.requireCheckinForMenuAccess &&
+        !isActivelyCheckedIn;
+    if (isLocked && routeKey != 'dashboard' && routeKey != 'attendance' && routeKey != 'leave') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please check in first to access this section.'),
+          backgroundColor: Color(0xFFF59E0B),
+        ),
+      );
+      setState(() {
+        _pendingRouteKey = 'attendance';
+      });
+      return;
+    }
     setState(() {
       _pendingRouteKey = routeKey;
     });
@@ -201,6 +222,10 @@ class _MainLayoutState extends State<MainLayout> with WidgetsBindingObserver {
     final isSuperAdmin = user.isSuperAdmin;
     final isCompanyAdmin = user.isCompanyAdmin || user.isManager;
     final isMobile = ResponsiveLayout.isMobile(context);
+    final attP = context.watch<AttendanceProvider>();
+    final bool isActivelyCheckedIn = attP.isCheckedIn ? !attP.isCheckedOut : user.isCheckedInNow;
+    final bool isMenuLockedByCheckin =
+        !isSuperAdmin && !user.isCompanyAdmin && user.requireCheckinForMenuAccess && !isActivelyCheckedIn;
 
     // Build nav items dynamically with categorized sections
     final navItems = <_NavItem>[];
@@ -541,6 +566,13 @@ class _MainLayoutState extends State<MainLayout> with WidgetsBindingObserver {
             screen: const BranchManagementScreen(),
           ),
         );
+      }
+
+      if (isMenuLockedByCheckin) {
+        navItems.removeWhere((it) =>
+            it.routeKey != 'dashboard' &&
+            it.routeKey != 'attendance' &&
+            it.routeKey != 'leave');
       }
     }
 
@@ -1258,7 +1290,14 @@ class _MainLayoutState extends State<MainLayout> with WidgetsBindingObserver {
               ],
 
               // Quick Action Button in Imperial Emerald & Gold
-              if (canAddLead) ...[
+              if (canAddLead &&
+                  !(auth.currentUser != null &&
+                      !auth.currentUser!.isSuperAdmin &&
+                      !auth.currentUser!.isCompanyAdmin &&
+                      auth.currentUser!.requireCheckinForMenuAccess &&
+                      !(context.watch<AttendanceProvider>().isCheckedIn
+                          ? !context.watch<AttendanceProvider>().isCheckedOut
+                          : auth.currentUser!.isCheckedInNow))) ...[
                 InkWell(
                   onTap: _openAddLeadDialog,
                   borderRadius: BorderRadius.circular(9),

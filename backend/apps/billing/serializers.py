@@ -33,6 +33,7 @@ class QuotationSerializer(serializers.ModelSerializer):
     created_by_phone = serializers.CharField(source='created_by.phone', read_only=True, default='')
     lead_name = serializers.CharField(source='lead.full_name', read_only=True, default='')
     branch_name = serializers.CharField(source='branch.name', read_only=True, default='')
+    approved_by_name = serializers.CharField(source='approved_by.full_name', read_only=True, default='')
 
     class Meta:
         model = Quotation
@@ -44,10 +45,11 @@ class QuotationSerializer(serializers.ModelSerializer):
             'items', 'custom_columns', 'subtotal', 'tax_amount', 'discount_amount', 'grand_total',
             'total_cost', 'gross_margin', 'hide_cost_in_pdf',
             'notes', 'terms_and_conditions', 'status',
+            'approved_by', 'approved_by_name', 'approved_at', 'rejection_reason',
             'template', 'template_snapshot',
             'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'branch_name', 'created_by', 'created_by_name', 'created_by_phone', 'date', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'branch_name', 'created_by', 'created_by_name', 'created_by_phone', 'approved_by', 'approved_by_name', 'approved_at', 'date', 'created_at', 'updated_at']
 
 
 class InvoiceSerializer(serializers.ModelSerializer):

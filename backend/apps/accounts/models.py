@@ -229,6 +229,27 @@ class User(AbstractBaseUser, PermissionsMixin, TimeStampedModel):
 
         return sorted(perms)
 
+    def is_checkin_required(self):
+        if self.is_super_admin or self.role == 'COMPANY_ADMIN' or not self.company:
+            return False
+        prof = getattr(self, 'employee_profile', None)
+        override = getattr(prof, 'require_checkin_override', 'INHERIT') if prof else 'INHERIT'
+        if override == 'EXEMPT':
+            return False
+        if override == 'REQUIRED':
+            return True
+        policy = getattr(self.company, 'payroll_policy', None)
+        return bool(policy and getattr(policy, 'require_checkin_for_menu_access', False))
+
+    def has_active_checkin_today(self):
+        from django.utils import timezone
+        today = timezone.localdate()
+        return self.attendance_records.filter(
+            date=today,
+            check_in_time__isnull=False,
+            check_out_time__isnull=True,
+        ).exists()
+
 class CustomRole(TenantModel):
     name = models.CharField(max_length=128)
     code = models.CharField(max_length=64, blank=True)
@@ -426,6 +447,23 @@ class EmployeeProfile(TimeStampedModel):
     shift_end_time = models.TimeField(null=True, blank=True, default='18:00:00')
     grace_period_minutes = models.PositiveIntegerField(default=15)
     joining_date = models.DateField(null=True, blank=True)
+    require_checkin_override = models.CharField(
+        max_length=20,
+        choices=[
+            ('INHERIT', 'Inherit Company Policy'),
+            ('REQUIRED', 'Always Require Check-In'),
+            ('EXEMPT', 'Exempt from Check-In'),
+        ],
+        default='INHERIT',
+    )
+    require_quotation_approval = models.BooleanField(default=False)
+    quotation_approver = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='quotation_approval_assignees',
+    )
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='ACTIVE', db_index=True)
 
     def __str__(self):

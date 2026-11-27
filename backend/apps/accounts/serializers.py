@@ -126,6 +126,8 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             'custom_role_names': [r.name for r in user.custom_roles.all()],
             'resolved_permissions': user.resolved_permissions,
             'active_delegations': _serialize_active_delegations(user),
+            'require_checkin_for_menu_access': user.is_checkin_required(),
+            'is_checked_in_now': user.has_active_checkin_today(),
         }
         return data
 
@@ -152,6 +154,8 @@ class UserProfileSerializer(serializers.ModelSerializer):
     is_master_admin = serializers.BooleanField(read_only=True)
     resolved_permissions = serializers.ReadOnlyField()
     active_delegations = serializers.SerializerMethodField()
+    require_checkin_for_menu_access = serializers.SerializerMethodField()
+    is_checked_in_now = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -164,6 +168,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
             'company_allowed_menus', 'can_manage_branches', 'company_plan_name',
             'company_plan_expires_at', 'company_days_until_expiry', 'company_is_plan_expired',
             'resolved_permissions', 'active_delegations',
+            'require_checkin_for_menu_access', 'is_checked_in_now',
             'is_active', 'created_at'
         ]
         read_only_fields = ['id', 'email', 'role', 'company', 'company_name', 'created_at']
@@ -180,6 +185,12 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
     def get_company_country_iso(self, obj):
         return self._resolved_region(obj)[0]
+
+    def get_require_checkin_for_menu_access(self, obj):
+        return obj.is_checkin_required()
+
+    def get_is_checked_in_now(self, obj):
+        return obj.has_active_checkin_today()
 
     def get_company_country_code(self, obj):
         return self._resolved_region(obj)[1]
@@ -274,6 +285,7 @@ class EmployeeProfileSerializer(serializers.ModelSerializer):
     department_name = serializers.CharField(source='department.name', read_only=True)
     department_attendance_mode = serializers.CharField(source='department.attendance_mode', read_only=True)
     allowed_branch_ids = serializers.SerializerMethodField()
+    quotation_approver_name = serializers.CharField(source='quotation_approver.full_name', read_only=True, default='')
 
     class Meta:
         model = EmployeeProfile
@@ -282,7 +294,10 @@ class EmployeeProfileSerializer(serializers.ModelSerializer):
             'allowed_branches', 'allowed_branch_ids',
             'team', 'team_name', 'manager', 'manager_name',
             'employee_code', 'daily_call_target', 'is_geofence_required',
-            'shift_start_time', 'shift_end_time', 'grace_period_minutes', 'joining_date', 'status'
+            'shift_start_time', 'shift_end_time', 'grace_period_minutes', 'joining_date',
+            'require_checkin_override', 'require_quotation_approval',
+            'quotation_approver', 'quotation_approver_name',
+            'status'
         ]
 
     def get_allowed_branch_ids(self, obj):
@@ -376,6 +391,13 @@ class EmployeeCreateSerializer(serializers.Serializer):
     shift_start_time = serializers.TimeField(required=False, allow_null=True)
     shift_end_time = serializers.TimeField(required=False, allow_null=True)
     grace_period_minutes = serializers.IntegerField(required=False, default=15, min_value=0)
+    require_checkin_override = serializers.ChoiceField(
+        choices=[('INHERIT', 'Inherit'), ('REQUIRED', 'Required'), ('EXEMPT', 'Exempt')],
+        required=False,
+        default='INHERIT',
+    )
+    require_quotation_approval = serializers.BooleanField(required=False, default=False)
+    quotation_approver_id = serializers.UUIDField(required=False, allow_null=True)
     basic_salary = serializers.DecimalField(max_digits=12, decimal_places=2, required=False, default=0)
     hra = serializers.DecimalField(max_digits=12, decimal_places=2, required=False, default=0)
     allowances = serializers.DecimalField(max_digits=12, decimal_places=2, required=False, default=0)

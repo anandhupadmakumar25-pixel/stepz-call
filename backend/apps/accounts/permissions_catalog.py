@@ -56,6 +56,7 @@ PERMISSION_GROUPS = [
             {'key': 'quotations.view', 'label': 'View Quotations', 'description': 'View company quotations'},
             {'key': 'quotations.create', 'label': 'Create Quotations', 'description': 'Create new client quotations'},
             {'key': 'quotations.edit', 'label': 'Edit Quotations', 'description': 'Modify existing quotations'},
+            {'key': 'quotations.approve', 'label': 'Approve / Reject Quotations', 'description': 'Review and approve or reject employee quotations before sending'},
             {'key': 'quotations.delete', 'label': 'Delete Quotations', 'description': 'Delete draft or cancelled quotations'},
             {'key': 'quotations.view_cost_cst', 'label': 'View Internal Cost (CST) & Margin', 'description': 'See internal cost prices and gross profit margins'},
             {'key': 'quotations.convert_to_invoice', 'label': 'Convert Quotation to Bill', 'description': '1-click convert approved quotation into an invoice'},

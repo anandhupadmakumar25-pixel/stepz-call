@@ -289,6 +289,7 @@ class CompanyPayrollPolicy(TimeStampedModel):
     
     allow_out_of_fence_punch = models.BooleanField(default=True)
     strict_geofence_block = models.BooleanField(default=False)
+    require_checkin_for_menu_access = models.BooleanField(default=False)
     
     salary_cycle_start_day = models.PositiveIntegerField(default=1)
     pay_calculation_basis = models.CharField(

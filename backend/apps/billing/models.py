@@ -48,6 +48,8 @@ class DocumentTemplate(TenantModel):
 class Quotation(TenantModel):
     STATUS_CHOICES = [
         ('DRAFT', 'Draft'),
+        ('PENDING_APPROVAL', 'Pending Approval'),
+        ('APPROVED', 'Approved'),
         ('SENT', 'Sent to Customer'),
         ('ACCEPTED', 'Accepted / Approved'),
         ('REJECTED', 'Rejected'),
@@ -108,6 +110,15 @@ class Quotation(TenantModel):
     notes = models.TextField(blank=True)
     terms_and_conditions = models.TextField(blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='DRAFT', db_index=True)
+    approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='approved_quotations',
+    )
+    approved_at = models.DateTimeField(null=True, blank=True)
+    rejection_reason = models.TextField(blank=True)
     template = models.ForeignKey(
         DocumentTemplate,
         on_delete=models.SET_NULL,

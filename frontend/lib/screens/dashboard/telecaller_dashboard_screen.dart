@@ -93,9 +93,18 @@ class _TelecallerDashboardScreenState extends State<TelecallerDashboardScreen> {
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     final dash = context.watch<DashboardProvider>();
+    final attP = context.watch<AttendanceProvider>();
     final user = auth.currentUser;
     final isDesktop = ResponsiveLayout.isDesktop(context);
     final isMobile = ResponsiveLayout.isMobile(context);
+
+    final bool isActivelyCheckedIn =
+        attP.isCheckedIn ? !attP.isCheckedOut : (user?.isCheckedInNow ?? false);
+    final bool isMenuLockedByCheckin = user != null &&
+        !user.isSuperAdmin &&
+        !user.isCompanyAdmin &&
+        user.requireCheckinForMenuAccess &&
+        !isActivelyCheckedIn;
 
     final targetPct = dash.telecallerDailyTarget > 0
         ? (dash.telecallerCallsToday / dash.telecallerDailyTarget).clamp(0.0, 1.0)
@@ -133,7 +142,8 @@ class _TelecallerDashboardScreenState extends State<TelecallerDashboardScreen> {
               branchName: branchName,
               isMobile: isMobile,
               isDesktop: isDesktop,
-              canViewTasks: (user?.hasMenuPermission('tasks') ?? false) &&
+              canViewTasks: !isMenuLockedByCheckin &&
+                  (user?.hasMenuPermission('tasks') ?? false) &&
                   (user?.hasPermission('tasks.view') ?? false),
             ),
             const SizedBox(height: 14),
@@ -171,68 +181,113 @@ class _TelecallerDashboardScreenState extends State<TelecallerDashboardScreen> {
             ),
             const SizedBox(height: 14),
 
-            // 4 Micro Metric Stat Badges
-            _buildLuxuryStatCards(dash, isDesktop, isMobile),
-            const SizedBox(height: 16),
-
-            // ==========================================
-            // ZONE 2 & 3: RESPONSIVE WORKSPACE (SPLIT DESKTOP / TABBED MOBILE)
-            // ==========================================
-            LayoutBuilder(
-              builder: (ctx, c) {
-                if (c.maxWidth >= 1080) {
-                  return Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        flex: 7,
-                        child: _buildMyAssignedLeadsQueue(context, isMobile, companyName),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        flex: 5,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            _buildPriorityCallbacksCard(context, dash, isMobile),
-                            const SizedBox(height: 16),
-                            _buildRecentActivityLedger(dash, isMobile),
-                          ],
-                        ),
-                      ),
-                    ],
-                  );
-                }
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+            if (isMenuLockedByCheckin) ...[
+              GlassCard(
+                padding: EdgeInsets.all(isMobile ? 18 : 24),
+                borderRadius: BorderRadius.circular(18),
+                borderColor: const Color(0xFFFCD34D),
+                child: Column(
                   children: [
                     Container(
-                      padding: const EdgeInsets.all(4),
+                      padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                        color: const Color(0xFFFEF3C7),
+                        borderRadius: BorderRadius.circular(14),
                       ),
-                      child: Row(
-                        children: [
-                          _buildWorkspaceTabBtn(0, 'Leads Queue', Icons.people_alt_rounded),
-                          _buildWorkspaceTabBtn(1, 'Callbacks', Icons.phone_callback_rounded),
-                          _buildWorkspaceTabBtn(2, 'Activity', Icons.history_rounded),
-                        ],
+                      child: const Icon(
+                        Icons.lock_clock_rounded,
+                        size: 32,
+                        color: Color(0xFFB45309),
                       ),
                     ),
                     const SizedBox(height: 12),
-                    if (_mobileWorkspaceTab == 0)
-                      _buildMyAssignedLeadsQueue(context, isMobile, companyName)
-                    else if (_mobileWorkspaceTab == 1)
-                      _buildPriorityCallbacksCard(context, dash, isMobile)
-                    else
-                      _buildRecentActivityLedger(dash, isMobile),
+                    Text(
+                      'Check-In Required to Access Workspace',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.inter(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: const Color(0xFF0F172A),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Your company requires an active check-in session to access Leads, Calling Queue, Callbacks, Quotations, and other menus. Please check in using the Attendance card above to unlock your workspace.',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        color: const Color(0xFF475569),
+                        height: 1.4,
+                      ),
+                    ),
                   ],
-                );
-              },
-            ),
-            const SizedBox(height: 24),
+                ),
+              ),
+              const SizedBox(height: 24),
+            ] else ...[
+              // 4 Micro Metric Stat Badges
+              _buildLuxuryStatCards(dash, isDesktop, isMobile),
+              const SizedBox(height: 16),
+
+              // ==========================================
+              // ZONE 2 & 3: RESPONSIVE WORKSPACE (SPLIT DESKTOP / TABBED MOBILE)
+              // ==========================================
+              LayoutBuilder(
+                builder: (ctx, c) {
+                  if (c.maxWidth >= 1080) {
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          flex: 7,
+                          child: _buildMyAssignedLeadsQueue(context, isMobile, companyName),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          flex: 5,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              _buildPriorityCallbacksCard(context, dash, isMobile),
+                              const SizedBox(height: 16),
+                              _buildRecentActivityLedger(dash, isMobile),
+                            ],
+                          ),
+                        ),
+                      ],
+                    );
+                  }
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                        ),
+                        child: Row(
+                          children: [
+                            _buildWorkspaceTabBtn(0, 'Leads Queue', Icons.people_alt_rounded),
+                            _buildWorkspaceTabBtn(1, 'Callbacks', Icons.phone_callback_rounded),
+                            _buildWorkspaceTabBtn(2, 'Activity', Icons.history_rounded),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      if (_mobileWorkspaceTab == 0)
+                        _buildMyAssignedLeadsQueue(context, isMobile, companyName)
+                      else if (_mobileWorkspaceTab == 1)
+                        _buildPriorityCallbacksCard(context, dash, isMobile)
+                      else
+                        _buildRecentActivityLedger(dash, isMobile),
+                    ],
+                  );
+                },
+              ),
+              const SizedBox(height: 24),
+            ],
           ],
         ),
       ),
@@ -1273,9 +1328,11 @@ class _TelecallerDashboardScreenState extends State<TelecallerDashboardScreen> {
                 Expanded(
                   child: InkWell(
                     onTap: () {
-                      showDialog(
-                        context: context,
-                        builder: (_) => QuotationFormDialog(lead: lead),
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => QuotationFormDialog(lead: lead),
+                        ),
                       );
                     },
                     borderRadius: BorderRadius.circular(8),
@@ -1448,9 +1505,11 @@ class _TelecallerDashboardScreenState extends State<TelecallerDashboardScreen> {
                 icon: const Icon(Icons.request_quote_rounded, size: 16),
                 tooltip: 'Create Quotation',
                 onPressed: () {
-                  showDialog(
-                    context: context,
-                    builder: (_) => QuotationFormDialog(lead: lead),
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => QuotationFormDialog(lead: lead),
+                    ),
                   );
                 },
               ),

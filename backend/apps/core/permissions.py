@@ -30,13 +30,37 @@ class IsManager(permissions.BasePermission):
             return bool(request.user.company and request.user.company.status != 'SUSPENDED')
         return False
 
+def _passes_active_checkin_guard(request):
+    user = getattr(request, 'user', None)
+    if not user or not user.is_authenticated:
+        return True
+    path = getattr(request, 'path', '') or ''
+    if (
+        '/attendance/' in path
+        or '/leaves/' in path
+        or '/leave-types/' in path
+        or '/holidays/' in path
+        or '/accounts/me/' in path
+        or '/notifications/' in path
+        or '/companies/' in path
+    ):
+        return True
+    if hasattr(user, 'is_checkin_required') and user.is_checkin_required():
+        return user.has_active_checkin_today()
+    return True
+
+
 class IsEmployee(permissions.BasePermission):
+    message = "Active check-in required to access workspace features. Please check in first."
+
     def has_permission(self, request, view):
         if not (request.user and request.user.is_authenticated and request.user.is_active):
             return False
         if request.user.is_super_admin:
             return True
-        return bool(request.user.company and request.user.company.status != 'SUSPENDED')
+        if not (request.user.company and request.user.company.status != 'SUSPENDED'):
+            return False
+        return _passes_active_checkin_guard(request)
 
 class TenantObjectPermission(permissions.BasePermission):
     """
@@ -69,7 +93,13 @@ def require_permission(perm_key: str):
         def has_permission(self, request, view):
             if not (request.user and request.user.is_authenticated and request.user.is_active):
                 return False
-            return request.user.has_permission(perm_key)
+            if not request.user.has_permission(perm_key):
+                return False
+            if not perm_key.startswith(('attendance.', 'leave.')) and perm_key != 'payroll.view_own_payslip':
+                if not _passes_active_checkin_guard(request):
+                    self.message = "Active check-in required to access this section. Please check in first."
+                    return False
+            return True
 
     return GranularPermission
 
@@ -85,7 +115,13 @@ def require_any_permission(*perm_keys: str):
         def has_permission(self, request, view):
             if not (request.user and request.user.is_authenticated and request.user.is_active):
                 return False
-            return any(request.user.has_permission(k) for k in perm_keys)
+            if not any(request.user.has_permission(k) for k in perm_keys):
+                return False
+            if not any(k.startswith(('attendance.', 'leave.')) or k == 'payroll.view_own_payslip' for k in perm_keys):
+                if not _passes_active_checkin_guard(request):
+                    self.message = "Active check-in required to access this section. Please check in first."
+                    return False
+            return True
 
     return AnyGranularPermission
 

@@ -11,6 +11,7 @@ import '../../models/quotation_model.dart';
 import '../../models/invoice_model.dart';
 import '../../models/plan_model.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/billing_provider.dart';
 import '../../providers/company_provider.dart';
 import '../billing/record_payment_dialog.dart';
 import 'convert_quotation_dialog.dart';
@@ -473,69 +474,192 @@ class _QuotationDetailDialogState extends State<QuotationDetailDialog> {
                 spacing: 10,
                 runSpacing: 10,
                 children: [
-                  // WhatsApp Button
-                  ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF25D366),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    ),
-                    icon: const Icon(Icons.chat_rounded, size: 18),
-                    label: Text('Share to WhatsApp', style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 12)),
-                    onPressed: () => ActionLoader.run(
-                      context,
-                      message: 'Opening WhatsApp...',
-                      task: () => PdfInvoiceService.shareQuotationToWhatsApp(
-                        q,
-                        companyName: compName,
-                        defaultCountryCode: context.read<AuthProvider>().currentUser?.companyCountryCode ?? '+91',
-                      ),
-                    ),
-                  ),
-                  Wrap(
-                    spacing: 10,
-                    children: [
-                      GlassSecondaryButton(
-                        text: 'Print / PDF',
-                        icon: Icons.print_outlined,
-                        onPressed: () => _showPrintOptionsDialog(
-                          context,
-                          q,
-                          compName,
-                          compPhone,
-                          compEmail,
-                          compAddress,
-                          compGstin,
-                          compWebsite,
-                          compLogo,
-                        ),
-                      ),
-                      if (q.status != 'CONVERTED') ...[
-                        GlassSecondaryButton(
-                          text: 'Edit Quote',
-                          icon: Icons.edit_outlined,
-                          onPressed: () async {
-                            final updated = await showDialog<QuotationModel>(
-                              context: context,
-                              builder: (_) => QuotationFormDialog(quotationToEdit: _quotation),
-                            );
-                            if (updated != null && mounted) {
-                              setState(() {
-                                _quotation = updated;
-                              });
-                            }
-                          },
-                        ),
-                        GradientPrimaryButton(
-                          text: 'Convert to Fixed Price Bill',
-                          icon: Icons.receipt_long_rounded,
-                          gradient: const LinearGradient(colors: [Color(0xFF059669), Color(0xFF10B981)]),
-                          onPressed: _handleConvertToInvoice,
+                  Builder(builder: (context) {
+                    final isApprovalBlocked = q.status == 'PENDING_APPROVAL' || q.status == 'REJECTED';
+                    final currentUser = context.watch<AuthProvider>().currentUser;
+                    final canApprove = currentUser != null &&
+                        (currentUser.isCompanyAdmin ||
+                            currentUser.isSuperAdmin ||
+                            currentUser.hasPermission('quotations.approve'));
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (isApprovalBlocked)
+                          Container(
+                            width: double.infinity,
+                            margin: const EdgeInsets.only(bottom: 10),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: q.status == 'REJECTED'
+                                  ? const Color(0xFFFEE2E2)
+                                  : const Color(0xFFFEF3C7),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: q.status == 'REJECTED'
+                                    ? const Color(0xFFFCA5A5)
+                                    : const Color(0xFFFCD34D),
+                              ),
+                            ),
+                            child: Text(
+                              q.status == 'REJECTED'
+                                  ? 'Rejected${q.rejectionReason.isNotEmpty ? ': ${q.rejectionReason}' : ''} — Edit & resubmit to request approval.'
+                                  : 'Pending Approval — WhatsApp, PDF & Conversion are locked until approved.',
+                              style: GoogleFonts.inter(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: q.status == 'REJECTED'
+                                    ? const Color(0xFF991B1B)
+                                    : const Color(0xFF92400E),
+                              ),
+                            ),
+                          ),
+                        Wrap(
+                          alignment: WrapAlignment.spaceBetween,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: 10,
+                          runSpacing: 10,
+                          children: [
+                            if (!isApprovalBlocked)
+                              ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF25D366),
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                ),
+                                icon: const Icon(Icons.chat_rounded, size: 18),
+                                label: Text('Share to WhatsApp', style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 12)),
+                                onPressed: () => ActionLoader.run(
+                                  context,
+                                  message: 'Opening WhatsApp...',
+                                  task: () => PdfInvoiceService.shareQuotationToWhatsApp(
+                                    q,
+                                    companyName: compName,
+                                    defaultCountryCode: context.read<AuthProvider>().currentUser?.companyCountryCode ?? '+91',
+                                  ),
+                                ),
+                              ),
+                            Wrap(
+                              spacing: 10,
+                              runSpacing: 8,
+                              children: [
+                                if (q.status == 'PENDING_APPROVAL' && canApprove) ...[
+                                  ElevatedButton.icon(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFF059669),
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                    ),
+                                    icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
+                                    label: Text('Approve', style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 12)),
+                                    onPressed: () async {
+                                      final updated = await context
+                                          .read<BillingProvider>()
+                                          .approveOrRejectQuotation(q.id, action: 'APPROVE');
+                                      if (updated != null && mounted) {
+                                        setState(() => _quotation = updated);
+                                      }
+                                    },
+                                  ),
+                                  ElevatedButton.icon(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFFDC2626),
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                    ),
+                                    icon: const Icon(Icons.cancel_outlined, size: 18),
+                                    label: Text('Reject', style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 12)),
+                                    onPressed: () async {
+                                      final reasonCtrl = TextEditingController();
+                                      final confirm = await showDialog<bool>(
+                                        context: context,
+                                        builder: (ctx) => AlertDialog(
+                                          title: const Text('Reject Quotation'),
+                                          content: TextField(
+                                            controller: reasonCtrl,
+                                            decoration: const InputDecoration(
+                                              labelText: 'Rejection Reason',
+                                              hintText: 'Enter reason for rejection',
+                                            ),
+                                            maxLines: 2,
+                                          ),
+                                          actions: [
+                                            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                                            ElevatedButton(
+                                              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFDC2626)),
+                                              onPressed: () => Navigator.pop(ctx, true),
+                                              child: const Text('Reject', style: TextStyle(color: Colors.white)),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                      if (confirm == true && mounted) {
+                                        final updated = await context
+                                            .read<BillingProvider>()
+                                            .approveOrRejectQuotation(
+                                              q.id,
+                                              action: 'REJECT',
+                                              rejectionReason: reasonCtrl.text.trim(),
+                                            );
+                                        if (updated != null && mounted) {
+                                          setState(() => _quotation = updated);
+                                        }
+                                      }
+                                    },
+                                  ),
+                                ],
+                                if (!isApprovalBlocked)
+                                  GlassSecondaryButton(
+                                    text: 'Print / PDF',
+                                    icon: Icons.print_outlined,
+                                    onPressed: () => _showPrintOptionsDialog(
+                                      context,
+                                      q,
+                                      compName,
+                                      compPhone,
+                                      compEmail,
+                                      compAddress,
+                                      compGstin,
+                                      compWebsite,
+                                      compLogo,
+                                    ),
+                                  ),
+                                if (q.status != 'CONVERTED') ...[
+                                  GlassSecondaryButton(
+                                    text: 'Edit Quote',
+                                    icon: Icons.edit_outlined,
+                                    onPressed: () async {
+                                      final updated = await Navigator.push<QuotationModel>(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => QuotationFormDialog(quotationToEdit: _quotation),
+                                        ),
+                                      );
+                                      if (updated != null && mounted) {
+                                        setState(() {
+                                          _quotation = updated;
+                                        });
+                                      }
+                                    },
+                                  ),
+                                  if (!isApprovalBlocked)
+                                    GradientPrimaryButton(
+                                      text: 'Convert to Fixed Price Bill',
+                                      icon: Icons.receipt_long_rounded,
+                                      gradient: const LinearGradient(colors: [Color(0xFF059669), Color(0xFF10B981)]),
+                                      onPressed: _handleConvertToInvoice,
+                                    ),
+                                ],
+                              ],
+                            ),
+                          ],
                         ),
                       ],
-                    ],
-                  ),
+                    );
+                  }),
                 ],
               ),
             ],
@@ -744,9 +868,15 @@ class _QuotationDetailDialogState extends State<QuotationDetailDialog> {
     if (status == 'SENT') {
       bg = const Color(0xFFDBEAFE);
       fg = const Color(0xFF1D4ED8);
-    } else if (status == 'ACCEPTED') {
+    } else if (status == 'PENDING_APPROVAL') {
+      bg = const Color(0xFFFEF3C7);
+      fg = const Color(0xFFB45309);
+    } else if (status == 'APPROVED' || status == 'ACCEPTED') {
       bg = const Color(0xFFD1FAE5);
       fg = const Color(0xFF047857);
+    } else if (status == 'REJECTED') {
+      bg = const Color(0xFFFEE2E2);
+      fg = const Color(0xFFB91C1C);
     } else if (status == 'CONVERTED') {
       bg = const Color(0xFFEDE9FE);
       fg = const Color(0xFF6D28D9);
@@ -755,7 +885,7 @@ class _QuotationDetailDialogState extends State<QuotationDetailDialog> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(6)),
-      child: Text(status, style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w800, color: fg)),
+      child: Text(status.replaceAll('_', ' '), style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w800, color: fg)),
     );
   }
 

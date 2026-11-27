@@ -36,7 +36,7 @@ class QuotationFormDialog extends StatefulWidget {
     this.isBill = false,
     this.quotationToEdit,
     this.invoiceToEdit,
-    this.asPage = false,
+    this.asPage = true,
   });
 
   @override
@@ -329,6 +329,8 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
         final def = bp.defaultTemplateFor(docType);
         if (def != null) {
           _applyTemplate(def);
+        } else {
+          setState(() => _syncTemplateControllers());
         }
       }
     });
@@ -405,6 +407,43 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
     });
   }
 
+  static const Set<String> _builtInTableColKeys = {
+    'sl. no', 'sl no', 'sr no', 's.no', '#',
+    'qty', 'quantity',
+    'item name', 'description',
+    'item code', 'code',
+    'unit price', 'rate',
+    'ex. tax', 'subtotal',
+    'vat%', 'tax%',
+    'vat', 'tax',
+    'total', 'amount',
+    'cst', 'cost', 'cost price', 'margin',
+  };
+
+  List<String> _extractCustomColumnsFromLayout(TemplateLayoutConfig layout) {
+    final result = <String>[];
+    final seen = <String>{};
+    void addIfCustom(String col) {
+      final trimmed = col.trim();
+      final lower = trimmed.toLowerCase();
+      if (trimmed.isEmpty || _builtInTableColKeys.contains(lower)) return;
+      if (seen.add(lower)) {
+        result.add(trimmed);
+      }
+    }
+
+    for (final c in layout.customColumns) {
+      addIfCustom(c);
+    }
+    final tableEl = layout.canvasElements.where((e) => e.type == 'table').firstOrNull;
+    if (tableEl != null) {
+      for (final c in tableEl.tableColumns) {
+        addIfCustom(c);
+      }
+    }
+    return result;
+  }
+
   void _applyTemplate(DocumentTemplateModel tpl) {
     setState(() {
       _selectedTemplateId = tpl.id;
@@ -413,9 +452,15 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
       _showPrice = tpl.layout.showPrice;
       _showTax = tpl.layout.showTax;
       _hideCostInPdf = tpl.layout.hideCostInPdf;
+      final mergedCols = _extractCustomColumnsFromLayout(tpl.layout);
       _customColumns
         ..clear()
-        ..addAll(tpl.layout.customColumns);
+        ..addAll(mergedCols);
+      for (final item in _items) {
+        for (final col in _customColumns) {
+          item.getCustomController(col, () => setState(() {}));
+        }
+      }
       if (tpl.layout.incoterms.isNotEmpty) {
         _incotermsController.text = tpl.layout.incoterms;
       }
@@ -432,6 +477,17 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
 
   void _syncTemplateControllers() {
     final layout = _activeTemplateLayout;
+    final layoutCustomCols = _extractCustomColumnsFromLayout(layout);
+    for (final col in layoutCustomCols) {
+      if (!_customColumns.any((c) => c.toLowerCase().trim() == col.toLowerCase().trim())) {
+        _customColumns.add(col);
+      }
+    }
+    for (final item in _items) {
+      for (final col in _customColumns) {
+        item.getCustomController(col, () => setState(() {}));
+      }
+    }
     final activeSet = layout.customHeaderFields.toSet();
     final staleKeys = _customFieldControllers.keys.where((k) => !activeSet.contains(k)).toList();
     for (final k in staleKeys) {
@@ -2683,8 +2739,16 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                                 final quote = await _saveQuotation();
                                 if (quote != null) {
                                   final parentCtx = nav.context;
+                                  final messenger = ScaffoldMessenger.of(context);
                                   nav.pop(quote);
-                                  if (parentCtx.mounted) {
+                                  if (quote.status == 'PENDING_APPROVAL') {
+                                    messenger.showSnackBar(
+                                      SnackBar(
+                                        content: Text('Quotation ${quote.quotationNumber} saved & sent for approval. WhatsApp share is locked until approved.'),
+                                        backgroundColor: const Color(0xFFF59E0B),
+                                      ),
+                                    );
+                                  } else if (parentCtx.mounted) {
                                     await ActionLoader.run(
                                       parentCtx,
                                       message: 'Opening WhatsApp...',
@@ -2750,8 +2814,16 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                                 final quote = await _saveQuotation();
                                 if (quote != null) {
                                   final parentCtx = nav.context;
+                                  final messenger = ScaffoldMessenger.of(context);
                                   nav.pop(quote);
-                                  if (parentCtx.mounted) {
+                                  if (quote.status == 'PENDING_APPROVAL') {
+                                    messenger.showSnackBar(
+                                      SnackBar(
+                                        content: Text('Quotation ${quote.quotationNumber} saved & sent for approval. PDF export is locked until approved.'),
+                                        backgroundColor: const Color(0xFFF59E0B),
+                                      ),
+                                    );
+                                  } else if (parentCtx.mounted) {
                                     await ActionLoader.run(
                                       parentCtx,
                                       message: 'Generating Quotation PDF...',
@@ -2809,8 +2881,12 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                                   nav.pop(quote);
                                   messenger.showSnackBar(
                                     SnackBar(
-                                      content: Text('Sales Quotation ${quote.quotationNumber} created & products saved!'),
-                                      backgroundColor: const Color(0xFF10B981),
+                                      content: Text(quote.status == 'PENDING_APPROVAL'
+                                          ? 'Sales Quotation ${quote.quotationNumber} saved & sent for approval!'
+                                          : 'Sales Quotation ${quote.quotationNumber} created & products saved!'),
+                                      backgroundColor: quote.status == 'PENDING_APPROVAL'
+                                          ? const Color(0xFFF59E0B)
+                                          : const Color(0xFF10B981),
                                     ),
                                   );
                                 }

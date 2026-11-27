@@ -159,6 +159,10 @@ class EmployeeListCreateView(views.APIView):
             if data.get('department_id'):
                 department = Department.objects.filter(id=data['department_id'], company=company).first()
 
+            q_approver = None
+            if data.get('quotation_approver_id'):
+                q_approver = User.objects.filter(id=data['quotation_approver_id'], company=company).first()
+
             profile = EmployeeProfile.objects.create(
                 user=user,
                 team=team,
@@ -171,6 +175,9 @@ class EmployeeListCreateView(views.APIView):
                 shift_start_time=data.get('shift_start_time') or '09:00:00',
                 shift_end_time=data.get('shift_end_time') or '18:00:00',
                 grace_period_minutes=data.get('grace_period_minutes', 15),
+                require_checkin_override=data.get('require_checkin_override', 'INHERIT'),
+                require_quotation_approval=bool(data.get('require_quotation_approval', False)),
+                quotation_approver=q_approver,
                 status='ACTIVE'
             )
 
@@ -281,6 +288,13 @@ class EmployeeDetailView(views.APIView):
             profile.shift_end_time = request.data['shift_end_time']
         if 'joining_date' in request.data:
             profile.joining_date = request.data['joining_date'] or None
+        if 'require_checkin_override' in request.data:
+            profile.require_checkin_override = request.data['require_checkin_override'] or 'INHERIT'
+        if 'require_quotation_approval' in request.data:
+            profile.require_quotation_approval = bool(request.data['require_quotation_approval'])
+        if 'quotation_approver_id' in request.data:
+            app_id = request.data['quotation_approver_id']
+            profile.quotation_approver = User.objects.filter(id=app_id, company=company).first() if app_id else None
         if 'team_id' in request.data:
             team_id = request.data['team_id']
             profile.team = Team.objects.filter(id=team_id, company=company).first() if team_id else None

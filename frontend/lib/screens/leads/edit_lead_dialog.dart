@@ -34,14 +34,16 @@ class _EditLeadDialogState extends State<EditLeadDialog> {
   final List<Map<String, String>> _statusOptions = [
     {'value': 'UNASSIGNED', 'label': 'Unassigned'},
     {'value': 'ASSIGNED', 'label': 'Assigned'},
-    {'value': 'CALL_IN_PROGRESS', 'label': 'Call in Progress'},
-    {'value': 'CONNECTED', 'label': 'Connected'},
-    {'value': 'NOT_CONNECTED', 'label': 'Not Connected'},
+    {'value': 'IN_PROGRESS', 'label': 'In Progress'},
     {'value': 'CALLBACK_REQUESTED', 'label': 'Callback Requested'},
     {'value': 'INTERESTED', 'label': '⭐ Interested'},
+    {'value': 'QUALIFIED', 'label': 'Qualified'},
     {'value': 'NOT_INTERESTED', 'label': 'Not Interested'},
-    {'value': 'CONVERTED', 'label': 'Converted / Won'},
-    {'value': 'LOST', 'label': 'Lost'},
+    {'value': 'BUSY', 'label': 'Busy'},
+    {'value': 'NO_ANSWER', 'label': 'No Answer'},
+    {'value': 'COMPLETED', 'label': 'Completed / Won'},
+    {'value': 'BLOCKED', 'label': 'Permanently Blocked'},
+    {'value': 'ARCHIVED', 'label': 'Archived'},
   ];
 
   @override
@@ -55,7 +57,9 @@ class _EditLeadDialogState extends State<EditLeadDialog> {
     _stateController = TextEditingController(text: widget.lead.state);
     _notesController = TextEditingController(text: widget.lead.notes);
 
-    _selectedStatus = widget.lead.status;
+    _selectedStatus = _statusOptions.any((o) => o['value'] == widget.lead.status)
+        ? widget.lead.status
+        : 'UNASSIGNED';
     _selectedCategory = widget.lead.categoryId;
   }
 
@@ -115,8 +119,6 @@ class _EditLeadDialogState extends State<EditLeadDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final categories = context.watch<LeadProvider>().categories;
-
     return Dialog(
       backgroundColor: Colors.transparent,
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),

@@ -29,6 +29,7 @@ class _CompanyRulesTabState extends State<CompanyRulesTab> {
 
   bool _allowOutOfFence = true;
   bool _strictGeofence = false;
+  bool _requireCheckinForMenuAccess = false;
   String _payBasis = 'CALENDAR_DAYS';
   bool _isSavingPolicy = false;
   bool _initialized = false;
@@ -59,6 +60,7 @@ class _CompanyRulesTabState extends State<CompanyRulesTab> {
         _salaryCycleStartCtrl.text = policy.salaryCycleStartDay.toString();
         _allowOutOfFence = policy.allowOutOfFencePunch;
         _strictGeofence = policy.strictGeofenceBlock;
+        _requireCheckinForMenuAccess = policy.requireCheckinForMenuAccess;
         _payBasis = policy.payCalculationBasis;
         _initialized = true;
       });
@@ -126,6 +128,7 @@ class _CompanyRulesTabState extends State<CompanyRulesTab> {
       'salary_cycle_start_day': int.tryParse(_salaryCycleStartCtrl.text) ?? 1,
       'allow_out_of_fence_punch': _allowOutOfFence,
       'strict_geofence_block': _strictGeofence,
+      'require_checkin_for_menu_access': _requireCheckinForMenuAccess,
       'pay_calculation_basis': _payBasis,
     });
     setState(() => _isSavingPolicy = false);
@@ -773,6 +776,18 @@ class _CompanyRulesTabState extends State<CompanyRulesTab> {
                           ),
                           const SizedBox(width: 6),
                           Text('Strict Block if Outside Fence', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF0F172A))),
+                        ],
+                      ),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Switch(
+                            value: _requireCheckinForMenuAccess,
+                            activeThumbColor: const Color(0xFF6366F1),
+                            onChanged: (v) => setState(() => _requireCheckinForMenuAccess = v),
+                          ),
+                          const SizedBox(width: 6),
+                          Text('Must Check-In to Access Menus', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF0F172A))),
                         ],
                       ),
                     ],
