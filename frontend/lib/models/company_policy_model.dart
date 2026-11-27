@@ -49,6 +49,9 @@ class CompanyPayrollPolicyModel {
   final bool strictGeofenceBlock;
   final bool requireCheckinForMenuAccess;
   final int salaryCycleStartDay;
+  final int salaryDay;
+  final int reminderDaysBefore;
+  final bool autoDeductAbsentLop;
   final String payCalculationBasis; // 'CALENDAR_DAYS' or 'FIXED_26_DAYS'
   final bool overtimeEnabled;
   final int overtimeMinMinutes;
@@ -67,6 +70,9 @@ class CompanyPayrollPolicyModel {
     this.strictGeofenceBlock = false,
     this.requireCheckinForMenuAccess = false,
     this.salaryCycleStartDay = 1,
+    this.salaryDay = 5,
+    this.reminderDaysBefore = 2,
+    this.autoDeductAbsentLop = true,
     this.payCalculationBasis = 'CALENDAR_DAYS',
     this.overtimeEnabled = false,
     this.overtimeMinMinutes = 60,
@@ -99,6 +105,9 @@ class CompanyPayrollPolicyModel {
       strictGeofenceBlock: json['strict_geofence_block'] ?? false,
       requireCheckinForMenuAccess: json['require_checkin_for_menu_access'] ?? false,
       salaryCycleStartDay: parseInt(json['salary_cycle_start_day'], 1),
+      salaryDay: parseInt(json['salary_day'], 5),
+      reminderDaysBefore: parseInt(json['reminder_days_before'], 2),
+      autoDeductAbsentLop: json['auto_deduct_absent_lop'] ?? true,
       payCalculationBasis: json['pay_calculation_basis']?.toString() ?? 'CALENDAR_DAYS',
       overtimeEnabled: json['overtime_enabled'] ?? false,
       overtimeMinMinutes: parseInt(json['overtime_min_minutes'], 60),
@@ -121,6 +130,9 @@ class CompanyPayrollPolicyModel {
       'strict_geofence_block': strictGeofenceBlock,
       'require_checkin_for_menu_access': requireCheckinForMenuAccess,
       'salary_cycle_start_day': salaryCycleStartDay,
+      'salary_day': salaryDay,
+      'reminder_days_before': reminderDaysBefore,
+      'auto_deduct_absent_lop': autoDeductAbsentLop,
       'pay_calculation_basis': payCalculationBasis,
       'overtime_enabled': overtimeEnabled,
       'overtime_min_minutes': overtimeMinMinutes,

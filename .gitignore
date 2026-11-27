@@ -36,3 +36,8 @@ Thumbs.db
 
 # Firebase
 .firebase/
+
+# Automation test outputs & Excel lock files
+automation_tests/reports/
+automation_tests/screenshots/
+~$*.xlsx

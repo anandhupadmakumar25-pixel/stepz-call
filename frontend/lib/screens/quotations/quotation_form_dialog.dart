@@ -1849,7 +1849,7 @@ class _QuotationFormDialogState extends State<QuotationFormDialog> {
                                 if (_activeTemplateLayout.isBlockVisible('bank_details')) ...[
                                   const SizedBox(height: 10),
                                   _buildInput(
-                                    label: 'Bank / UPI Payment Details',
+                                    label: 'Bank Payment Details',
                                     controller: _bankDetailsController,
                                     icon: Icons.account_balance_outlined,
                                   ),

@@ -175,7 +175,8 @@ class CompanyPayrollPolicySerializer(serializers.ModelSerializer):
             'shift_start_time', 'shift_end_time', 'grace_period_minutes',
             'full_day_hours', 'half_day_hours',
             'allow_out_of_fence_punch', 'strict_geofence_block', 'require_checkin_for_menu_access',
-            'salary_cycle_start_day', 'pay_calculation_basis',
+            'salary_cycle_start_day', 'salary_day', 'reminder_days_before', 'auto_deduct_absent_lop',
+            'pay_calculation_basis',
             'overtime_enabled', 'overtime_min_minutes', 'overtime_hourly_multiplier',
             'custom_profile_fields', 'created_at', 'updated_at'
         ]

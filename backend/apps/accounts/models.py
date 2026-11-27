@@ -758,6 +758,7 @@ class EmployeeSalaryStructure(TenantModel):
     bank_name = models.CharField(max_length=120, blank=True)
     account_number = models.CharField(max_length=64, blank=True)
     ifsc_iban = models.CharField(max_length=64, blank=True)
+    salary_day_override = models.PositiveIntegerField(null=True, blank=True)
 
     @property
     def gross_salary(self):
@@ -799,6 +800,8 @@ class Payslip(TenantModel):
     working_days = models.PositiveIntegerField(default=26)
     present_days = models.DecimalField(max_digits=5, decimal_places=1, default=0.0)
     paid_leave_days = models.DecimalField(max_digits=5, decimal_places=1, default=0.0)
+    unpaid_leave_days = models.DecimalField(max_digits=5, decimal_places=1, default=0.0)
+    absent_days = models.DecimalField(max_digits=5, decimal_places=1, default=0.0)
     lop_days = models.DecimalField(max_digits=5, decimal_places=1, default=0.0)
     late_days = models.PositiveIntegerField(default=0)
     overtime_hours = models.DecimalField(max_digits=6, decimal_places=2, default=0.00)
@@ -816,10 +819,60 @@ class Payslip(TenantModel):
     other_deductions = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
     net_pay = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
 
+    due_date = models.DateField(null=True, blank=True)
+    paid_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    balance_due = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    payment_status = models.CharField(
+        max_length=20,
+        choices=[('UNPAID', 'Unpaid'), ('PARTIAL', 'Partial'), ('PAID', 'Paid')],
+        default='UNPAID',
+        db_index=True,
+    )
+    rule_breakdown = models.JSONField(default=list, blank=True)
+    notes = models.TextField(blank=True)
+
     status = models.CharField(max_length=20, default='DRAFT')
     payment_reference = models.CharField(max_length=100, blank=True)
 
     class Meta:
         ordering = ['-year', '-month', 'user__first_name']
         unique_together = ('payroll_run', 'user')
+
+
+class PayslipPayment(TenantModel):
+    PAYMENT_MODE_CHOICES = [
+        ('BANK_TRANSFER', 'Bank Transfer'),
+        ('CASH', 'Cash'),
+        ('CARD', 'Card'),
+        ('CHEQUE', 'Cheque'),
+        ('ONLINE_TRANSFER', 'Online Transfer'),
+    ]
+
+    payslip = models.ForeignKey(Payslip, on_delete=models.CASCADE, related_name='payments')
+    receipt_number = models.CharField(max_length=40, db_index=True)
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    payment_mode = models.CharField(max_length=25, choices=PAYMENT_MODE_CHOICES, default='BANK_TRANSFER')
+    transaction_ref = models.CharField(max_length=120, blank=True)
+    paid_at = models.DateTimeField(auto_now_add=True)
+    paid_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='recorded_payslip_payments',
+    )
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ['-paid_at']
+
+
+class PayrollReminderLog(TenantModel):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='payroll_reminder_logs')
+    month = models.PositiveIntegerField()
+    year = models.PositiveIntegerField()
+    reminder_type = models.CharField(max_length=30)
+    sent_date = models.DateField()
+
+    class Meta:
+        unique_together = ('company', 'user', 'month', 'year', 'reminder_type', 'sent_date')
 

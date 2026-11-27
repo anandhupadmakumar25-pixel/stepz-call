@@ -346,9 +346,15 @@ class TemplateLayoutConfig {
   static List<CanvasElement> buildStandardParfemperorCanvas(String docType) {
     final docTitle = docType == 'QUOTATION'
         ? 'QUOTATION'
-        : (docType == 'RECEIPT' ? 'RECEIPT VOUCHER' : 'PROFORMA INVOICE');
-    final numLabel = docType == 'QUOTATION' ? 'Quote No.' : 'INV. No.';
-    final dateLabel = docType == 'QUOTATION' ? 'Quote Date' : 'INV. Date';
+        : (docType == 'RECEIPT'
+            ? 'RECEIPT VOUCHER'
+            : (docType == 'PAYSLIP' ? 'SALARY PAYSLIP' : 'PROFORMA INVOICE'));
+    final numLabel = docType == 'QUOTATION'
+        ? 'Quote No.'
+        : (docType == 'PAYSLIP' ? 'Pay Period' : 'INV. No.');
+    final dateLabel = docType == 'QUOTATION'
+        ? 'Quote Date'
+        : (docType == 'PAYSLIP' ? 'Payday Due' : 'INV. Date');
 
     return [
       CanvasElement(

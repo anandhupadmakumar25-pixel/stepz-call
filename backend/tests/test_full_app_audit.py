@@ -149,6 +149,8 @@ class FullAppLogicAuditTests(TestCase):
 
     def test_section_delegation_grant_and_revoke(self):
         admin_client = self._client(self.admin_a)
+        self.emp_role.permissions = list(set(self.emp_role.permissions + ['payroll.view_own_payslip']))
+        self.emp_role.save(update_fields=['permissions'])
         emp_client = self._client(self.emp_a)
 
         # Before delegation -> cannot list employees
@@ -610,6 +612,8 @@ class FullAppLogicAuditTests(TestCase):
         policy.save(update_fields=['require_checkin_for_menu_access'])
 
         admin_client = self._client(self.admin_a)
+        self.emp_role.permissions = list(set(self.emp_role.permissions + ['payroll.view_own_payslip']))
+        self.emp_role.save(update_fields=['permissions'])
         emp_client = self._client(self.emp_a)
 
         # Company Admin bypasses check-in lock
@@ -722,3 +726,152 @@ class FullAppLogicAuditTests(TestCase):
 
         r_conv_ok = emp_client.post(f'/api/v1/billing/quotations/{quote_id}/convert-to-invoice/', {}, format='json')
         self.assertEqual(r_conv_ok.status_code, 201)
+
+    def test_dynamic_payroll_rules_installments_reminders_and_payslip_template(self):
+        from apps.accounts.models import EmployeeSalaryStructure, PayrollRun, Payslip, PayslipPayment
+        from apps.companies.models import CompanyCustomRule, CompanyPayrollPolicy
+        from apps.notifications.models import Notification
+
+        admin_client = self._client(self.admin_a)
+        self.emp_role.permissions = list(set(self.emp_role.permissions + ['payroll.view_own_payslip']))
+        self.emp_role.save(update_fields=['permissions'])
+        emp_client = self._client(self.emp_a)
+
+        # Configure payroll policy: Fixed 26 days, salary day 5, auto_deduct_absent_lop=False for clean rule isolation
+        policy, _ = CompanyPayrollPolicy.objects.get_or_create(company=self.company_a)
+        policy.pay_calculation_basis = 'FIXED_26_DAYS'
+        policy.salary_day = 5
+        policy.reminder_days_before = 3
+        policy.auto_deduct_absent_lop = False
+        policy.save()
+
+        # Late rule: every 2 lates beyond 1 free allowance = 0.5 day LOP
+        CompanyCustomRule.objects.create(
+            company=self.company_a,
+            name='Late Coming LOP',
+            category='LATE_ARRIVAL',
+            trigger_metric='LATE_COUNT',
+            operator='EVERY_N',
+            threshold_value=Decimal('2.00'),
+            free_allowance_count=1,
+            action_type='LOP_DAYS',
+            action_value=Decimal('0.50'),
+            is_active=True,
+        )
+
+        # Salary structure: 26,000 gross (1,000/day)
+        EmployeeSalaryStructure.objects.create(
+            company=self.company_a,
+            user=self.emp_a,
+            currency='INR',
+            basic_salary=Decimal('20000.00'),
+            hra=Decimal('4000.00'),
+            allowances=Decimal('2000.00'),
+        )
+
+        # 3 LATE days in Nov 2026 -> (3 - 1) // 2 = 1 trigger -> 0.5 day LOP (500.00)
+        for day_num in (2, 3, 4):
+            AttendanceRecord.objects.create(
+                company=self.company_a,
+                user=self.emp_a,
+                date=date(2026, 11, day_num),
+                status='LATE',
+                check_in_time=timezone.now(),
+            )
+
+        # 1 day Unpaid Leave
+        unpaid_lt = LeaveType.objects.create(
+            company=self.company_a,
+            name='Loss of Pay',
+            code='LOP',
+            annual_quota=10,
+            is_paid=False,
+        )
+        LeaveRequest.objects.create(
+            company=self.company_a,
+            user=self.emp_a,
+            leave_type=unpaid_lt,
+            start_date=date(2026, 11, 10),
+            end_date=date(2026, 11, 10),
+            days_count=Decimal('1.0'),
+            reason='Personal',
+            status='APPROVED',
+            reviewed_by=self.admin_a,
+        )
+
+        # 1. Generate Payroll Run for Nov 2026
+        r_gen = admin_client.post('/api/v1/accounts/payroll-runs/', {'month': 11, 'year': 2026}, format='json')
+        self.assertEqual(r_gen.status_code, 201)
+        run_id = r_gen.data['id']
+
+        r_detail = admin_client.get(f'/api/v1/accounts/payroll-runs/{run_id}/')
+        self.assertEqual(r_detail.status_code, 200)
+        slip = r_detail.data['payslips'][0]
+        slip_id = slip['id']
+        self.assertEqual(float(slip['unpaid_leave_days']), 1.0)
+        self.assertEqual(float(slip['lop_deduction']), 1000.0)
+        self.assertEqual(float(slip['late_deduction']), 500.0)
+        self.assertEqual(float(slip['net_pay']), 24500.0)
+        self.assertEqual(float(slip['balance_due']), 24500.0)
+        self.assertEqual(slip['payment_status'], 'UNPAID')
+        self.assertTrue(len(slip['rule_breakdown']) >= 1)
+
+        # 2. Adjust bonus while DRAFT (+500 -> net 25,000)
+        r_patch = admin_client.patch(f'/api/v1/accounts/payslips/{slip_id}/', {'bonus': 500}, format='json')
+        self.assertEqual(r_patch.status_code, 200)
+        self.assertEqual(float(r_patch.data['net_pay']), 25000.0)
+        self.assertEqual(float(r_patch.data['balance_due']), 25000.0)
+
+        # 3. Overpayment guard (400)
+        r_over = admin_client.post(f'/api/v1/accounts/payslips/{slip_id}/pay/', {
+            'amount': 30000,
+            'payment_mode': 'BANK_TRANSFER',
+        }, format='json')
+        self.assertEqual(r_over.status_code, 400)
+
+        # 4. Pay partial installment (10,000) -> PARTIAL, balance 15,000, receipt SAL-2026-0001
+        r_part = admin_client.post(f'/api/v1/accounts/payslips/{slip_id}/pay/', {
+            'amount': 10000,
+            'payment_mode': 'BANK_TRANSFER',
+            'transaction_ref': 'TXN-101',
+        }, format='json')
+        self.assertEqual(r_part.status_code, 201)
+        self.assertEqual(r_part.data['payment']['receipt_number'], 'SAL-2026-0001')
+        self.assertEqual(r_part.data['payslip']['payment_status'], 'PARTIAL')
+        self.assertEqual(float(r_part.data['payslip']['balance_due']), 15000.0)
+
+        # Employee received Salary Credited notification
+        self.assertTrue(Notification.objects.filter(user=self.emp_a, title='Salary Credited').exists())
+
+        # 5. Overdue reminder check (set due_date in past) + deduplication
+        Payslip.objects.filter(id=slip_id).update(due_date=timezone.localdate() - timedelta(days=1))
+        r_rem1 = admin_client.post('/api/v1/accounts/payroll-reminders/check/', {}, format='json')
+        self.assertEqual(r_rem1.status_code, 200)
+        self.assertEqual(r_rem1.data['dispatched'], 1)
+        r_rem2 = admin_client.post('/api/v1/accounts/payroll-reminders/check/', {}, format='json')
+        self.assertEqual(r_rem2.data['dispatched'], 0)
+
+        # 6. Pay remaining balance (15,000) -> PAID & PayrollRun auto-marked PAID
+        r_full = admin_client.post(f'/api/v1/accounts/payslips/{slip_id}/pay/', {
+            'amount': 15000,
+            'payment_mode': 'CASH',
+        }, format='json')
+        self.assertEqual(r_full.status_code, 201)
+        self.assertEqual(r_full.data['payslip']['payment_status'], 'PAID')
+        self.assertEqual(float(r_full.data['payslip']['balance_due']), 0.0)
+        self.assertEqual(PayrollRun.objects.get(id=run_id).status, 'PAID')
+
+        # Employee can fetch own payslips with installment history
+        r_my = emp_client.get('/api/v1/accounts/my-payslips/')
+        self.assertEqual(r_my.status_code, 200)
+        self.assertEqual(len(r_my.data[0]['payments']), 2)
+
+        # 7. Save & retrieve PAYSLIP DocumentTemplate
+        r_tpl = admin_client.post('/api/v1/billing/templates/', {
+            'name': 'Default Corporate Payslip',
+            'doc_type': 'PAYSLIP',
+            'is_default': True,
+            'layout_json': {'theme': {'primary_color': '#047857'}},
+        }, format='json')
+        self.assertEqual(r_tpl.status_code, 201)
+        self.assertEqual(r_tpl.data['doc_type'], 'PAYSLIP')

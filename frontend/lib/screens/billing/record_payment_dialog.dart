@@ -24,7 +24,7 @@ class _RecordPaymentDialogState extends State<RecordPaymentDialog> {
   late TextEditingController _refController;
   late TextEditingController _notesController;
 
-  String _paymentMode = 'UPI';
+  String _paymentMode = 'Bank Transfer';
   bool _isSaving = false;
   String? _errorMessage;
   String? _selectedReceiptTemplateId;
@@ -36,11 +36,11 @@ class _RecordPaymentDialogState extends State<RecordPaymentDialog> {
   final TextEditingController _podCommodityCtrl = TextEditingController();
 
   final List<String> _paymentModes = [
-    'UPI',
+    'Bank Transfer',
     'Cash',
-    'Bank Transfer / NEFT',
     'Card (Debit/Credit)',
     'Cheque',
+    'Online Transfer',
   ];
 
   @override
@@ -434,7 +434,7 @@ class _RecordPaymentDialogState extends State<RecordPaymentDialog> {
 
                 // Reference Input
                 Text(
-                  'Transaction / UTR Reference',
+                  'Transaction / Reference ID',
                   style: GoogleFonts.inter(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
@@ -446,7 +446,7 @@ class _RecordPaymentDialogState extends State<RecordPaymentDialog> {
                   controller: _refController,
                   style: GoogleFonts.inter(fontSize: 12),
                   decoration: InputDecoration(
-                    hintText: 'e.g. UPI/3284729104 or Cheque #93821',
+                    hintText: 'Reference / Receipt ID (Optional)',
                     filled: true,
                     fillColor: Colors.white,
                     border: OutlineInputBorder(

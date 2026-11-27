@@ -385,15 +385,7 @@ class _MainLayoutState extends State<MainLayout> with WidgetsBindingObserver {
       }
 
       // Leave, Holidays & Payroll
-      if ((user.hasMenuPermission('leave') || user.hasMenuPermission('payroll')) &&
-          user.hasAnyPermission([
-            'leave.apply_own',
-            'leave.approve',
-            'leave.manage_types',
-            'payroll.process_salary',
-            'payroll.manage_rules',
-            'payroll.view_own',
-          ])) {
+      if (user.hasMenuPermission('leave') || user.hasMenuPermission('payroll')) {
         final delegated = user.isDelegatedFor('attendance_leave') || user.isDelegatedFor('payroll');
         navItems.add(
           _NavItem(

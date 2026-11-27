@@ -8,6 +8,7 @@ from apps.accounts.models import (
     EmployeeSalaryStructure,
     PayrollRun,
     Payslip,
+    PayslipPayment,
 )
 
 
@@ -95,32 +96,84 @@ class EmployeeSalaryStructureSerializer(serializers.ModelSerializer):
             'basic_salary', 'hra', 'allowances',
             'pf_deduction', 'esi_deduction', 'tax_deduction',
             'gross_salary', 'total_fixed_deductions',
-            'bank_name', 'account_number', 'ifsc_iban',
+            'bank_name', 'account_number', 'ifsc_iban', 'salary_day_override',
         ]
         read_only_fields = ['id', 'gross_salary', 'total_fixed_deductions']
+
+
+class PayslipPaymentSerializer(serializers.ModelSerializer):
+    payment_mode_display = serializers.CharField(source='get_payment_mode_display', read_only=True)
+    paid_by_name = serializers.CharField(source='paid_by.full_name', read_only=True, default='')
+
+    class Meta:
+        model = PayslipPayment
+        fields = [
+            'id', 'payslip', 'receipt_number', 'amount',
+            'payment_mode', 'payment_mode_display', 'transaction_ref',
+            'paid_at', 'paid_by', 'paid_by_name', 'notes',
+        ]
+        read_only_fields = ['id', 'payslip', 'receipt_number', 'paid_at', 'paid_by']
 
 
 class PayslipSerializer(serializers.ModelSerializer):
     user_name = serializers.CharField(source='user.full_name', read_only=True)
     user_email = serializers.CharField(source='user.email', read_only=True)
+    user_department = serializers.SerializerMethodField()
+    user_designation = serializers.SerializerMethodField()
+    joining_date = serializers.SerializerMethodField()
+    bank_name = serializers.SerializerMethodField()
+    account_number = serializers.SerializerMethodField()
+    ifsc_iban = serializers.SerializerMethodField()
+    payments = PayslipPaymentSerializer(many=True, read_only=True)
 
     class Meta:
         model = Payslip
         fields = [
             'id', 'payroll_run', 'user', 'user_name', 'user_email',
+            'user_department', 'user_designation', 'joining_date',
+            'bank_name', 'account_number', 'ifsc_iban',
             'month', 'year', 'currency',
-            'working_days', 'present_days', 'paid_leave_days', 'lop_days',
+            'working_days', 'present_days', 'paid_leave_days',
+            'unpaid_leave_days', 'absent_days', 'lop_days',
             'late_days', 'overtime_hours',
             'basic_salary', 'hra', 'allowances', 'overtime_pay', 'bonus', 'gross_earnings',
             'lop_deduction', 'late_deduction', 'statutory_deductions', 'other_deductions', 'net_pay',
+            'due_date', 'paid_amount', 'balance_due', 'payment_status',
+            'rule_breakdown', 'notes', 'payments',
             'status', 'payment_reference', 'created_at',
         ]
         read_only_fields = ['id', 'payroll_run', 'user', 'month', 'year', 'created_at']
+
+    def get_user_department(self, obj):
+        prof = getattr(obj.user, 'employee_profile', None)
+        return prof.department.name if prof and prof.department else ''
+
+    def get_user_designation(self, obj):
+        prof = getattr(obj.user, 'employee_profile', None)
+        return getattr(prof, 'designation', '') if prof else ''
+
+    def get_joining_date(self, obj):
+        prof = getattr(obj.user, 'employee_profile', None)
+        return prof.joining_date.isoformat() if prof and prof.joining_date else None
+
+    def get_bank_name(self, obj):
+        st = getattr(obj.user, 'salary_structure', None)
+        return st.bank_name if st else ''
+
+    def get_account_number(self, obj):
+        st = getattr(obj.user, 'salary_structure', None)
+        return st.account_number if st else ''
+
+    def get_ifsc_iban(self, obj):
+        st = getattr(obj.user, 'salary_structure', None)
+        return st.ifsc_iban if st else ''
 
 
 class PayrollRunSerializer(serializers.ModelSerializer):
     generated_by_name = serializers.CharField(source='generated_by.full_name', read_only=True, default='')
     payslip_count = serializers.IntegerField(source='payslips.count', read_only=True)
+    total_paid = serializers.SerializerMethodField()
+    total_balance_due = serializers.SerializerMethodField()
 
     class Meta:
         model = PayrollRun
@@ -128,7 +181,14 @@ class PayrollRunSerializer(serializers.ModelSerializer):
             'id', 'month', 'year', 'status',
             'generated_by', 'generated_by_name', 'finalized_at',
             'total_gross', 'total_deductions', 'total_net_pay',
+            'total_paid', 'total_balance_due',
             'payslip_count', 'created_at',
         ]
         read_only_fields = ['id', 'generated_by', 'finalized_at', 'created_at']
+
+    def get_total_paid(self, obj):
+        return float(sum((p.paid_amount for p in obj.payslips.all()), 0))
+
+    def get_total_balance_due(self, obj):
+        return float(sum((p.balance_due for p in obj.payslips.all()), 0))
 

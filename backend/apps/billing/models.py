@@ -15,6 +15,7 @@ class DocumentTemplate(TenantModel):
         ('QUOTATION', 'Quotation'),
         ('INVOICE', 'Bill / Invoice'),
         ('RECEIPT', 'Receipt Voucher'),
+        ('PAYSLIP', 'Salary Payslip'),
     ]
 
     name = models.CharField(max_length=120)

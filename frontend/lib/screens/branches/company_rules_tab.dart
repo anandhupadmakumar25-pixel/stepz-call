@@ -26,10 +26,13 @@ class _CompanyRulesTabState extends State<CompanyRulesTab> {
   final _fullDayHoursCtrl = TextEditingController(text: '8.0');
   final _halfDayHoursCtrl = TextEditingController(text: '4.5');
   final _salaryCycleStartCtrl = TextEditingController(text: '1');
+  final _salaryDayCtrl = TextEditingController(text: '5');
+  final _reminderDaysCtrl = TextEditingController(text: '2');
 
   bool _allowOutOfFence = true;
   bool _strictGeofence = false;
   bool _requireCheckinForMenuAccess = false;
+  bool _autoDeductAbsentLop = false;
   String _payBasis = 'CALENDAR_DAYS';
   bool _isSavingPolicy = false;
   bool _initialized = false;
@@ -58,9 +61,12 @@ class _CompanyRulesTabState extends State<CompanyRulesTab> {
         _fullDayHoursCtrl.text = policy.fullDayHours.toString();
         _halfDayHoursCtrl.text = policy.halfDayHours.toString();
         _salaryCycleStartCtrl.text = policy.salaryCycleStartDay.toString();
+        _salaryDayCtrl.text = policy.salaryDay.toString();
+        _reminderDaysCtrl.text = policy.reminderDaysBefore.toString();
         _allowOutOfFence = policy.allowOutOfFencePunch;
         _strictGeofence = policy.strictGeofenceBlock;
         _requireCheckinForMenuAccess = policy.requireCheckinForMenuAccess;
+        _autoDeductAbsentLop = policy.autoDeductAbsentLop;
         _payBasis = policy.payCalculationBasis;
         _initialized = true;
       });
@@ -126,9 +132,12 @@ class _CompanyRulesTabState extends State<CompanyRulesTab> {
       'full_day_hours': double.tryParse(_fullDayHoursCtrl.text) ?? 8.0,
       'half_day_hours': double.tryParse(_halfDayHoursCtrl.text) ?? 4.5,
       'salary_cycle_start_day': int.tryParse(_salaryCycleStartCtrl.text) ?? 1,
+      'salary_day': (int.tryParse(_salaryDayCtrl.text) ?? 5).clamp(1, 31),
+      'reminder_days_before': (int.tryParse(_reminderDaysCtrl.text) ?? 2).clamp(0, 15),
       'allow_out_of_fence_punch': _allowOutOfFence,
       'strict_geofence_block': _strictGeofence,
       'require_checkin_for_menu_access': _requireCheckinForMenuAccess,
+      'auto_deduct_absent_lop': _autoDeductAbsentLop,
       'pay_calculation_basis': _payBasis,
     });
     setState(() => _isSavingPolicy = false);
@@ -737,6 +746,24 @@ class _CompanyRulesTabState extends State<CompanyRulesTab> {
                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
                       ),
                     ),
+                    SizedBox(
+                      width: isMobile ? double.infinity : 165,
+                      child: GlassTextField(
+                        label: 'Salary Payday (1-31)',
+                        hintText: '5',
+                        controller: _salaryDayCtrl,
+                        keyboardType: TextInputType.number,
+                      ),
+                    ),
+                    SizedBox(
+                      width: isMobile ? double.infinity : 175,
+                      child: GlassTextField(
+                        label: 'Reminder Days Before',
+                        hintText: '2',
+                        controller: _reminderDaysCtrl,
+                        keyboardType: TextInputType.number,
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 16),
@@ -788,6 +815,18 @@ class _CompanyRulesTabState extends State<CompanyRulesTab> {
                           ),
                           const SizedBox(width: 6),
                           Text('Must Check-In to Access Menus', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF0F172A))),
+                        ],
+                      ),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Switch(
+                            value: _autoDeductAbsentLop,
+                            activeThumbColor: const Color(0xFF059669),
+                            onChanged: (v) => setState(() => _autoDeductAbsentLop = v),
+                          ),
+                          const SizedBox(width: 6),
+                          Text('Auto-Deduct Unexcused Absences (LOP)', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF0F172A))),
                         ],
                       ),
                     ],

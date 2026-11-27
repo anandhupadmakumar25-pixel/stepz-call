@@ -35,6 +35,9 @@ from apps.accounts.views_hr import (
     PayrollRunListGenerateView,
     PayrollRunDetailView,
     PayrollRunFinalizePayView,
+    PayslipDetailUpdateView,
+    PayslipPayInstallmentView,
+    PayrollReminderCheckView,
     MyPayslipsView,
 )
 from rest_framework_simplejwt.views import TokenRefreshView
@@ -75,5 +78,8 @@ urlpatterns = [
     path('payroll-runs/', PayrollRunListGenerateView.as_view(), name='payroll_run_list_generate'),
     path('payroll-runs/<uuid:pk>/', PayrollRunDetailView.as_view(), name='payroll_run_detail'),
     path('payroll-runs/<uuid:pk>/action/', PayrollRunFinalizePayView.as_view(), name='payroll_run_action'),
+    path('payslips/<uuid:pk>/', PayslipDetailUpdateView.as_view(), name='payslip_detail_update'),
+    path('payslips/<uuid:pk>/pay/', PayslipPayInstallmentView.as_view(), name='payslip_pay_installment'),
+    path('payroll-reminders/check/', PayrollReminderCheckView.as_view(), name='payroll_reminder_check'),
     path('my-payslips/', MyPayslipsView.as_view(), name='my_payslips'),
 ]

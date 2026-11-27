@@ -267,6 +267,7 @@ class _TemplateDesignerDialogState extends State<TemplateDesignerDialog> {
                           DropdownMenuItem(value: 'QUOTATION', child: Text('Quotation', overflow: TextOverflow.ellipsis)),
                           DropdownMenuItem(value: 'INVOICE', child: Text('Invoice / Proforma', overflow: TextOverflow.ellipsis)),
                           DropdownMenuItem(value: 'RECEIPT', child: Text('Receipt Voucher', overflow: TextOverflow.ellipsis)),
+                          DropdownMenuItem(value: 'PAYSLIP', child: Text('Salary Payslip', overflow: TextOverflow.ellipsis)),
                         ],
                         onChanged: widget.templateToEdit != null
                             ? null
@@ -625,6 +626,7 @@ class _TemplateDesignerDialogState extends State<TemplateDesignerDialog> {
                               DropdownMenuItem(value: 'QUOTATION', child: Text('Quotation / Estimate')),
                               DropdownMenuItem(value: 'INVOICE', child: Text('Bill / Tax Invoice')),
                               DropdownMenuItem(value: 'RECEIPT', child: Text('Receipt Voucher')),
+                              DropdownMenuItem(value: 'PAYSLIP', child: Text('Salary Payslip')),
                             ],
                             onChanged: widget.templateToEdit != null
                                 ? null
@@ -804,7 +806,7 @@ class _TemplateDesignerDialogState extends State<TemplateDesignerDialog> {
                             maxLines: 2,
                             decoration: InputDecoration(
                               isDense: true,
-                              labelText: 'Bank / UPI Payment Details',
+                              labelText: 'Bank Payment Details',
                               border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                             ),
                           ),
@@ -854,7 +856,11 @@ class _TemplateDesignerDialogState extends State<TemplateDesignerDialog> {
   ) {
     final docLabel = _titleOverrideCtrl.text.isNotEmpty
         ? _titleOverrideCtrl.text.toUpperCase()
-        : (_docType == 'QUOTATION' ? 'QUOTATION' : (_docType == 'INVOICE' ? 'TAX INVOICE' : 'RECEIPT VOUCHER'));
+        : (_docType == 'QUOTATION'
+            ? 'QUOTATION'
+            : (_docType == 'INVOICE'
+                ? 'TAX INVOICE'
+                : (_docType == 'PAYSLIP' ? 'SALARY PAYSLIP' : 'RECEIPT VOUCHER')));
 
     switch (blk.id) {
       case 'header':
@@ -959,7 +965,7 @@ class _TemplateDesignerDialogState extends State<TemplateDesignerDialog> {
           children: [
             Text('BANK / PAYMENT DETAILS', style: GoogleFonts.inter(fontSize: 8, fontWeight: FontWeight.w800, color: primary)),
             Text(
-              _bankCtrl.text.isNotEmpty ? _bankCtrl.text : 'Bank Name · A/C No · IFSC / IBAN · UPI ID',
+              _bankCtrl.text.isNotEmpty ? _bankCtrl.text : 'Bank Name · A/C No · IBAN / SWIFT',
               style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF475569)),
             ),
           ],

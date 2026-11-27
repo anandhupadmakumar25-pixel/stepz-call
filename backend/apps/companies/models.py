@@ -292,6 +292,9 @@ class CompanyPayrollPolicy(TimeStampedModel):
     require_checkin_for_menu_access = models.BooleanField(default=False)
     
     salary_cycle_start_day = models.PositiveIntegerField(default=1)
+    salary_day = models.PositiveIntegerField(default=5)
+    reminder_days_before = models.PositiveIntegerField(default=2)
+    auto_deduct_absent_lop = models.BooleanField(default=False)
     pay_calculation_basis = models.CharField(
         max_length=20,
         choices=[

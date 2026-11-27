@@ -252,17 +252,84 @@ class HrPayrollProvider extends ChangeNotifier {
     } catch (_) {}
   }
 
-  Future<bool> actionPayrollRun(String runId, String action, {String paymentReference = ''}) async {
+  Future<bool> actionPayrollRun(
+    String runId,
+    String action, {
+    String paymentReference = '',
+    String paymentMode = 'BANK_TRANSFER',
+  }) async {
     try {
       await ApiClient.post('/accounts/payroll-runs/$runId/action/', {
         'action': action,
         'payment_reference': paymentReference,
+        'payment_mode': paymentMode,
       });
       await fetchPayrollRuns();
       await fetchPayrollRunDetail(runId);
       return true;
     } catch (_) {
       return false;
+    }
+  }
+
+  Future<bool> updatePayslip(String payslipId, String runId, Map<String, dynamic> data) async {
+    _errorMessage = null;
+    try {
+      await ApiClient.patch('/accounts/payslips/$payslipId/', data);
+      await fetchPayrollRuns();
+      await fetchPayrollRunDetail(runId);
+      return true;
+    } on ApiException catch (e) {
+      _errorMessage = e.message;
+      notifyListeners();
+      return false;
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<Map<String, dynamic>?> payPayslipInstallment(
+    String payslipId,
+    String runId, {
+    required double amount,
+    required String paymentMode,
+    String transactionRef = '',
+    String notes = '',
+  }) async {
+    _errorMessage = null;
+    try {
+      final res = await ApiClient.post('/accounts/payslips/$payslipId/pay/', {
+        'amount': amount,
+        'payment_mode': paymentMode,
+        if (transactionRef.isNotEmpty) 'transaction_ref': transactionRef,
+        if (notes.isNotEmpty) 'notes': notes,
+      });
+      await fetchPayrollRuns();
+      await fetchPayrollRunDetail(runId);
+      if (res is Map<String, dynamic>) return res;
+      return null;
+    } on ApiException catch (e) {
+      _errorMessage = e.message;
+      notifyListeners();
+      return null;
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
+      return null;
+    }
+  }
+
+  Future<int> checkPayrollReminders() async {
+    try {
+      final res = await ApiClient.post('/accounts/payroll-reminders/check/', {});
+      if (res is Map<String, dynamic>) {
+        return int.tryParse(res['dispatched']?.toString() ?? '0') ?? 0;
+      }
+      return 0;
+    } catch (_) {
+      return 0;
     }
   }
 
